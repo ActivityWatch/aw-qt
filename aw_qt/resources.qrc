@@ -1,0 +1,7 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+    <qresource>
+        <file alias="sagan.jpg">../img/sagan-smiling.jpg</file>
+        <file alias="sagan-sympathetic.png">../img/sagan-sympathetic-cropped-clean.png</file>
+    </qresource>
+</RCC>
