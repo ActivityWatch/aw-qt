@@ -44,7 +44,12 @@ class Module:
         return self.process.stderr.read()
 
 
-modules = [Module(name) for name in ["aw-server", "aw-watcher-afk", "aw-watcher-x11"]]
+modules = [Module(name) for name in [
+"aw-server", 
+"aw-watcher-afk", 
+"aw-watcher-x11", 
+"aw-watcher-macos", 
+"aw-watcher-network"]]
 
 if __name__ == "__main__":
     for module in modules:
