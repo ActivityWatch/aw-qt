@@ -47,8 +47,7 @@ class Module:
 modules = [Module(name) for name in [
 "aw-server", 
 "aw-watcher-afk", 
-"aw-watcher-x11", 
-"aw-watcher-macos", 
+"aw-watcher-window", 
 "aw-watcher-network"]]
 
 if __name__ == "__main__":
