@@ -43,12 +43,15 @@ class Module:
         """Useful if you want to retrieve logs written to stderr"""
         return self.process.stderr.read()
 
+_possible_modules = [
+    "aw-server",
+    "aw-watcher-afk",
+    "aw-watcher-window",
+    "aw-watcher-network"
+]
 
-modules = [Module(name) for name in [
-"aw-server", 
-"aw-watcher-afk", 
-"aw-watcher-window", 
-"aw-watcher-network"]]
+# TODO: Filter away all modules not available on system
+modules = [Module(name) for name in _possible_modules]
 
 if __name__ == "__main__":
     for module in modules:
