@@ -17,4 +17,3 @@ install:
 script:
  - "./build.sh"
  - "pyinstaller aw-qt.spec"
- - "pyinstaller aw-qt-onefile.spec"
