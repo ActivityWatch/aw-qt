@@ -15,7 +15,6 @@ cwd = "/home/erb/Programming/activitywatch/aw-traygui"
 
 logging.basicConfig()
 
-
 def open_webui():
     print("Opening dashboard")
     webbrowser.open("http://localhost:27170/")
@@ -51,15 +50,13 @@ class SystemTrayIcon(QSystemTrayIcon):
     def __init__(self, icon, parent=None):
         QSystemTrayIcon.__init__(self, icon, parent)
         menu = QMenu(parent)
+        # sagan_icon = QIcon(":/sagan-sympathetic.png")
 
         self.setToolTip("This is a tooltip\nThis is a second line")
 
         # openWebUIIcon = QIcon.fromTheme("open", QIcon(cwd + "/img/sagan-smiling.jpg"))
-        openWebUIIcon = QIcon(":/sagan-sympathetic.png")
-        menu.addAction(openWebUIIcon, "Open Dashboard", open_webui)
-
-        openAPIBrowserIcon = QIcon(":/sagan-sympathetic.png")
-        menu.addAction(openAPIBrowserIcon, "Open API Browser", open_apibrowser)
+        menu.addAction("Open Dashboard", open_webui)
+        menu.addAction("Open API Browser", open_apibrowser)
 
         menu.addSeparator()
 
@@ -110,13 +107,16 @@ def run():
     timer.timeout.connect(lambda: None)  # Let the interpreter run each 500 ms.
 
     if not QSystemTrayIcon.isSystemTrayAvailable():
-        QMessageBox.critical(None, "Systray", "I couldn't detect any system tray on this system.")
+        QMessageBox.critical(None, "Systray", "I couldn't detect any system tray on this system. Either get one or run the ActivityWatch modules from the console.")
         sys.exit(1)
 
     widget = QWidget()
 
-    trayIcon = SystemTrayIcon(QIcon(":/sagan-sympathetic.png"), widget)
+    icon = QIcon(":/logo.png")
+    trayIcon = SystemTrayIcon(icon, widget)
     trayIcon.show()
+
+    trayIcon.showMessage("Title", "message")
 
     QApplication.setQuitOnLastWindowClosed(False)
 
