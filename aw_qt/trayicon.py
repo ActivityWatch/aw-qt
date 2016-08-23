@@ -52,7 +52,7 @@ class SystemTrayIcon(QSystemTrayIcon):
         menu = QMenu(parent)
         # sagan_icon = QIcon(":/sagan-sympathetic.png")
 
-        self.setToolTip("This is a tooltip\nThis is a second line")
+        self.setToolTip("ActivityWatch")
 
         # openWebUIIcon = QIcon.fromTheme("open", QIcon(cwd + "/img/sagan-smiling.jpg"))
         menu.addAction("Open Dashboard", open_webui)
@@ -116,7 +116,7 @@ def run():
     trayIcon = SystemTrayIcon(icon, widget)
     trayIcon.show()
 
-    trayIcon.showMessage("Title", "message")
+    # trayIcon.showMessage("Title", "message")
 
     QApplication.setQuitOnLastWindowClosed(False)
 
