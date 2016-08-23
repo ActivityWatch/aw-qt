@@ -1,13 +1,14 @@
 
 language: python
-python:
-# - "3.3"
-# - "3.4"
- - "3.5"
- - "nightly" # currently points to 3.6-dev
+matrix:
+  includes:
+  - python: "3.5"
+  - python: "nightly"
+  allow_failures:
+  - python: "nightly"
 
 before_install:
- - "pip install pyqt5"
+ - "pip install PyQt5"
 
 install:
  - "python setup.py install"
