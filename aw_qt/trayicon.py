@@ -17,12 +17,12 @@ logging.basicConfig()
 
 def open_webui():
     print("Opening dashboard")
-    webbrowser.open("http://localhost:27170/")
+    webbrowser.open("http://localhost:5600/")
 
 
 def open_apibrowser():
     print("Opening api browser")
-    webbrowser.open("http://localhost:5600/")
+    webbrowser.open("http://localhost:5600/api/")
 
 
 def _build_modulemenu(menu):
