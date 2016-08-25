@@ -8,13 +8,15 @@ logger = logging.getLogger("aw.qt.manager")
 
 
 class Module:
-    def __init__(self, name):
+    def __init__(self, name, localdir=True):
+        self._localdir = localdir
         self.name = name
         self.process = None
 
     def start(self):
         logger.info("Starting module {}".format(self.name))
-        self.process = subprocess.Popen(self.name, universal_newlines=True,
+        exec_path = ("./" if self._localdir else "") + self.name
+        self.process = subprocess.Popen(exec_path, universal_newlines=True,
                                         stdout=PIPE, stderr=PIPE)
 
     def stop(self):
