@@ -1,4 +1,9 @@
-from . import trayicon
+import logging
+
+from . import gui
+
+logging.basicConfig()
+
 
 def main():
-    trayicon.run()
+    gui.run()

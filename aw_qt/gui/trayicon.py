@@ -1,19 +1,15 @@
 import sys
 import logging
-import threading
 import signal
 import webbrowser
 
-from PyQt5 import QtCore, QtGui
+from PyQt5 import QtCore
 from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QMessageBox, QMenu, QWidget
 from PyQt5.QtGui import QIcon
 
-from . import resources
-from . import manager
+from .. import resources
+from .. import manager
 
-cwd = "/home/erb/Programming/activitywatch/aw-traygui"
-
-logging.basicConfig()
 
 def open_webui():
     print("Opening dashboard")
@@ -28,25 +24,31 @@ def open_apibrowser():
 def _build_modulemenu(menu):
     menu.clear()
 
-    running_modules = filter(lambda m: m.is_running(), manager.modules)
-    stopped_modules = filter(lambda m: not m.is_running(), manager.modules)
+    #running_modules = filter(lambda m: m.is_alive(), manager.modules)
+    #stopped_modules = filter(lambda m: not m.is_alive(), manager.modules)
 
-    runningLabel = menu.addAction("Running")
-    runningLabel.setEnabled(False)
+    #runningLabel = menu.addAction("Running")
+    #runningLabel.setEnabled(False)
 
-    for m_running in running_modules:
-        menu.addAction(m_running.name, m_running.stop)
-
-    menu.addSeparator()
-
-    stoppedLabel = menu.addAction("Stopped")
-    stoppedLabel.setEnabled(False)
-
-    for m_stopped in stopped_modules:
-        menu.addAction(m_stopped.name, m_stopped.start)
+    for module in manager.modules:
+        alive = module.is_alive()
+        ac = menu.addAction(module.name, module.stop if alive else module.start)
+        ac.setCheckable(True)
+        ac.setChecked(alive)
+        menu.addAction("Show log", module.show_log)
+        menu.addSeparator()
 
 
-class SystemTrayIcon(QSystemTrayIcon):
+    #stoppedLabel = menu.addAction("Stopped")
+    #stoppedLabel.setEnabled(False)
+
+    #for module in stopped_modules:
+    #    ac = menu.addAction(module.name, module.start)
+    #    ac.setChecked(False)
+    #    menu.addAction("Log for " + module.name, module.showLog)
+
+
+class TrayIcon(QSystemTrayIcon):
     def __init__(self, icon, parent=None):
         QSystemTrayIcon.__init__(self, icon, parent)
         menu = QMenu(parent)
@@ -54,7 +56,7 @@ class SystemTrayIcon(QSystemTrayIcon):
 
         self.setToolTip("ActivityWatch")
 
-        # openWebUIIcon = QIcon.fromTheme("open", QIcon(cwd + "/img/sagan-smiling.jpg"))
+        # openWebUIIcon = QIcon.fromTheme("open")
         menu.addAction("Open Dashboard", open_webui)
         menu.addAction("Open API Browser", open_apibrowser)
 
@@ -72,6 +74,17 @@ class SystemTrayIcon(QSystemTrayIcon):
 
         def rebuild_modules_menu():
             _build_modulemenu(modulesMenu)
+            unexpected_exits = manager.get_unexpected_stops()
+            if unexpected_exits:
+                for module in unexpected_exits:
+                    msg = """
+Module {} quit unexpectedly
+Output:
+{}
+                    """.format(module.name, module.stderr())
+                    QMessageBox.warning(None, "ActivityWatch", msg)
+                    module.stop()
+
             # TODO: Do it in a better way, singleShot isn't pretty...
             QtCore.QTimer.singleShot(2000, rebuild_modules_menu)
 
@@ -83,7 +96,7 @@ def exit_dialog():
     # TODO: Save state for resume
     options = QMessageBox.Yes | QMessageBox.No
     default = QMessageBox.No
-    answer = QMessageBox.question(None, '', "Are you sure you want to quit?", options, default)
+    answer = QMessageBox.question(None, "ActivityWatch", "Are you sure you want to quit?", options, default)
 
     if answer == QMessageBox.Yes:
         exit()
@@ -113,7 +126,7 @@ def run():
     widget = QWidget()
 
     icon = QIcon(":/logo.png")
-    trayIcon = SystemTrayIcon(icon, widget)
+    trayIcon = TrayIcon(icon, widget)
     trayIcon.show()
 
     # trayIcon.showMessage("Title", "message")
