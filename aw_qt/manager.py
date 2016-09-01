@@ -1,3 +1,4 @@
+import os
 from time import sleep
 import logging
 import subprocess
@@ -10,8 +11,7 @@ logger = logging.getLogger("aw.qt.manager")
 
 
 class Module:
-    def __init__(self, name, localdir=False):
-        self._localdir = localdir
+    def __init__(self, name):
         self.name = name
         self.started = False
         self._process = None
@@ -20,8 +20,12 @@ class Module:
 
     def start(self, testing=False):
         logger.info("Starting module {}".format(self.name))
-        exec_path = ("./" if self._localdir else "") + self.name + (" --testing" if testing else "")
-        self._process = subprocess.Popen(exec_path, universal_newlines=True,
+
+        # Will start module from localdir if present there,
+        # otherwise will try to call what is available in PATH.
+        exec_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), self.name)
+        exec_cmd = (exec_path if os.path.isfile(exec_path) else self.name) + (" --testing" if testing else "")
+        self._process = subprocess.Popen(exec_cmd, universal_newlines=True,
                                          stdout=PIPE, stderr=PIPE)
         self.started = True
 
@@ -57,10 +61,10 @@ class Module:
         """Useful if you want to retrieve logs written to stderr"""
         if not self._process and not self._last_process:
             return "Module not started, no output available"
-        elif self._last_process:
+        if self._last_process:
             log = self._last_process.stderr.read()
             self._log += log
-        else:
+        if self._process:
             log = self._process.stderr.read()
             self._log += log
         return self._log
