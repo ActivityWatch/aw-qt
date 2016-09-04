@@ -24,7 +24,7 @@ class Module:
         # Will start module from localdir if present there,
         # otherwise will try to call what is available in PATH.
         exec_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), self.name)
-        exec_cmd = (exec_path if os.path.isfile(exec_path) else self.name) + (" --testing" if testing else "")
+        exec_cmd = [exec_path if os.path.isfile(exec_path) else self.name, "--testing" if testing else ""]
         self._process = subprocess.Popen(exec_cmd, universal_newlines=True,
                                          stdout=PIPE, stderr=PIPE)
         self.started = True
@@ -65,11 +65,14 @@ class Module:
             print("Reading last process stderr...")
             log = self._last_process.stderr.read()
             self._log += log
+        # FIXME: Currently causes everything to hang when trying to read stderr of self._process
+        """
         if self._process:
             print("Reading active process stderr...")
             log = self._process.stderr.read()
             self._log += log
-        print("Read stderr")
+        """
+        self._log += "\n\nReading the output of a currently running module is currently broken, sorry."
         return self._log
 
     def show_log(self):

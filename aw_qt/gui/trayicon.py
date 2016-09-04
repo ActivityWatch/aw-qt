@@ -2,6 +2,7 @@ import sys
 import logging
 import signal
 import webbrowser
+from functools import partial
 
 from PyQt5 import QtCore
 from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QMessageBox, QMenu, QWidget
@@ -21,12 +22,12 @@ def open_apibrowser():
     webbrowser.open("http://localhost:5600/api/")
 
 
-def _build_modulemenu(menu):
+def _build_modulemenu(menu, testing):
     menu.clear()
 
     for module in manager.modules.values():
         alive = module.is_alive()
-        ac = menu.addAction(module.name, module.stop if alive else module.start)
+        ac = menu.addAction(module.name, module.stop if alive else partial(module.start, testing=testing))
         ac.setCheckable(True)
         ac.setChecked(alive)
         menu.addAction("Show log", module.show_log)
@@ -34,12 +35,12 @@ def _build_modulemenu(menu):
 
 
 class TrayIcon(QSystemTrayIcon):
-    def __init__(self, icon, parent=None):
+    def __init__(self, icon, parent=None, testing=False):
         QSystemTrayIcon.__init__(self, icon, parent)
         menu = QMenu(parent)
         # sagan_icon = QIcon(":/sagan-sympathetic.png")
 
-        self.setToolTip("ActivityWatch")
+        self.setToolTip("ActivityWatch" + (" (testing)" if testing else ""))
 
         # openWebUIIcon = QIcon.fromTheme("open")
         menu.addAction("Open Dashboard", open_webui)
@@ -48,7 +49,7 @@ class TrayIcon(QSystemTrayIcon):
         menu.addSeparator()
 
         modulesMenu = menu.addMenu("Modules")
-        _build_modulemenu(modulesMenu)
+        _build_modulemenu(modulesMenu, testing)
 
         menu.addSeparator()
 
@@ -58,7 +59,7 @@ class TrayIcon(QSystemTrayIcon):
         self.setContextMenu(menu)
 
         def rebuild_modules_menu():
-            _build_modulemenu(modulesMenu)
+            _build_modulemenu(modulesMenu, testing)
             unexpected_exits = manager.get_unexpected_stops()
             if unexpected_exits:
                 for module in unexpected_exits:
@@ -92,7 +93,7 @@ def exit(*args):
     QApplication.quit()
 
 
-def run():
+def run(testing=False):
     logging.info("Creating trayicon...")
     # print(QIcon.themeSearchPaths())
 
@@ -111,7 +112,7 @@ def run():
     widget = QWidget()
 
     icon = QIcon(":/logo.png")
-    trayIcon = TrayIcon(icon, widget)
+    trayIcon = TrayIcon(icon, widget, testing=testing)
     trayIcon.show()
 
     # trayIcon.showMessage("Title", "message")
