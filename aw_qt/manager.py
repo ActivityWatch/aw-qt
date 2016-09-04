@@ -62,11 +62,14 @@ class Module:
         if not self._process and not self._last_process:
             return "Module not started, no output available"
         if self._last_process:
+            print("Reading last process stderr...")
             log = self._last_process.stderr.read()
             self._log += log
         if self._process:
+            print("Reading active process stderr...")
             log = self._process.stderr.read()
             self._log += log
+        print("Read stderr")
         return self._log
 
     def show_log(self):
@@ -78,18 +81,18 @@ _possible_modules = [
     "aw-server",
     "aw-watcher-afk",
     "aw-watcher-window",
-    "aw-watcher-network"
+    # "aw-watcher-network"
 ]
 
 # TODO: Filter away all modules not available on system
-modules = [Module(name) for name in _possible_modules]
+modules = {name: Module(name) for name in _possible_modules}
 
 
 def get_unexpected_stops():
-    return list(filter(lambda x: x.started and not x.is_alive(), modules))
+    return list(filter(lambda x: x.started and not x.is_alive(), modules.values()))
 
 if __name__ == "__main__":
-    for module in modules:
+    for module in modules.values():
         module.start()
         sleep(2)
         assert module.is_alive()

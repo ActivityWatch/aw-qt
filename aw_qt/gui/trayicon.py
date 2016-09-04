@@ -24,28 +24,13 @@ def open_apibrowser():
 def _build_modulemenu(menu):
     menu.clear()
 
-    #running_modules = filter(lambda m: m.is_alive(), manager.modules)
-    #stopped_modules = filter(lambda m: not m.is_alive(), manager.modules)
-
-    #runningLabel = menu.addAction("Running")
-    #runningLabel.setEnabled(False)
-
-    for module in manager.modules:
+    for module in manager.modules.values():
         alive = module.is_alive()
         ac = menu.addAction(module.name, module.stop if alive else module.start)
         ac.setCheckable(True)
         ac.setChecked(alive)
         menu.addAction("Show log", module.show_log)
         menu.addSeparator()
-
-
-    #stoppedLabel = menu.addAction("Stopped")
-    #stoppedLabel.setEnabled(False)
-
-    #for module in stopped_modules:
-    #    ac = menu.addAction(module.name, module.start)
-    #    ac.setChecked(False)
-    #    menu.addAction("Log for " + module.name, module.showLog)
 
 
 class TrayIcon(QSystemTrayIcon):
@@ -134,10 +119,7 @@ def run():
     QApplication.setQuitOnLastWindowClosed(False)
 
     # Run the application, blocks until quit
-    exit_message = app.exec_()
-
-    # Exit
-    sys.exit(exit_message)
+    return app.exec_()
 
 
 if __name__ == "__main__":
