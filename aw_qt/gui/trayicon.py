@@ -4,7 +4,6 @@ import signal
 import webbrowser
 import os
 import subprocess
-from functools import partial
 
 from PyQt5 import QtCore
 from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QMessageBox, QMenu, QWidget
@@ -79,6 +78,14 @@ class TrayIcon(QSystemTrayIcon):
 
         self.setContextMenu(menu)
 
+        def show_module_failed_dialog(module):
+            box = QMessageBox(parent)
+            box.setIcon(QMessageBox.Warning)
+            box.setText("Module {} quit unexpectedly".format(module.name))
+            box.setDetailedText(module.stderr())
+            box.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+            box.show()
+
         def rebuild_modules_menu():
             for module in modulesMenu.actions():
                 name = module.text()
@@ -89,13 +96,7 @@ class TrayIcon(QSystemTrayIcon):
             unexpected_exits = manager.get_unexpected_stops()
             if unexpected_exits:
                 for module in unexpected_exits:
-                    msg = """
-Module {} quit unexpectedly
-
-Output:
-{}
-                    """.format(module.name, module.stderr())
-                    QMessageBox.warning(None, "ActivityWatch", msg)
+                    show_module_failed_dialog(module)
                     module.stop()
 
             # TODO: Do it in a better way, singleShot isn't pretty...
