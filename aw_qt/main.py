@@ -24,9 +24,9 @@ def main():
 
     error_code = gui.run(testing=args.testing)
 
-    # TODO: Stop all modules, not just autostarted ones
-    for module_name in autostart_modules:
-        manager.modules[module_name].stop(testing=args.testing)
+    # TODO: This might no longer be needed due to signal handling etc. in trayicon.py
+    for module in filter(lambda m: m.is_alive(), manager.modules.values()):
+        module.stop()
 
     sys.exit(error_code)
 

@@ -2,36 +2,53 @@ import sys
 import logging
 import signal
 import webbrowser
+import os
+import subprocess
 from functools import partial
 
 from PyQt5 import QtCore
 from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QMessageBox, QMenu, QWidget
 from PyQt5.QtGui import QIcon
 
+import aw_core
+
 from .. import resources
 from .. import manager
 
 
-def open_webui():
+def open_webui(root_url):
     print("Opening dashboard")
-    webbrowser.open("http://localhost:5600/")
+    webbrowser.open(root_url)
 
 
-def open_apibrowser():
+def open_apibrowser(root_url):
     print("Opening api browser")
-    webbrowser.open("http://localhost:5600/api/")
+    webbrowser.open(root_url + "/api")
 
 
 def _build_modulemenu(menu, testing):
     menu.clear()
 
-    for module in manager.modules.values():
-        alive = module.is_alive()
-        ac = menu.addAction(module.name, module.stop if alive else partial(module.start, testing=testing))
+    def add_module_menuitem(module):
+        ac = menu.addAction(module.name, lambda: module.toggle(testing))
         ac.setCheckable(True)
-        ac.setChecked(alive)
-        menu.addAction("Show log", module.show_log)
-        menu.addSeparator()
+        ac.setChecked(module.is_alive())
+
+    add_module_menuitem(manager.modules["aw-server"])
+
+    for module_name in sorted(manager.modules.keys()):
+        if module_name != "aw-server":
+            add_module_menuitem(manager.modules[module_name])
+
+
+def open_dir(d):
+    """From: http://stackoverflow.com/a/1795849/965332"""
+    if sys.platform == 'win32':
+        os.startfile(d)
+    elif sys.platform == 'darwin':
+        subprocess.Popen(['open', d])
+    else:
+        subprocess.Popen(['xdg-open', d])
 
 
 class TrayIcon(QSystemTrayIcon):
@@ -42,15 +59,19 @@ class TrayIcon(QSystemTrayIcon):
 
         self.setToolTip("ActivityWatch" + (" (testing)" if testing else ""))
 
+        root_url = "http://localhost:{port}".format(port=5666 if testing else 5600)
+
         # openWebUIIcon = QIcon.fromTheme("open")
-        menu.addAction("Open Dashboard", open_webui)
-        menu.addAction("Open API Browser", open_apibrowser)
+        menu.addAction("Open Dashboard", lambda: open_webui(root_url))
+        menu.addAction("Open API Browser", lambda: open_apibrowser(root_url))
 
         menu.addSeparator()
 
         modulesMenu = menu.addMenu("Modules")
         _build_modulemenu(modulesMenu, testing)
 
+        menu.addSeparator()
+        menu.addAction("Open log folder", lambda: open_dir(aw_core.dirs.get_log_dir()))
         menu.addSeparator()
 
         exitIcon = QIcon.fromTheme("application-exit", QIcon("media/application_exit.png"))
@@ -59,12 +80,18 @@ class TrayIcon(QSystemTrayIcon):
         self.setContextMenu(menu)
 
         def rebuild_modules_menu():
-            _build_modulemenu(modulesMenu, testing)
+            for module in modulesMenu.actions():
+                name = module.text()
+                alive = manager.modules[name].is_alive()
+                module.setChecked(alive)
+                # print(module.text(), alive)
+
             unexpected_exits = manager.get_unexpected_stops()
             if unexpected_exits:
                 for module in unexpected_exits:
                     msg = """
 Module {} quit unexpectedly
+
 Output:
 {}
                     """.format(module.name, module.stderr())
@@ -90,6 +117,15 @@ def exit_dialog():
 
 def exit(*args):
     # TODO: Stop all services
+    print("Shutdown initiated, stopping all services...")
+
+    for module in manager.modules.values():
+        if module.is_alive():
+            module.stop()
+
+    # Terminate entire process group, just in case.
+    # os.killpg(0, signal.SIGINT)
+
     QApplication.quit()
 
 
@@ -101,6 +137,9 @@ def run(testing=False):
 
     # Without this, Ctrl+C will have no effect
     signal.signal(signal.SIGINT, exit)
+    # Ensure cleanup happens on SIGTERM
+    signal.signal(signal.SIGTERM, exit)
+
     timer = QtCore.QTimer()
     timer.start(100)  # You may change this if you wish.
     timer.timeout.connect(lambda: None)  # Let the interpreter run each 500 ms.
