@@ -5,8 +5,6 @@ import subprocess
 from subprocess import PIPE
 from typing import Optional
 
-from .gui.logviewer import LogViewer
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("aw.qt.manager")
 

@@ -60,6 +60,10 @@ class TrayIcon(QSystemTrayIcon):
 
         root_url = "http://localhost:{port}".format(port=5666 if testing else 5600)
 
+        if testing:
+            menu.addAction("Running in testing mode")  # .setEnabled(False)
+            menu.addSeparator()
+
         # openWebUIIcon = QIcon.fromTheme("open")
         menu.addAction("Open Dashboard", lambda: open_webui(root_url))
         menu.addAction("Open API Browser", lambda: open_apibrowser(root_url))
