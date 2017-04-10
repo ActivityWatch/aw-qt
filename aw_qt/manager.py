@@ -2,82 +2,97 @@ import os
 from time import sleep
 import logging
 import subprocess
-from subprocess import PIPE
-
-from .gui.logviewer import LogViewer
+from subprocess import PIPE, STDOUT
+from typing import Optional
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("aw.qt.manager")
 
 
 class Module:
-    def __init__(self, name):
+    def __init__(self, name: str) -> None:
         self.name = name
         self.started = False
-        self._process = None
-        self._last_process = None
+        self._process = None  # type: Optional[subprocess.Popen]
+        self._last_process = None  # type: Optional[subprocess.Popen]
         self._log = ""
 
-    def start(self, testing=False):
+    def start(self, testing: bool = False) -> None:
         logger.info("Starting module {}".format(self.name))
+
+        # Create a process group, become its leader
+        os.setpgrp()
 
         # Will start module from localdir if present there,
         # otherwise will try to call what is available in PATH.
         exec_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), self.name)
-        exec_cmd = [exec_path if os.path.isfile(exec_path) else self.name, "--testing" if testing else ""]
+        exec_cmd = [exec_path if os.path.isfile(exec_path) else self.name]
+
+        if testing:
+            exec_cmd.append("--testing")
 
         WINDOWS=True
         if WINDOWS:
             exec_cmd = ["python", "-m", *exec_cmd]
 
         self._process = subprocess.Popen(exec_cmd, universal_newlines=True, bufsize=0,
-                                         stdout=PIPE, stderr=subprocess.STDOUT)
+                                         stdout=PIPE, stderr=PIPE if not WINDOWS else STDOUT)
+        # Should be True if module is supposed to be running, else False
         self.started = True
 
-    def stop(self):
+    def stop(self) -> None:
         """
         Stops a module, and waits until it terminates.
         """
         # TODO: What if a module doesn't stop? Add timeout to p.wait() and then do a p.kill() if timeout is hit
         if not self.started:
-            logger.warning("Tried to kill module {}, but it has never been started".format(self.name))
+            logger.warning("Tried to stop module {}, but it hasn't been started".format(self.name))
+            return
         elif not self.is_alive():
-            logger.warning("Tried to kill module {}, but it was already dead".format(self.name))
+            logger.warning("Tried to stop module {}, but it wasn't running".format(self.name))
         else:
-            logger.info("Stopping module {}".format(self.name))
+            logger.debug("Stopping module {}".format(self.name))
             self._process.terminate()
-            logger.info("Waiting for module {} to shut down".format(self.name))
+            logger.debug("Waiting for module {} to shut down".format(self.name))
             self._process.wait()
-            logger.info("Module {} has shut down".format(self.name))
+            logger.info("Stopped module {}".format(self.name))
+
         assert not self.is_alive()
         self._last_process = self._process
         self._process = None
         self.started = False
 
+    def toggle(self, testing: bool = False) -> None:
+        if self.started:
+            self.stop()
+        else:
+            self.start(testing=testing)
+
     def is_alive(self):
-        if not self.started:
+        if self._process is None:
             return False
 
         self._process.poll()
         # If returncode is none after p.poll(), module is still running
         return True if self._process.returncode is None else False
 
-    def stderr(self):
+    def stderr(self) -> str:
         """Useful if you want to retrieve logs written to stderr"""
+        if self.is_alive():
+            return "Can't fetch output while running"
         if not self._process and not self._last_process:
             return "Module not started, no output available"
-        if self._last_process:
-            print("Reading last process stderr...")
-            log = self._last_process.stderr.read()
-            self._log += log
-        # FIXME: Currently causes everything to hang when trying to read stderr of self._process
-        """
-        if self._process:
+
+        # Trying to read stderr or a running process causes hang
+        if self.started and not self.is_alive():
             print("Reading active process stderr...")
-            log = self._process.stderr.read()
-            self._log += log
-        """
-        self._log += "\n\nReading the output of a currently running module is currently broken, sorry."
+            self._log += self._process.stderr.read()
+        elif self._last_process:
+            print("Reading last process stderr...")
+            self._log += self._last_process.stderr.read()
+        else:
+            self._log += "\n\nReading the output of a currently running module is currently broken, sorry."
+
         return self._log
 
     def show_log(self):
@@ -98,6 +113,7 @@ modules = {name: Module(name) for name in _possible_modules}
 
 def get_unexpected_stops():
     return list(filter(lambda x: x.started and not x.is_alive(), modules.values()))
+
 
 if __name__ == "__main__":
     for module in modules.values():
