@@ -25,8 +25,13 @@ class Module:
         # otherwise will try to call what is available in PATH.
         exec_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), self.name)
         exec_cmd = [exec_path if os.path.isfile(exec_path) else self.name, "--testing" if testing else ""]
-        self._process = subprocess.Popen(exec_cmd, universal_newlines=True,
-                                         stdout=PIPE, stderr=PIPE)
+
+        WINDOWS=True
+        if WINDOWS:
+            exec_cmd = ["python", "-m", *exec_cmd]
+
+        self._process = subprocess.Popen(exec_cmd, universal_newlines=True, bufsize=0,
+                                         stdout=PIPE, stderr=subprocess.STDOUT)
         self.started = True
 
     def stop(self):
