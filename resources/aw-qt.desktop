@@ -9,6 +9,6 @@ Terminal=false
 Type=Application
 X-GNOME-Autostart-enabled=false
 Version=1.0
-Icon=/home/erb/Programming/activitywatch/aw-qt/img/logo.png
+Icon=activitywatch
 Categories=Utility;
 
