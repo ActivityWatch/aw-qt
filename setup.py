@@ -11,7 +11,7 @@ setup(name='aw-qt',
       packages=['aw_qt'],
       install_requires=[
           'aw-core>=0.1',
-          'appdirs==1.4.0',
+          'appdirs>=1.4.0,<1.5.0',
           'PyQt5>=5.7'
       ],
       dependency_links=[

@@ -2,12 +2,14 @@ import os
 from time import sleep
 import logging
 import subprocess
-from subprocess import PIPE
+from subprocess import PIPE, STDOUT
 from typing import Optional
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("aw.qt.manager")
 
+# TODO: Proper detection, NEEDS TO BE FIXED BEFORE MERGE WITH MASTER
+WINDOWS = True
 
 class Module:
     def __init__(self, name: str) -> None:
@@ -20,17 +22,25 @@ class Module:
     def start(self, testing: bool = False) -> None:
         logger.info("Starting module {}".format(self.name))
 
+
         # Create a process group, become its leader
-        os.setpgrp()
+        if not WINDOWS:
+            os.setpgrp()
 
         # Will start module from localdir if present there,
         # otherwise will try to call what is available in PATH.
         exec_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), self.name)
         exec_cmd = [exec_path if os.path.isfile(exec_path) else self.name]
+
         if testing:
             exec_cmd.append("--testing")
-        self._process = subprocess.Popen(exec_cmd, universal_newlines=True,
-                                         stdout=PIPE, stderr=PIPE)
+
+        if WINDOWS:
+            # TODO: This works in my testing setup, will probably not work universally
+            exec_cmd = ["python", "-m", *exec_cmd]
+
+        self._process = subprocess.Popen(exec_cmd, universal_newlines=True, bufsize=0,
+                                         stdout=PIPE, stderr=PIPE if not WINDOWS else STDOUT)
         # Should be True if module is supposed to be running, else False
         self.started = True
 
@@ -77,21 +87,19 @@ class Module:
         if not self._process and not self._last_process:
             return "Module not started, no output available"
 
+        buffer = self._process.stderr if not WINDOWS else self._process.stdout
+
         # Trying to read stderr or a running process causes hang
         if self.started and not self.is_alive():
             print("Reading active process stderr...")
-            self._log += self._process.stderr.read()
+            self._log += buffer.read()
         elif self._last_process:
             print("Reading last process stderr...")
-            self._log += self._last_process.stderr.read()
+            self._log += buffer.read()
         else:
             self._log += "\n\nReading the output of a currently running module is currently broken, sorry."
 
         return self._log
-
-    def show_log(self):
-        self.lv = LogViewer(name=self.name)
-        self.lv.set_log(self.stderr())
 
 
 _possible_modules = [
