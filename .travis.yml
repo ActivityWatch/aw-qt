@@ -1,4 +1,3 @@
-
 language: python
 matrix:
   include:
@@ -15,5 +14,6 @@ install:
  - "make build"
 
 script:
+ - "python -c 'import aw_qt'"
  - "make package"
 
