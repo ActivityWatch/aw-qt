@@ -15,5 +15,7 @@ install:
  - "python setup.py install"
 
 script:
- - "./build.sh"
+ - "make"
+
+after_script:
  - "pyinstaller aw-qt.spec"
