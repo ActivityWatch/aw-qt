@@ -11,8 +11,7 @@ from PyQt5.QtGui import QIcon
 
 import aw_core
 
-from .. import resources
-from .. import manager
+from . import manager
 
 
 def open_webui(root_url):
