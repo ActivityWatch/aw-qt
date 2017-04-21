@@ -12,10 +12,8 @@ before_install:
  - "pip install PyQt5"
 
 install:
- - "python setup.py install"
+ - "make build"
 
 script:
- - "make"
+ - "make package"
 
-after_script:
- - "pyinstaller aw-qt.spec"
