@@ -5,8 +5,27 @@ import subprocess
 from subprocess import PIPE
 from typing import Optional
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("aw.qt.manager")
+
+
+def _locate_executable(name: str) -> str:
+    # Will start module from localdir if present there,
+    # otherwise will try to call what is available in PATH.
+    curr_filepath = os.path.realpath(__file__)
+    curr_dir = os.path.dirname(curr_filepath)
+    search_paths = [curr_dir, os.path.abspath(os.path.join(curr_dir, os.pardir))]
+    exec_paths = [os.path.join(path, name) for path in search_paths]
+
+    for exec_path in exec_paths:
+        if os.path.isfile(exec_path):
+            logger.debug("Found executable for {} in: {}".format(name, exec_path))
+            return [exec_path]
+            break  # this break is redundant, but kept due to for-else semantics
+    else:
+        # TODO: Actually check if it is in PATH
+        logger.debug("Trying to start {} using PATH (executable not found in: {})"
+                     .format(name, exec_paths))
+        return [name]
 
 
 class Module:
@@ -23,12 +42,10 @@ class Module:
         # Create a process group, become its leader
         os.setpgrp()
 
-        # Will start module from localdir if present there,
-        # otherwise will try to call what is available in PATH.
-        exec_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), self.name)
-        exec_cmd = [exec_path if os.path.isfile(exec_path) else self.name]
+        exec_cmd = _locate_executable(self.name)
         if testing:
             exec_cmd.append("--testing")
+        logger.debug("Running: {}".format(exec_cmd))
         self._process = subprocess.Popen(exec_cmd, universal_newlines=True,
                                          stdout=PIPE, stderr=PIPE)
         # Should be True if module is supposed to be running, else False
@@ -89,15 +106,14 @@ class Module:
 
         return self._log
 
-    def show_log(self):
-        self.lv = LogViewer(name=self.name)
-        self.lv.set_log(self.stderr())
 
-
+# TODO: Fetch these from somewhere appropriate (auto detect or a config file)
+#       Save to config wether they should autostart or not.
 _possible_modules = [
     "aw-server",
     "aw-watcher-afk",
     "aw-watcher-window",
+    # "aw-watcher-spotify",
     # "aw-watcher-network"
 ]
 
