@@ -6,8 +6,6 @@ from time import sleep
 from . import manager
 from . import trayicon
 
-logging.basicConfig()
-
 
 def autostart(testing: bool):
     # Start aw-server and wait for it to boot
