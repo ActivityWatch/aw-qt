@@ -1,6 +1,7 @@
 __pycache__
 *.swp
+*.pyc
 *.egg-info
 aw_qt/resources.py
 dist
-build
+build*
