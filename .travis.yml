@@ -1,4 +1,6 @@
+dist: trusty
 language: python
+
 matrix:
   include:
   - python: "3.5"
@@ -8,6 +10,7 @@ matrix:
 
 before_install:
  - "pip install pyinstaller"
+ - "pip install nuitka"
  - "pip install PyQt5"
 
 install:
@@ -16,4 +19,5 @@ install:
 script:
  - "make test"
  - "make package"
+ - "make package-nuitka"
 

@@ -13,3 +13,7 @@ test:
 
 package:
 	pyinstaller aw-qt.spec --clean --noconfirm
+
+package-nuitka:
+	export PYTHONPATH="/usr/local/lib/python3.5/dist-packages:/usr/local/lib/python3.5/site-packages:/home/${USER}/.local/lib/python3.5/site-packages:/home/${USER}/Programming/activitywatch/aw-core"; \
+	nuitka --python-version=3.5 --portable --python-flag=no_site --output-dir="build-nuitka" --plugin-enable=qt-plugins aw_qt/
