@@ -3,17 +3,26 @@ matrix:
   include:
   - python: "3.5"
   - python: "nightly"
+  - os: osx
+    language: generic
   allow_failures:
   - python: "nightly"
 
 before_install:
- - "pip install pyinstaller"
- - "pip install PyQt5"
+ - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
+     wget https://github.com/ActivityWatch/activitywatch/raw/master/scripts/ci/setup_venv_osx.sh;
+     chmod +x setup_venv_osx.sh;
+     ./setup_venv_osx.sh
+     source venv/bin/activate;
+   fi
+ - pip install pyinstaller
+ - pip install PyQt5
 
 install:
- - "make build"
+ - make build
 
 script:
- - "make test"
- - "make package"
+ - make test
+ - make test-integration
+ - make package
 
