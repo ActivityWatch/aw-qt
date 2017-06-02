@@ -13,6 +13,8 @@ import aw_core
 
 from . import manager
 
+logger = logging.getLogger(__name__)
+
 
 def open_webui(root_url):
     print("Opening dashboard")
@@ -134,7 +136,7 @@ def exit(*args):
 
 
 def run(testing=False):
-    logging.info("Creating trayicon...")
+    logger.info("Creating trayicon...")
     # print(QIcon.themeSearchPaths())
 
     app = QApplication(sys.argv)
