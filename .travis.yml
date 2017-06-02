@@ -12,7 +12,7 @@ before_install:
  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
      wget https://github.com/ActivityWatch/activitywatch/raw/master/scripts/ci/setup_venv_osx.sh;
      chmod +x setup_venv_osx.sh;
-     ./setup_venv_osx.sh
+     ./setup_venv_osx.sh;
      source venv/bin/activate;
    fi
    # We might want to move this into the integration test script
@@ -23,19 +23,8 @@ before_install:
    fi
  - python -V
  - pip -V
- - python3 -V
- - pip3 -V
  - pip3 install --upgrade pip
  - pip3 install pyinstaller
-   # Installing with `pip install pyqt5` doesn't work reliably for whatever reason.
- - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
-     python3 -c "import distutils.util; print(distutils.util.get_platform())";
-     wheelname="PyQt5-5.8.2-cp35.cp36.cp37-abi3-macosx_10_6_intel.macosx_10_6_intel.macosx_10_9_intel.macosx_10_9_x86_64.whl";
-     wget -O "$wheelname" "https://pypi.python.org/packages/0f/a8/71d918272a9ae17541942daffb15d663d7c9401346252a495a84822e81d5/PyQt5-5.8.2-5.8.0-cp35.cp36.cp37-abi3-macosx_10_6_intel.whl#md5=2b71949cfc748db399c0bd8157444a85";
-     pip3 install "$wheelname";
-     ls -l /opt/local/bin;
-     ln -s /opt/local/bin/pyrcc5-3.5 /opt/local/bin/pyrcc5;
-   fi
 
 install:
  - make build
