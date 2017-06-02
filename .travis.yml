@@ -31,6 +31,8 @@ install:
 
 script:
  - make test
- - make test-integration
+ - if [[ "$TRAVIS_OS_NAME" != "osx" ]]; then
+     make test-integration;
+   fi
  - make package
 
