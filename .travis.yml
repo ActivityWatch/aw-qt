@@ -23,6 +23,13 @@ before_install:
    fi
  - pip install --upgrade pip
  - pip install pyinstaller
+   # Installing PyQt5 with brew was suggested here: https://www.davidculley.com/installing-python-on-a-mac/
+   # Installing it with pip didn't work very well for me in a lot of cases...
+ - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
+     brew install qt5;
+     brew install sip --with-python3;
+     brew install pyqt5;
+   fi
 
 install:
  - make build
