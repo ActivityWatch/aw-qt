@@ -25,6 +25,7 @@ before_install:
  - pip install pyinstaller
    # Installing with `pip install pyqt5` doesn't work reliably for whatever reason.
  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
+     python3 -c "import distutils; print(distutils.util.get_platform())"
      wheelname="PyQt5-5.8.2-5.8.0-cp35.cp36.cp37-abi3-macosx_10_6_intel.macosx_10_6_intel.macosx_10_9_intel.macosx_10_9_x86_64.whl";
      wget -O "$wheelname" "https://pypi.python.org/packages/0f/a8/71d918272a9ae17541942daffb15d663d7c9401346252a495a84822e81d5/PyQt5-5.8.2-5.8.0-cp35.cp36.cp37-abi3-macosx_10_6_intel.whl#md5=2b71949cfc748db399c0bd8157444a85";
      pip install "$wheelname";
