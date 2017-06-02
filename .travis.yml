@@ -15,10 +15,10 @@ before_install:
      ./setup_venv_osx.sh
      source venv/bin/activate;
    fi
-   # We might want to move this into the integration_tests.sh script
  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
-     "export DISPLAY=:99.0";
-     "sh -e /etc/init.d/xvfb start";
+     # We might want to move this into the integration test script
+     export DISPLAY=:99.0;
+     sh -e /etc/init.d/xvfb start;
      sleep 3;  # give xvfb some time to start
    fi
  - pip install pyinstaller
