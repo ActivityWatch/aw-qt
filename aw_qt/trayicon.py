@@ -79,7 +79,13 @@ class TrayIcon(QSystemTrayIcon):
         menu.addSeparator()
 
         exitIcon = QIcon.fromTheme("application-exit", QIcon("media/application_exit.png"))
-        menu.addAction(exitIcon, "Quit ActivityWatch", exit_dialog)
+        # This check is an attempted solution to: https://github.com/ActivityWatch/activitywatch/issues/62
+        # Seems to be in agreement with: https://github.com/OtterBrowser/otter-browser/issues/1313
+        #   "it seems that the bug is also triggered when creating a QIcon with an invalid path"
+        if exitIcon.availableSizes():
+            menu.addAction(exitIcon, "Quit ActivityWatch", exit_dialog)
+        else:
+            menu.addAction("Quit ActivityWatch", exit_dialog)
 
         self.setContextMenu(menu)
 
