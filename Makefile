@@ -16,3 +16,8 @@ test-integration:
 
 package:
 	pyinstaller aw-qt.spec --clean --noconfirm
+
+package-appveyor:
+	# Includes Qt binaries which are not automatically found due to bug in PyInstaller 3.2
+	# See: https://github.com/pyinstaller/pyinstaller/issues/2152
+	pyinstaller aw-qt.spec --path "C:/Python35/Lib/site-packages/PyQt5/Qt/bin" --clean --noconfirm
