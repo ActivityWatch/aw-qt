@@ -5,7 +5,7 @@ import subprocess
 from subprocess import PIPE
 from typing import Optional
 
-logger = logging.getLogger("aw.qt.manager")
+logger = logging.getLogger(__name__)
 
 
 def _locate_executable(name: str) -> str:
@@ -18,13 +18,13 @@ def _locate_executable(name: str) -> str:
 
     for exec_path in exec_paths:
         if os.path.isfile(exec_path):
-            logger.debug("Found executable for {} in: {}".format(name, exec_path))
+            # logger.debug("Found executable for {} in: {}".format(name, exec_path))
             return [exec_path]
             break  # this break is redundant, but kept due to for-else semantics
     else:
         # TODO: Actually check if it is in PATH
-        logger.debug("Trying to start {} using PATH (executable not found in: {})"
-                     .format(name, exec_paths))
+        # logger.debug("Trying to start {} using PATH (executable not found in: {})"
+        #              .format(name, exec_paths))
         return [name]
 
 
@@ -78,7 +78,7 @@ class Module:
         else:
             self.start(testing=testing)
 
-    def is_alive(self):
+    def is_alive(self) -> bool:
         if self._process is None:
             return False
 

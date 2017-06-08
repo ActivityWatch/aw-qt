@@ -4,10 +4,12 @@ import argparse
 from time import sleep
 from typing import List
 
+from aw_core.log import setup_logging
+
 from . import manager
 from . import trayicon
 
-logger = logging.getLogger("aw-qt")
+logger = logging.getLogger(__name__)
 
 
 def autostart(modules: List[str], testing: bool):
@@ -35,7 +37,7 @@ def stop():
 
 def main():
     args = parse_args()
-    logging.basicConfig(level=logging.DEBUG if args.testing else logging.INFO)
+    setup_logging("aw-qt", testing=args.testing, verbose=args.testing, log_file=True)
 
     autostart(args.autostart_modules, testing=args.testing)
 
