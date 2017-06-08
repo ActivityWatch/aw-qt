@@ -2,15 +2,18 @@ import os
 from time import sleep
 import logging
 import subprocess
-from subprocess import PIPE
-from typing import Optional
+from typing import Optional, List
 
 logger = logging.getLogger(__name__)
 
 
-def _locate_executable(name: str) -> str:
-    # Will start module from localdir if present there,
-    # otherwise will try to call what is available in PATH.
+def _locate_executable(name: str) -> List[str]:
+    """
+    Will start module from localdir if present there,
+    otherwise will try to call what is available in PATH.
+
+    Returns it as a Popen cmd list.
+    """
     curr_filepath = os.path.realpath(__file__)
     curr_dir = os.path.dirname(curr_filepath)
     search_paths = [curr_dir, os.path.abspath(os.path.join(curr_dir, os.pardir))]
@@ -46,7 +49,11 @@ class Module:
         if testing:
             exec_cmd.append("--testing")
         # logger.debug("Running: {}".format(exec_cmd))
+
+        # There is a very good reason stdout and stderr is not PIPE here
+        # See: https://github.com/ActivityWatch/aw-server/issues/27
         self._process = subprocess.Popen(exec_cmd, universal_newlines=True)
+
         # Should be True if module is supposed to be running, else False
         self.started = True
 
