@@ -52,8 +52,9 @@ def parse_args():
     parser = argparse.ArgumentParser(prog="aw-qt", description='A trayicon and service manager for ActivityWatch')
     parser.add_argument('--testing', action='store_true',
                         help='Run the trayicon and services in testing mode')
-    parser.add_argument('--autostart-modules', dest='autostart_modules', type=lambda s: [m for m in s.split(',') if m],
+    parser.add_argument('--autostart-modules', dest='autostart_modules',
+                        type=lambda s: [m for m in s.split(',') if m and m.lower() != "none"],
                         default=["aw-server", "aw-watcher-afk", "aw-watcher-window"],
-                        help='A comma-separated list of modules to autostart')
+                        help='A comma-separated list of modules to autostart, or just `none` to not autostart anything')
 
     return parser.parse_args()
