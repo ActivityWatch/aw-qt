@@ -45,9 +45,8 @@ class Module:
         exec_cmd = _locate_executable(self.name)
         if testing:
             exec_cmd.append("--testing")
-        logger.debug("Running: {}".format(exec_cmd))
-        self._process = subprocess.Popen(exec_cmd, universal_newlines=True,
-                                         stdout=PIPE, stderr=PIPE)
+        # logger.debug("Running: {}".format(exec_cmd))
+        self._process = subprocess.Popen(exec_cmd, universal_newlines=True)
         # Should be True if module is supposed to be running, else False
         self.started = True
 
