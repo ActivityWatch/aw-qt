@@ -15,5 +15,6 @@ test-integration:
 	python3 ./tests/integration_tests.py --no-modules
 
 package:
-	pyinstaller aw-qt.spec --clean --noconfirm;
+	pyinstaller aw-qt.spec --clean --noconfirm --windowed
+
 

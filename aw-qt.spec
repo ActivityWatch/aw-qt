@@ -1,7 +1,14 @@
 # -*- mode: python -*-
 
+# .spec files can be tricky, so here are som useful resources:
+#
+#  - https://pythonhosted.org/PyInstaller/spec-files.html
+#  - https://shanetully.com/2013/08/cross-platform-deployment-of-python-applications-with-pyinstaller/
+
 import platform
 import os
+import sys
+
 
 extra_pathex = []
 if platform.system() == "Windows":
@@ -13,8 +20,8 @@ if platform.system() == "Windows":
 	extra_pathex.append(pyqt_path + "\\Qt\\bin")
 
 
+icon = 'img/logo.ico'
 block_cipher = None
-
 
 
 a = Analysis(['aw_qt/__main__.py'],
@@ -37,7 +44,8 @@ exe = EXE(pyz,
           debug=False,
           strip=False,
           upx=True,
-          console=True )
+          icon=icon,
+          console=True)  # TODO: Might want to set console=False in the future
 coll = COLLECT(exe,
                a.binaries,
                a.zipfiles,
@@ -45,3 +53,14 @@ coll = COLLECT(exe,
                strip=False,
                upx=True,
                name='aw-qt')
+
+
+# Build a .app for macOS
+# This would probably be done best by also bundling aw-server, aw-watcher-afk and 
+# aw-watcher-window in one single `.app`.
+#
+# NOTE: Untested, remove the False to test
+if False and platform.system() == "Darwin":
+    app = BUNDLE(exe,
+                 name="ActivityWatch.app",
+                 icon=None)  # TODO: Should this be icon=icon?
