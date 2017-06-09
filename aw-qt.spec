@@ -1,10 +1,24 @@
 # -*- mode: python -*-
 
+import platform
+import os
+
+extra_pathex = []
+if platform.system() == "Windows":
+	# The Windows version includes paths to Qt binaries which are
+	# not automatically found due to bug in PyInstaller 3.2.
+	# See: https://github.com/pyinstaller/pyinstaller/issues/2152
+	import PyQt5
+	pyqt_path = os.path.dirname(PyQt5.__file__)
+	extra_pathex.append(pyqt_path + "\\Qt\\bin")
+
+
 block_cipher = None
 
 
+
 a = Analysis(['aw_qt/__main__.py'],
-             pathex=[],
+             pathex=[] + extra_pathex,
              binaries=None,
              datas=None,
              hiddenimports=[],
