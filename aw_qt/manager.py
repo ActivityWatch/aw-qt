@@ -1,4 +1,5 @@
 import os
+import platform
 from time import sleep
 import logging
 import subprocess
@@ -43,7 +44,8 @@ class Module:
         logger.info("Starting module {}".format(self.name))
 
         # Create a process group, become its leader
-        os.setpgrp()
+        if platform.system() != "Windows":
+            os.setpgrp()
 
         exec_cmd = _locate_executable(self.name)
         if testing:
