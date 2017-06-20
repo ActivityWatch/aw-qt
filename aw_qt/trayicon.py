@@ -75,7 +75,7 @@ class TrayIcon(QSystemTrayIcon):
         _build_modulemenu(modulesMenu, testing)
 
         menu.addSeparator()
-        menu.addAction("Open log folder", lambda: open_dir(aw_core.dirs.get_log_dir()))
+        menu.addAction("Open log folder", lambda: open_dir(aw_core.dirs.get_log_dir(None)))
         menu.addSeparator()
 
         exitIcon = QIcon.fromTheme("application-exit", QIcon("media/application_exit.png"))
