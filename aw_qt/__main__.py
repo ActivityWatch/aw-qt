@@ -1,3 +1,3 @@
-from aw_qt import main
+from aw_qt.main import main
 
 main()
