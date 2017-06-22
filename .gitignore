@@ -4,3 +4,4 @@ __pycache__
 aw_qt/resources.py
 dist
 build
+.mypy_cache
