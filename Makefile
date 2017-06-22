@@ -1,7 +1,7 @@
 .PHONY: build
 
 build:
-	pip3 install pyqt5
+	pip3 install pyqt5 mypy
 	pyrcc5 -o aw_qt/resources.py aw_qt/resources.qrc
 	python3 setup.py install
 
@@ -13,6 +13,9 @@ test:
 
 test-integration:
 	python3 ./tests/integration_tests.py --no-modules
+
+typecheck:
+	mypy aw_qt --ignore-missing-imports
 
 package:
 	pyinstaller aw-qt.spec --clean --noconfirm --windowed
