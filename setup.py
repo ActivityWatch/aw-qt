@@ -18,4 +18,7 @@ setup(name='aw-qt',
       ],
       entry_points={
           'console_scripts': ['aw-qt = aw_qt:main']
-      })
+      },
+      classifiers=[
+          'Programing Language :: Python :: 3'
+      ])
