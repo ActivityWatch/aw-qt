@@ -1,4 +1,4 @@
-.PHONY: build
+.PHONY: build install test test-integration typecheck package clean
 
 build:
 	pip3 install pyqt5 mypy
@@ -20,4 +20,6 @@ typecheck:
 package:
 	pyinstaller aw-qt.spec --clean --noconfirm --windowed
 
-
+clean:
+	rm -rf build dist
+	rm -rf __pycache__ aw_qt/__pycache__
