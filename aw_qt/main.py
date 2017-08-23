@@ -19,7 +19,7 @@ def main():
     _manager.autostart()
 
     error_code = trayicon.run(_manager, testing=args.testing)
-    _manager.stop()
+    _manager.stop_all()
 
     sys.exit(error_code)
 
