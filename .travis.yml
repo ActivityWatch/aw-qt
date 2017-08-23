@@ -4,6 +4,7 @@ language: python
 matrix:
   include:
   - python: "3.5"
+  - python: "3.6"
   - python: "nightly"
   - os: osx
     language: generic
