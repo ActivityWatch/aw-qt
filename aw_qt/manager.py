@@ -125,13 +125,20 @@ class Manager:
     def get_unexpected_stops(self):
         return list(filter(lambda x: x.started and not x.is_alive(), self.modules.values()))
 
-    def autostart(self):
-        if "aw-server" in self.modules:
+    def start(self, module_name):
+        if module_name in self.modules.keys():
             self.modules["aw-server"].start()
+        else:
+            logger.error("Unable to start module '{}': No such module".format(module_name))
 
-        autostart_modules = set(self.modules.keys()) - {"aw-server"}
+    def autostart(self, autostart_modules):
+        # Always start aw-server first
+        if "aw-server" in autostart_modules:
+            self.modules.start("aw-server")
+
+        autostart_modules = set(autostart_modules) - {"aw-server"}
         for module_name in autostart_modules:
-            self.modules[module_name].start()
+            self.modules.start(module_name)
 
     def stop_all(self):
         for module in filter(lambda m: m.is_alive(), self.modules.values()):

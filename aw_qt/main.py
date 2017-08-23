@@ -16,7 +16,7 @@ def main():
     setup_logging("aw-qt", testing=args.testing, verbose=args.testing, log_file=True)
 
     _manager = Manager(testing=args.testing)
-    _manager.autostart()
+    _manager.autostart(args.autostart_modules)
 
     error_code = trayicon.run(_manager, testing=args.testing)
     _manager.stop_all()
