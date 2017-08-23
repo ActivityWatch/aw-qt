@@ -5,6 +5,8 @@ import logging
 import subprocess
 from typing import Optional, List
 
+import aw_core
+
 logger = logging.getLogger(__name__)
 
 
@@ -36,12 +38,13 @@ class Module:
     def __init__(self, name: str) -> None:
         self.name = name
         self.started = False
+        self.testing = False
         self._process = None  # type: Optional[subprocess.Popen]
         self._last_process = None  # type: Optional[subprocess.Popen]
-        self._log = ""
 
     def start(self, testing: bool = False) -> None:
         logger.info("Starting module {}".format(self.name))
+        self.testing = testing
 
         # Create a process group, become its leader
         if platform.system() != "Windows":
@@ -95,24 +98,14 @@ class Module:
         # If returncode is none after p.poll(), module is still running
         return True if self._process.returncode is None else False
 
-    def stderr(self) -> str:
-        """Useful if you want to retrieve logs written to stderr"""
-        if self.is_alive():
-            return "Can't fetch output while running"
-        if not self._process and not self._last_process:
-            return "Module not started, no output available"
-
-        # Trying to read stderr or a running process causes hang
-        if self.started and not self.is_alive():
-            print("Reading active process stderr...")
-            self._log += self._process.stderr.read()
-        elif self._last_process:
-            print("Reading last process stderr...")
-            self._log += self._last_process.stderr.read()
+    def read_log(self) -> str:
+        """Useful if you want to retrieve the logs of a module"""
+        log_path = aw_core.log.get_latest_log_file(self.name, self.testing)
+        if log_path:
+            with open(log_path) as f:
+                return f.read()
         else:
-            self._log += "\n\nReading the output of a currently running module is currently broken, sorry."
-
-        return self._log
+            return "No log file found"
 
 
 # TODO: Fetch these from somewhere appropriate (auto detect or a config file)

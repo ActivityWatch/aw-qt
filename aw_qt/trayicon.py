@@ -93,7 +93,7 @@ class TrayIcon(QSystemTrayIcon):
             box = QMessageBox(parent)
             box.setIcon(QMessageBox.Warning)
             box.setText("Module {} quit unexpectedly".format(module.name))
-            box.setDetailedText(module.stderr())
+            box.setDetailedText(module.read_log())
             box.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
             box.show()
 
