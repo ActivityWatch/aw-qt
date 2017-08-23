@@ -20,7 +20,7 @@ if platform.system() == "Windows":
 	extra_pathex.append(pyqt_path + "\\Qt\\bin")
 
 
-icon = 'img/logo.ico'
+icon = 'media/logo/logo.ico'
 block_cipher = None
 
 
