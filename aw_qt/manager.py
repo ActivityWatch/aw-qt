@@ -35,23 +35,22 @@ def _locate_executable(name: str) -> List[str]:
 
 
 class Module:
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, testing: bool = False) -> None:
         self.name = name
         self.started = False
-        self.testing = False
+        self.testing = testing
         self._process = None  # type: Optional[subprocess.Popen]
         self._last_process = None  # type: Optional[subprocess.Popen]
 
-    def start(self, testing: bool = False) -> None:
+    def start(self) -> None:
         logger.info("Starting module {}".format(self.name))
-        self.testing = testing
 
         # Create a process group, become its leader
         if platform.system() != "Windows":
             os.setpgrp()
 
         exec_cmd = _locate_executable(self.name)
-        if testing:
+        if self.testing:
             exec_cmd.append("--testing")
         # logger.debug("Running: {}".format(exec_cmd))
 
@@ -84,11 +83,11 @@ class Module:
         self._process = None
         self.started = False
 
-    def toggle(self, testing: bool = False) -> None:
+    def toggle(self) -> None:
         if self.started:
             self.stop()
         else:
-            self.start(testing=testing)
+            self.start()
 
     def is_alive(self) -> bool:
         if self._process is None:
@@ -108,26 +107,47 @@ class Module:
             return "No log file found"
 
 
-# TODO: Fetch these from somewhere appropriate (auto detect or a config file)
-#       Save to config wether they should autostart or not.
-_possible_modules = [
-    "aw-server",
-    "aw-watcher-afk",
-    "aw-watcher-window",
-    # "aw-watcher-spotify",
-    # "aw-watcher-network"
-]
+class Manager:
+    def __init__(self, testing: bool=False):
+        # TODO: Fetch these from somewhere appropriate (auto detect or a config file)
+        #       Save to config wether they should autostart or not.
+        _possible_modules = [
+            "aw-server",
+            "aw-watcher-afk",
+            "aw-watcher-window",
+            # "aw-watcher-spotify",
+            # "aw-watcher-network"
+        ]
 
-# TODO: Filter away all modules not available on system
-modules = {name: Module(name) for name in _possible_modules}
+        # TODO: Filter away all modules not available on system
+        self.modules = {name: Module(name, testing=testing) for name in _possible_modules}
 
+    def get_unexpected_stops(self):
+        return list(filter(lambda x: x.started and not x.is_alive(), self.modules.values()))
 
-def get_unexpected_stops():
-    return list(filter(lambda x: x.started and not x.is_alive(), modules.values()))
+    def start(self, module_name):
+        if module_name in self.modules.keys():
+            self.modules["aw-server"].start()
+        else:
+            logger.error("Unable to start module '{}': No such module".format(module_name))
+
+    def autostart(self, autostart_modules):
+        # Always start aw-server first
+        if "aw-server" in autostart_modules:
+            self.modules.start("aw-server")
+
+        autostart_modules = set(autostart_modules) - {"aw-server"}
+        for module_name in autostart_modules:
+            self.modules.start(module_name)
+
+    def stop_all(self):
+        for module in filter(lambda m: m.is_alive(), self.modules.values()):
+            module.stop()
 
 
 if __name__ == "__main__":
-    for module in modules.values():
+    manager = Manager()
+    for module in manager.modules.values():
         module.start()
         sleep(2)
         assert module.is_alive()

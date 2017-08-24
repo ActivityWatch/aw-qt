@@ -6,12 +6,12 @@ import os
 import subprocess
 
 from PyQt5 import QtCore
-from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QMessageBox, QMenu, QWidget
+from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QMessageBox, QMenu, QWidget, QPushButton
 from PyQt5.QtGui import QIcon
 
 import aw_core
 
-from . import manager
+from .manager import Manager
 
 logger = logging.getLogger(__name__)
 
@@ -26,21 +26,6 @@ def open_apibrowser(root_url):
     webbrowser.open(root_url + "/api")
 
 
-def _build_modulemenu(menu, testing):
-    menu.clear()
-
-    def add_module_menuitem(module):
-        ac = menu.addAction(module.name, lambda: module.toggle(testing))
-        ac.setCheckable(True)
-        ac.setChecked(module.is_alive())
-
-    add_module_menuitem(manager.modules["aw-server"])
-
-    for module_name in sorted(manager.modules.keys()):
-        if module_name != "aw-server":
-            add_module_menuitem(manager.modules[module_name])
-
-
 def open_dir(d):
     """From: http://stackoverflow.com/a/1795849/965332"""
     if sys.platform == 'win32':
@@ -52,16 +37,21 @@ def open_dir(d):
 
 
 class TrayIcon(QSystemTrayIcon):
-    def __init__(self, icon, parent=None, testing=False):
+    def __init__(self, manager: Manager, icon, parent=None, testing=False):
         QSystemTrayIcon.__init__(self, icon, parent)
-        menu = QMenu(parent)
-        # sagan_icon = QIcon(":/sagan-sympathetic.png")
-
         self.setToolTip("ActivityWatch" + (" (testing)" if testing else ""))
 
-        root_url = "http://localhost:{port}".format(port=5666 if testing else 5600)
+        self.manager = manager
+        self.testing = testing
 
-        if testing:
+        self._build_rootmenu()
+
+    def _build_rootmenu(self):
+        menu = QMenu(self.parent())
+
+        root_url = "http://localhost:{port}".format(port=5666 if self.testing else 5600)
+
+        if self.testing:
             menu.addAction("Running in testing mode")  # .setEnabled(False)
             menu.addSeparator()
 
@@ -72,7 +62,7 @@ class TrayIcon(QSystemTrayIcon):
         menu.addSeparator()
 
         modulesMenu = menu.addMenu("Modules")
-        _build_modulemenu(modulesMenu, testing)
+        self._build_modulemenu(modulesMenu)
 
         menu.addSeparator()
         menu.addAction("Open log folder", lambda: open_dir(aw_core.dirs.get_log_dir(None)))
@@ -90,21 +80,26 @@ class TrayIcon(QSystemTrayIcon):
         self.setContextMenu(menu)
 
         def show_module_failed_dialog(module):
-            box = QMessageBox(parent)
+            box = QMessageBox(self.parent())
             box.setIcon(QMessageBox.Warning)
             box.setText("Module {} quit unexpectedly".format(module.name))
             box.setDetailedText(module.read_log())
-            box.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+
+            restart_button = QPushButton("Restart", box)
+            restart_button.clicked.connect(module.start)
+            box.addButton(restart_button, QMessageBox.AcceptRole)
+            box.setStandardButtons(QMessageBox.Cancel)
+
             box.show()
 
         def rebuild_modules_menu():
             for module in modulesMenu.actions():
                 name = module.text()
-                alive = manager.modules[name].is_alive()
+                alive = self.manager.modules[name].is_alive()
                 module.setChecked(alive)
                 # print(module.text(), alive)
 
-            unexpected_exits = manager.get_unexpected_stops()
+            unexpected_exits = self.manager.get_unexpected_stops()
             if unexpected_exits:
                 for module in unexpected_exits:
                     show_module_failed_dialog(module)
@@ -114,6 +109,20 @@ class TrayIcon(QSystemTrayIcon):
             QtCore.QTimer.singleShot(2000, rebuild_modules_menu)
 
         QtCore.QTimer.singleShot(2000, rebuild_modules_menu)
+
+    def _build_modulemenu(self, moduleMenu):
+        moduleMenu.clear()
+
+        def add_module_menuitem(module):
+            ac = moduleMenu.addAction(module.name, lambda: module.toggle())
+            ac.setCheckable(True)
+            ac.setChecked(module.is_alive())
+
+        add_module_menuitem(self.manager.modules["aw-server"])
+
+        for module_name in sorted(self.manager.modules.keys()):
+            if module_name != "aw-server":
+                add_module_menuitem(self.manager.modules[module_name])
 
 
 def exit_dialog():
@@ -131,17 +140,13 @@ def exit(*args):
     # TODO: Stop all services
     print("Shutdown initiated, stopping all services...")
 
-    for module in manager.modules.values():
-        if module.is_alive():
-            module.stop()
-
     # Terminate entire process group, just in case.
     # os.killpg(0, signal.SIGINT)
 
     QApplication.quit()
 
 
-def run(testing=False):
+def run(manager, testing=False):
     logger.info("Creating trayicon...")
     # print(QIcon.themeSearchPaths())
 
@@ -163,7 +168,7 @@ def run(testing=False):
     widget = QWidget()
 
     icon = QIcon(":/logo.png")
-    trayIcon = TrayIcon(icon, widget, testing=testing)
+    trayIcon = TrayIcon(manager, icon, widget, testing=testing)
     trayIcon.show()
 
     trayIcon.showMessage("ActivityWatch", "ActivityWatch is starting up...")
