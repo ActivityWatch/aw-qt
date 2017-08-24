@@ -1,9 +1,15 @@
 .PHONY: build install test test-integration typecheck package clean
 
+pip_install_args := .
+
+ifdef DEV
+pip_install_args := --editable $(pip_install_args)
+endif
+
 build:
 	pip3 install pyqt5 mypy
 	pyrcc5 -o aw_qt/resources.py aw_qt/resources.qrc
-	python3 setup.py install
+	pip3 install $(pip_install_args)
 
 install:
 	bash scripts/config-autostart.sh
