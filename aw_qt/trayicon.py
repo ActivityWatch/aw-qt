@@ -1,9 +1,9 @@
 import sys
 import logging
-import signal
 import webbrowser
 import os
 import subprocess
+import atexit
 
 from PyQt5 import QtCore
 from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QMessageBox, QMenu, QWidget, QPushButton
@@ -152,14 +152,13 @@ def run(manager, testing=False):
 
     app = QApplication(sys.argv)
 
-    # Without this, Ctrl+C will have no effect
-    signal.signal(signal.SIGINT, exit)
-    # Ensure cleanup happens on SIGTERM
-    signal.signal(signal.SIGTERM, exit)
+    # Ensure proper cleanup
+    atexit.register(lambda: exit)
 
+    # Without this, Ctrl+C will have no effect
     timer = QtCore.QTimer()
     timer.start(100)  # You may change this if you wish.
-    timer.timeout.connect(lambda: None)  # Let the interpreter run each 500 ms.
+    timer.timeout.connect(lambda: None)  # Let the interpreter run each 100 ms.
 
     if not QSystemTrayIcon.isSystemTrayAvailable():
         QMessageBox.critical(None, "Systray", "I couldn't detect any system tray on this system. Either get one or run the ActivityWatch modules from the console.")
