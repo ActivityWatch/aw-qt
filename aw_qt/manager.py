@@ -134,11 +134,11 @@ class Manager:
     def autostart(self, autostart_modules):
         # Always start aw-server first
         if "aw-server" in autostart_modules:
-            self.modules.start("aw-server")
+            self.start("aw-server")
 
         autostart_modules = set(autostart_modules) - {"aw-server"}
         for module_name in autostart_modules:
-            self.modules.start(module_name)
+            self.start(module_name)
 
     def stop_all(self):
         for module in filter(lambda m: m.is_alive(), self.modules.values()):
