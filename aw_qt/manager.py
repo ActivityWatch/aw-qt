@@ -127,7 +127,7 @@ class Manager:
 
     def start(self, module_name):
         if module_name in self.modules.keys():
-            self.modules["aw-server"].start()
+            self.modules[module_name].start()
         else:
             logger.error("Unable to start module '{}': No such module".format(module_name))
 
