@@ -56,7 +56,8 @@ def _discover_modules_bundled() -> List[str]:
         matches = glob(os.path.join(path, "aw-*"))
         for match in matches:
             if os.path.isfile(match) and os.access(match, os.X_OK):
-                modules.append(match)
+                name = os.path.basename(match)
+                modules.append(name)
             else:
                 logger.warning("Found matching file but was not executable: {}".format(path))
 
@@ -171,6 +172,7 @@ class Manager:
         }
         found_modules |= set(_discover_modules_bundled())
         found_modules |= set(_discover_modules_system())
+        found_modules ^= {"aw-qt"}  # Exclude self
 
         for m_name in found_modules:
             if m_name not in self.modules:
