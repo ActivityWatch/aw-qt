@@ -81,7 +81,7 @@ def _discover_modules_system() -> List[str]:
 class Module:
     def __init__(self, name: str, testing: bool = False) -> None:
         self.name = name
-        self.started = False
+        self.started = False  # Should be True if module is supposed to be running, else False
         self.testing = testing
         self._process = None  # type: Optional[subprocess.Popen]
         self._last_process = None  # type: Optional[subprocess.Popen]
@@ -105,9 +105,11 @@ class Module:
 
             # There is a very good reason stdout and stderr is not PIPE here
             # See: https://github.com/ActivityWatch/aw-server/issues/27
-            self._process = subprocess.Popen(exec_cmd, universal_newlines=True)
+            try:
+                self._process = subprocess.Popen(exec_cmd, universal_newlines=True)
+            except OSError as e:
+                logger.error("Couldn't start module with command {} ({})".format(exec_cmd, e))
 
-            # Should be True if module is supposed to be running, else False
             self.started = True
 
     def stop(self) -> None:
