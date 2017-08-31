@@ -69,10 +69,11 @@ def _discover_modules_system() -> List[str]:
     search_paths = os.environ["PATH"].split(":")
     modules = []
     for path in search_paths:
-        files = os.listdir(path)
-        for filename in files:
-            if "aw-" in filename:
-                modules.append(filename)
+        if os.path.isdir(path):
+            files = os.listdir(path)
+            for filename in files:
+                if "aw-" in filename:
+                    modules.append(filename)
 
     logger.info("Found system modules: {}".format(set(modules)))
     return modules
