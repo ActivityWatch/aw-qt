@@ -5,7 +5,7 @@ from time import sleep
 import logging
 import subprocess
 import shutil
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 import aw_core
 
@@ -25,6 +25,7 @@ def _locate_bundled_executable(name: str) -> Optional[str]:
         if os.path.isfile(exec_path):
             # logger.debug("Found executable for {} in: {}".format(name, exec_path))
             return exec_path
+    return None
 
 
 def _is_system_module(name) -> bool:

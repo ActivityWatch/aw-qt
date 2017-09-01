@@ -27,12 +27,13 @@ before_install:
  - python -V
  - pip -V
  - pip3 install --upgrade pip
- - pip3 install pyinstaller
+ - pip3 install mypy pyinstaller
 
 install:
  - make build
 
 script:
+ - make typecheck
  - make test
  - make test-integration
  - make package
