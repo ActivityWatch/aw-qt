@@ -84,6 +84,7 @@ class Module:
         self.name = name
         self.started = False  # Should be True if module is supposed to be running, else False
         self.testing = testing
+        self.location = "system" if _is_system_module(name) else "bundled"
         self._process = None  # type: Optional[subprocess.Popen]
         self._last_process = None  # type: Optional[subprocess.Popen]
 
@@ -168,12 +169,7 @@ class Manager:
 
     def discover_modules(self):
         # These should always be bundled with aw-qt
-        found_modules = {
-            "aw-server",
-            "aw-watcher-afk",
-            "aw-watcher-window"
-        }
-        found_modules |= set(_discover_modules_bundled())
+        found_modules = set(_discover_modules_bundled())
         found_modules |= set(_discover_modules_system())
         found_modules ^= {"aw-qt"}  # Exclude self
 
