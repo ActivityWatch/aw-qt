@@ -20,7 +20,9 @@ if platform.system() == "Windows":
 	extra_pathex.append(pyqt_path + "\\Qt\\bin")
 
 
-icon = 'media/logo/logo.ico'
+icon_ico = 'media/logo/logo.ico'
+icon_png = 'media/logo/logo.png'
+icon_icns = 'media/logo/logo.icns'
 block_cipher = None
 
 
@@ -44,7 +46,7 @@ exe = EXE(pyz,
           debug=False,
           strip=False,
           upx=True,
-          icon=icon,
+          icon=icon_ico,
           console=True)  # TODO: Might want to set console=False in the future
 coll = COLLECT(exe,
                a.binaries,
@@ -58,9 +60,11 @@ coll = COLLECT(exe,
 # Build a .app for macOS
 # This would probably be done best by also bundling aw-server, aw-watcher-afk and 
 # aw-watcher-window in one single `.app`.
-#
-# NOTE: Untested, remove the False to test
-if False and platform.system() == "Darwin":
+
+if platform.system() == "Darwin":
     app = BUNDLE(exe,
+                 a.binaries,
+                 a.zipfiles,
+                 a.datas,
                  name="ActivityWatch.app",
-                 icon=None)  # TODO: Should this be icon=icon?
+                 icon=icon_icns)
