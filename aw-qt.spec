@@ -45,7 +45,7 @@ exe = EXE(pyz,
           strip=False,
           upx=True,
           icon=icon,
-          console=False)
+          console=False if platform.system() == "Windows" else True)
 coll = COLLECT(exe,
                a.binaries,
                a.zipfiles,
