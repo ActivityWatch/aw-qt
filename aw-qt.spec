@@ -45,7 +45,7 @@ exe = EXE(pyz,
           strip=False,
           upx=True,
           icon=icon,
-          console=False)
+          console=True)  # TODO: Might want to set console=False in the future
 coll = COLLECT(exe,
                a.binaries,
                a.zipfiles,
@@ -56,7 +56,7 @@ coll = COLLECT(exe,
 
 
 # Build a .app for macOS
-# This would probably be done best by also bundling aw-server, aw-watcher-afk and
+# This would probably be done best by also bundling aw-server, aw-watcher-afk and 
 # aw-watcher-window in one single `.app`.
 #
 # NOTE: Untested, remove the False to test
