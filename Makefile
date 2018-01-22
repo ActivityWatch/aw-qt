@@ -24,7 +24,7 @@ typecheck:
 	mypy aw_qt --ignore-missing-imports
 
 package:
-	pyinstaller aw-qt.spec --clean --noconfirm --windowed
+	pyinstaller --clean --noconfirm --windowed aw-qt.spec
 
 clean:
 	rm -rf build dist

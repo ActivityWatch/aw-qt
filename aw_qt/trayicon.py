@@ -37,7 +37,7 @@ def open_dir(d):
 
 
 class TrayIcon(QSystemTrayIcon):
-    def __init__(self, manager: Manager, icon, parent=None, testing=False):
+    def __init__(self, manager: Manager, icon, parent=None, testing=False) -> None:
         QSystemTrayIcon.__init__(self, icon, parent)
         self.setToolTip("ActivityWatch" + (" (testing)" if testing else ""))
 
@@ -177,7 +177,3 @@ def run(manager, testing=False):
 
     # Run the application, blocks until quit
     return app.exec_()
-
-
-if __name__ == "__main__":
-    run()

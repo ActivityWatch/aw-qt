@@ -108,7 +108,7 @@ class Module:
 
 
 class Manager:
-    def __init__(self, testing: bool=False):
+    def __init__(self, testing: bool=False) -> None:
         # TODO: Fetch these from somewhere appropriate (auto detect or a config file)
         #       Save to config wether they should autostart or not.
         _possible_modules = [
