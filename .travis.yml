@@ -8,7 +8,7 @@ matrix:
   - python: "nightly"
   - os: osx
     language: generic
-    env: PYENV_VERSION='3.6.5'
+    env: PYENV_VERSION='3.6.5' PYTHON_CONFIGURE_OPTS="--enable-framework"
   allow_failures:
   - python: "nightly"
 
