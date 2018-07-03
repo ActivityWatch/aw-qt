@@ -11,7 +11,7 @@ setup(name='aw-qt',
       packages=['aw_qt'],
       install_requires=[
           'aw-core>=0.1',
-          'PyQt5>=5.8,<5.11'
+          'PyQt5>=5.8,<5.10'
       ],
       dependency_links=[
           'https://github.com/ActivityWatch/aw-core/tarball/master#egg=aw-core-0.1.0'
