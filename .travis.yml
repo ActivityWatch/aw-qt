@@ -4,7 +4,7 @@ language: python
 matrix:
   include:
   - python: "3.5"
- #- python: "3.6"  # Disabled due to PyInstaller not having Python 3.6 support
+  - python: "3.6"
   - python: "nightly"
   - os: osx
     language: generic
@@ -35,6 +35,8 @@ install:
 script:
  - make typecheck
  - make test
- - make test-integration
+ - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
+     make test-integration;
+   fi
  - make package
 
