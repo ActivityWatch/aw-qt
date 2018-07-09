@@ -4,20 +4,20 @@ language: python
 matrix:
   include:
   - python: "3.5"
- #- python: "3.6"  # Disabled due to PyInstaller not having Python 3.6 support
+  - python: "3.6"
   - python: "nightly"
   - os: osx
     language: generic
+    env: PYENV_VERSION='3.6.5' PYTHON_CONFIGURE_OPTS="--enable-framework"
   allow_failures:
   - python: "nightly"
 
 before_install:
- - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
-     wget https://github.com/ActivityWatch/activitywatch/raw/master/scripts/ci/setup_venv_osx.sh;
-     chmod +x setup_venv_osx.sh;
-     ./setup_venv_osx.sh;
-     source venv/bin/activate;
-   fi
+ - |
+     if [[ -n "$PYENV_VERSION" ]]; then
+       wget https://github.com/praekeltfoundation/travis-pyenv/releases/download/0.4.0/setup-pyenv.sh
+       source setup-pyenv.sh
+     fi
    # We might want to move this into the integration test script
  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
      export DISPLAY=:99.0;
@@ -33,7 +33,10 @@ install:
  - make build
 
 script:
+ - make typecheck
  - make test
- - make test-integration
+ - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
+     make test-integration;
+   fi
  - make package
 
