@@ -33,6 +33,7 @@ install:
  - make build
 
 script:
+ - make typecheck
  - make test
  - make test-integration
  - make package

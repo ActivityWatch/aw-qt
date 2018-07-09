@@ -72,10 +72,14 @@ class Module:
         elif not self.is_alive():
             logger.warning("Tried to stop module {}, but it wasn't running".format(self.name))
         else:
+            if not self._process:
+                logger.error("No reference to process object")
             logger.debug("Stopping module {}".format(self.name))
-            self._process.terminate()
+            if self._process:
+                self._process.terminate()
             logger.debug("Waiting for module {} to shut down".format(self.name))
-            self._process.wait()
+            if self._process:
+                self._process.wait()
             logger.info("Stopped module {}".format(self.name))
 
         assert not self.is_alive()

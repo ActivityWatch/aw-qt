@@ -23,6 +23,11 @@ test-integration:
 typecheck:
 	mypy aw_qt --ignore-missing-imports
 
+precommit:
+	make typecheck
+	make test
+	make test-integration
+
 package:
 	pyinstaller --clean --noconfirm --windowed aw-qt.spec
 
