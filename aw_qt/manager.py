@@ -54,9 +54,17 @@ class Module:
             exec_cmd.append("--testing")
         # logger.debug("Running: {}".format(exec_cmd))
 
+        # Don't display a console window on Windows
+        # See: https://github.com/ActivityWatch/activitywatch/issues/212
+        if platform.system() == "Windows":
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        else:
+            startupinfo = None
+
         # There is a very good reason stdout and stderr is not PIPE here
         # See: https://github.com/ActivityWatch/aw-server/issues/27
-        self._process = subprocess.Popen(exec_cmd, universal_newlines=True)
+        self._process = subprocess.Popen(exec_cmd, universal_newlines=True, startupinfo=startupinfo)
 
         # Should be True if module is supposed to be running, else False
         self.started = True
