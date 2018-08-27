@@ -57,8 +57,8 @@ class Module:
         # Don't display a console window on Windows
         # See: https://github.com/ActivityWatch/activitywatch/issues/212
         if platform.system() == "Windows":
-            startupinfo = subprocess.STARTUPINFO()
-            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo = subprocess.STARTUPINFO()  # type: ignore
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW  # type: ignore
         else:
             startupinfo = None
 
