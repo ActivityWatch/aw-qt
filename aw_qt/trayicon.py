@@ -161,19 +161,17 @@ def run(manager, testing=False):
     timer.start(100)  # You may change this if you wish.
     timer.timeout.connect(lambda: None)  # Let the interpreter run each 500 ms.
 
-    if not QSystemTrayIcon.isSystemTrayAvailable():
-        QMessageBox.critical(None, "Systray", "I couldn't detect any system tray on this system. Either get one or run the ActivityWatch modules from the console.")
-        sys.exit(1)
+    # Only do this if System tray is available
+    if QSystemTrayIcon.isSystemTrayAvailable():
+        widget = QWidget()
 
-    widget = QWidget()
+        icon = QIcon(":/logo.png")
+        trayIcon = TrayIcon(manager, icon, widget, testing=testing)
+        trayIcon.show()
 
-    icon = QIcon(":/logo.png")
-    trayIcon = TrayIcon(manager, icon, widget, testing=testing)
-    trayIcon.show()
+        trayIcon.showMessage("ActivityWatch", "ActivityWatch is starting up...")
 
-    trayIcon.showMessage("ActivityWatch", "ActivityWatch is starting up...")
-
-    QApplication.setQuitOnLastWindowClosed(False)
+        QApplication.setQuitOnLastWindowClosed(False)
 
     # Run the application, blocks until quit
     return app.exec_()
