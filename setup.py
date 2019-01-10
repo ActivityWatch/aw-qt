@@ -10,9 +10,10 @@ setup(name='aw-qt',
       url='https://github.com/ActivityWatch/aw-trayicon',
       packages=['aw_qt'],
       install_requires=[
-          'aw-core>=0.1',
-          'PyQt5<5.11'
-      ],
+        'aw-core>=0.1',
+        'PyQt5<5.11',
+        'pyobjc;platform_system=="Darwin"'
+        ],
       dependency_links=[
           'https://github.com/ActivityWatch/aw-core/tarball/master#egg=aw-core-0.1.0'
       ],

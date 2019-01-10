@@ -56,11 +56,14 @@ class Module:
 
         # Don't display a console window on Windows
         # See: https://github.com/ActivityWatch/activitywatch/issues/212
+        startupinfo = None
         if platform.system() == "Windows":
             startupinfo = subprocess.STARTUPINFO()  # type: ignore
             startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW  # type: ignore
-        else:
-            startupinfo = None
+        elif platform.system() == "Darwin":
+            logger.info("Macos: Disable dock icon")
+            import AppKit
+            AppKit.NSBundle.mainBundle().infoDictionary()["LSBackgroundOnly"] = "1"
 
         # There is a very good reason stdout and stderr is not PIPE here
         # See: https://github.com/ActivityWatch/aw-server/issues/27
