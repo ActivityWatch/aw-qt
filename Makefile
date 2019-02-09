@@ -3,7 +3,7 @@
 pip_install_args := . --upgrade --process-dependency-links
 
 ifdef DEV
-pip_install_args := --editable $(pip_install_args)
+pip_install_args += --editable
 endif
 
 build: aw_qt/resources.py
