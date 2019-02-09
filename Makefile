@@ -1,6 +1,6 @@
 .PHONY: build install test test-integration typecheck package clean
 
-pip_install_args := . --upgrade --process-dependency-links
+pip_install_args := . --upgrade
 
 ifdef DEV
 pip_install_args += --editable
