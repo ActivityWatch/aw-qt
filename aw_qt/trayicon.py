@@ -171,8 +171,6 @@ def run(manager, testing=False):
     trayIcon = TrayIcon(manager, icon, widget, testing=testing)
     trayIcon.show()
 
-    trayIcon.showMessage("ActivityWatch", "ActivityWatch is starting up...")
-
     QApplication.setQuitOnLastWindowClosed(False)
 
     # Run the application, blocks until quit
