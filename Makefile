@@ -3,7 +3,7 @@
 pip_install_args := .
 
 ifdef DEV
-pip_install_args += --editable
+pip_install_args := --editable $(pip_install_args)
 endif
 
 build: aw_qt/resources.py
