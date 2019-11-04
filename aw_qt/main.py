@@ -30,7 +30,7 @@ def parse_args():
                         help='Run the trayicon and services in testing mode')
     parser.add_argument('--autostart-modules', dest='autostart_modules',
                         type=lambda s: [m for m in s.split(',') if m and m.lower() != "none"],
-                        default=["aw-server", "aw-watcher-afk", "aw-watcher-window"],
+                        default=None,
                         help='A comma-separated list of modules to autostart, or just `none` to not autostart anything')
 
     return parser.parse_args()

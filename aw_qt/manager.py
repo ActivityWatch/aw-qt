@@ -7,6 +7,8 @@ from typing import Optional, List
 
 import aw_core
 
+from .config import QTSettings
+
 logger = logging.getLogger(__name__)
 
 
@@ -126,22 +128,14 @@ class Module:
 
 
 class Manager:
-    def __init__(self, testing: bool=False) -> None:
-        # TODO: Fetch these from somewhere appropriate (auto detect or a config file)
-        #       Save to config wether they should autostart or not.
-        _possible_modules = [
-            "aw-server",
-            "aw-server-rust",
-            "aw-watcher-afk",
-            "aw-watcher-window",
-            # "aw-watcher-spotify",
-            # "aw-watcher-network"
-        ]
-
-        self.modules = []
-        for name in _possible_modules:
-            if not _locate_executable(name):
-                self.modules.append(Module(name, testing=testing))
+    def __init__(self, testing: bool = False) -> None:
+        self.settings = QTSettings(testing)
+        self.modules = {}
+        for name in self.settings.possible_modules:
+            if _locate_executable(name):
+                self.modules[name] = Module(name, testing=testing)
+            else:
+                print("Module '{}' not found".format(name))
 
     def get_unexpected_stops(self):
         return list(filter(lambda x: x.started and not x.is_alive(), self.modules.values()))
@@ -153,6 +147,11 @@ class Manager:
             logger.error("Unable to start module '{}': No such module".format(module_name))
 
     def autostart(self, autostart_modules):
+
+        if autostart_modules is None:
+            # Modules to start are not specified. Fallback on configuration.
+            autostart_modules = self.settings.autostart_modules
+
         # Always start aw-server first
         if "aw-server" in autostart_modules:
             self.start("aw-server")
