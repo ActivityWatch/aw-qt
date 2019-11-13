@@ -7,7 +7,7 @@ pip_install_args := --editable $(pip_install_args)
 endif
 
 build: aw_qt/resources.py
-	pip3 install mypy
+	pip3 install -r requirements.txt
 	pip3 install $(pip_install_args)
 
 install:

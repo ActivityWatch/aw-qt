@@ -19,8 +19,11 @@ def _locate_executable(name: str) -> List[str]:
     """
     curr_filepath = os.path.realpath(__file__)
     curr_dir = os.path.dirname(curr_filepath)
-    search_paths = [curr_dir, os.path.abspath(os.path.join(curr_dir, os.pardir))]
-    exec_paths = [os.path.join(path, name) for path in search_paths]
+    program_dir = os.path.abspath(os.path.join(curr_dir, os.pardir))
+    search_paths = [curr_dir, program_dir, os.path.join(program_dir, name)]
+
+    exec_end = ".exe" if platform.system() == "Windows" else ""
+    exec_paths = [os.path.join(path, name + exec_end) for path in search_paths]
 
     for exec_path in exec_paths:
         if os.path.isfile(exec_path):
@@ -29,8 +32,8 @@ def _locate_executable(name: str) -> List[str]:
             break  # this break is redundant, but kept due to for-else semantics
     else:
         # TODO: Actually check if it is in PATH
-        # logger.debug("Trying to start {} using PATH (executable not found in: {})"
-        #              .format(name, exec_paths))
+        logger.info("Trying to start {} using PATH (executable not found in: {})"
+                     .format(name, exec_paths))
         return [name]
 
 
