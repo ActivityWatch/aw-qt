@@ -50,7 +50,7 @@ class Module:
 
         # Create a process group, become its leader
         if platform.system() != "Windows":
-            os.setpgrp()
+            os.setpgrp()  # type: ignore
 
         exec_cmd = _locate_executable(self.name)
         if self.testing:
