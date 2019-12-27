@@ -7,7 +7,6 @@ pip_install_args := --editable $(pip_install_args)
 endif
 
 build: aw_qt/resources.py
-	pip3 install -r requirements-dev.txt
 	pip3 install $(pip_install_args)
 
 install:
@@ -35,5 +34,5 @@ clean:
 	rm -rf __pycache__ aw_qt/__pycache__
 
 aw_qt/resources.py: aw_qt/resources.qrc
-	pip3 install 'pyqt5<5.11'
+	poetry install --no-root
 	pyrcc5 -o aw_qt/resources.py aw_qt/resources.qrc

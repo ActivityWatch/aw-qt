@@ -1,16 +1,11 @@
 dist: trusty
-
 language: python
 matrix:
   include:
   - python: "3.6"
-  - python: "3.7"
-  - python: "nightly"
   - os: osx
     language: generic
     env: PYENV_VERSION='3.6.5' PYTHON_CONFIGURE_OPTS="--enable-framework"
-  allow_failures:
-  - python: "nightly"
 
 before_install:
  - |
@@ -28,6 +23,7 @@ before_install:
  - pip -V
  - pip3 install --upgrade pip
  - pip3 install pyinstaller
+ - pip3 install poetry
 
 install:
  - make build

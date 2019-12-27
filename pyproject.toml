@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "aw-qt"
+version = "0.1.0"
+description = "Trayicon for ActivityWatch"
+authors = ["Erik Bjäreholt <erik@bjareho.lt>"]
+license = "MPL-2.0"
+
+[tool.poetry.scripts]
+aw-qt = "aw_qt:main"
+
+[tool.poetry.dependencies]
+python = "^3.6"
+PyQt5 = "5.13.2"
+pyobjc = { version = "^6.1", platform = "darwin" }
+aw-core = {git = "https://github.com/ActivityWatch/aw-core.git"}
+
+[tool.poetry.dev-dependencies]
+mypy = "^0.761"
+
+[build-system]
+requires = ["poetry>=0.12"]
+build-backend = "poetry.masonry.api"
