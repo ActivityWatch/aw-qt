@@ -1,13 +1,13 @@
 .PHONY: build install test test-integration typecheck package clean
 
-pip_install_args := .
-
 ifdef DEV
-pip_install_args := --editable $(pip_install_args)
+installcmd := poetry install
+else
+installcmd := pip3 install .
 endif
 
 build: aw_qt/resources.py
-	pip3 install $(pip_install_args)
+	$(installcmd)
 
 install:
 	bash scripts/config-autostart.sh
