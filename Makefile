@@ -34,5 +34,5 @@ clean:
 	rm -rf __pycache__ aw_qt/__pycache__
 
 aw_qt/resources.py: aw_qt/resources.qrc
-	poetry install --no-root
+	pip install pyqt5
 	pyrcc5 -o aw_qt/resources.py aw_qt/resources.qrc
