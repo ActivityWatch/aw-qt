@@ -2,6 +2,7 @@
 <RCC version="1.0">
     <qresource>
         <file alias="logo.png">../media/logo/logo.png</file>
-        <file alias="monochrome-logo.png">../media/logo/black-monochrome-logo.png</file>
+        <file alias="black-monochrome-logo.png">../media/logo/black-monochrome-logo.png</file>
+        <file alias="white-monochrome-logo.png">../media/logo/white-monochrome-logo.png</file>
     </qresource>
 </RCC>
