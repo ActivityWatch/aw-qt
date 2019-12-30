@@ -166,8 +166,11 @@ def run(manager, testing=False):
         sys.exit(1)
 
     widget = QWidget()
+    if sys.platform == "darwin":
+        icon = QIcon(":/monochrome-logo.png")
+    else:
+        icon = QIcon(":/logo.png")
 
-    icon = QIcon(":/logo.png")
     trayIcon = TrayIcon(manager, icon, widget, testing=testing)
     trayIcon.show()
 
