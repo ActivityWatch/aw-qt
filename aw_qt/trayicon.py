@@ -166,8 +166,16 @@ def run(manager, testing=False):
         sys.exit(1)
 
     widget = QWidget()
+    if sys.platform == "darwin":
+        from Foundation import NSUserDefaults
+        style = NSUserDefaults.standardUserDefaults().stringForKey_('AppleInterfaceStyle')
+        if style == "Dark":
+            icon = QIcon(":/white-monochrome-logo.png")
+        else:
+            icon = QIcon(":/black-monochrome-logo.png")
+    else:
+        icon = QIcon(":/logo.png")
 
-    icon = QIcon(":/logo.png")
     trayIcon = TrayIcon(manager, icon, widget, testing=testing)
     trayIcon.show()
 
