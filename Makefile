@@ -1,14 +1,16 @@
 .PHONY: build install test test-integration typecheck package clean
 
-pip_install_args := .
-
 ifdef DEV
-pip_install_args := --editable $(pip_install_args)
+installcmd := poetry install
+else
+installcmd := pip3 install .
 endif
 
 build: aw_qt/resources.py
-	pip3 install -r requirements-dev.txt
-	pip3 install $(pip_install_args)
+	# Workaround for https://github.com/python-poetry/poetry/issues/1338#issuecomment-571618450
+	perl -i -pe's/^aw_qt\/resources.py/\#aw_qt\/resources.py/' .gitignore
+	$(installcmd)
+	perl -i -pe's/.*aw_qt\/resources.py/aw_qt\/resources.py/' .gitignore
 
 install:
 	bash scripts/config-autostart.sh
@@ -35,5 +37,5 @@ clean:
 	rm -rf __pycache__ aw_qt/__pycache__
 
 aw_qt/resources.py: aw_qt/resources.qrc
-	pip3 install 'pyqt5<5.11'
+	pip3 install pyqt5
 	pyrcc5 -o aw_qt/resources.py aw_qt/resources.qrc

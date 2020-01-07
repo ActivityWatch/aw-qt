@@ -131,6 +131,7 @@ class Manager:
         #       Save to config wether they should autostart or not.
         _possible_modules = [
             "aw-server",
+            "aw-server-rust",
             "aw-watcher-afk",
             "aw-watcher-window",
             # "aw-watcher-spotify",
@@ -153,8 +154,10 @@ class Manager:
         # Always start aw-server first
         if "aw-server" in autostart_modules:
             self.start("aw-server")
+        elif "aw-server-rust" in autostart_modules:
+            self.start("aw-server-rust")
 
-        autostart_modules = set(autostart_modules) - {"aw-server"}
+        autostart_modules = set(autostart_modules) - {"aw-server", "aw-server-rust"}
         for module_name in autostart_modules:
             self.start(module_name)
 
