@@ -24,6 +24,7 @@ before_install:
  - pip3 install --upgrade pip
  - pip3 install pyinstaller
  - pip3 install poetry
+ - poetry install --no-root  # Installs dev-dependencies
 
 install:
  - make build
