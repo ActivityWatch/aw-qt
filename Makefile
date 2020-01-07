@@ -7,7 +7,10 @@ installcmd := pip3 install .
 endif
 
 build: aw_qt/resources.py
+	# Workaround for https://github.com/python-poetry/poetry/issues/1338#issuecomment-571618450
+	sed -i 's/^aw_qt\/resources.py/\#aw_qt\/resources.py/' .gitignore
 	$(installcmd)
+	sed -i 's/.*aw_qt\/resources.py/aw_qt\/resources.py/' .gitignore
 
 install:
 	bash scripts/config-autostart.sh

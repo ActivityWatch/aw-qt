@@ -5,6 +5,9 @@ description = "Trayicon for ActivityWatch"
 authors = ["Erik Bjäreholt <erik@bjareho.lt>"]
 license = "MPL-2.0"
 include = ["aw_qt/resources.py"]  # resources.py is in .gitignore and generated before build
+packages = [
+    { include = "aw_qt" },
+]
 
 [tool.poetry.scripts]
 aw-qt = "aw_qt:main"
