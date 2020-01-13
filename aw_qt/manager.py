@@ -32,7 +32,7 @@ def _locate_executable(name: str) -> List[str]:
             break  # this break is redundant, but kept due to for-else semantics
     else:
         # TODO: Actually check if it is in PATH
-        logger.info("Trying to start {} using PATH (executable not found in: {})"
+        logger.debug("Trying to start {} using PATH (executable not found in: {})"
                      .format(name, exec_paths))
         return [name]
 
