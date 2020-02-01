@@ -8,9 +8,11 @@ endif
 
 build: aw_qt/resources.py
 	# Workaround for https://github.com/python-poetry/poetry/issues/1338#issuecomment-571618450
-	perl -i -pe's/^aw_qt\/resources.py/\#aw_qt\/resources.py/' .gitignore
+	cp .gitignore .gitignore.backup
+	grep -v 'aw_qt/resources.py' .gitignore.backup > .gitignore
 	$(installcmd)
-	perl -i -pe's/.*aw_qt\/resources.py/aw_qt\/resources.py/' .gitignore
+	mv .gitignore.backup .gitignore
+	rm -f .gitignore.backup
 
 install:
 	bash scripts/config-autostart.sh
