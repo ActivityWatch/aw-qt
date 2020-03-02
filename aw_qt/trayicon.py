@@ -128,12 +128,7 @@ class TrayIcon(QSystemTrayIcon):
 def exit_dialog():
     # TODO: Do cleanup actions
     # TODO: Save state for resume
-    options = QMessageBox.Yes | QMessageBox.No
-    default = QMessageBox.No
-    answer = QMessageBox.question(None, "ActivityWatch", "Are you sure you want to quit?", options, default)
-
-    if answer == QMessageBox.Yes:
-        exit()
+    exit()
 
 
 def exit(*args):
