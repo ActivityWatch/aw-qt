@@ -124,17 +124,15 @@ class TrayIcon(QSystemTrayIcon):
             if module_name != "aw-server":
                 add_module_menuitem(self.manager.modules[module_name])
 
+    def exit_dialog(self):
+        exit(self.manager)
 
-def exit_dialog():
+
+def exit(manager: Manager):
     # TODO: Do cleanup actions
     # TODO: Save state for resume
-    exit()
-
-
-def exit(*args):
-    # TODO: Stop all services
     print("Shutdown initiated, stopping all services...")
-
+    manager.stop_all()
     # Terminate entire process group, just in case.
     # os.killpg(0, signal.SIGINT)
 
