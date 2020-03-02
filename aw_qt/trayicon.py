@@ -73,9 +73,9 @@ class TrayIcon(QSystemTrayIcon):
         # Seems to be in agreement with: https://github.com/OtterBrowser/otter-browser/issues/1313
         #   "it seems that the bug is also triggered when creating a QIcon with an invalid path"
         if exitIcon.availableSizes():
-            menu.addAction(exitIcon, "Quit ActivityWatch", exit_dialog)
+            menu.addAction(exitIcon, "Quit ActivityWatch", exit(self.manager))
         else:
-            menu.addAction("Quit ActivityWatch", exit_dialog)
+            menu.addAction("Quit ActivityWatch", exit(self.manager))
 
         self.setContextMenu(menu)
 
@@ -123,9 +123,6 @@ class TrayIcon(QSystemTrayIcon):
         for module_name in sorted(self.manager.modules.keys()):
             if module_name != "aw-server":
                 add_module_menuitem(self.manager.modules[module_name])
-
-    def exit_dialog(self):
-        exit(self.manager)
 
 
 def exit(manager: Manager):
