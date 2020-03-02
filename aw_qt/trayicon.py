@@ -73,9 +73,9 @@ class TrayIcon(QSystemTrayIcon):
         # Seems to be in agreement with: https://github.com/OtterBrowser/otter-browser/issues/1313
         #   "it seems that the bug is also triggered when creating a QIcon with an invalid path"
         if exitIcon.availableSizes():
-            menu.addAction(exitIcon, "Quit ActivityWatch", exit(self.manager))
+            menu.addAction(exitIcon, "Quit ActivityWatch", lambda: exit(self.manager))
         else:
-            menu.addAction("Quit ActivityWatch", exit(self.manager))
+            menu.addAction("Quit ActivityWatch", lambda: exit(self.manager))
 
         self.setContextMenu(menu)
 
@@ -143,9 +143,9 @@ def run(manager, testing=False):
     app = QApplication(sys.argv)
 
     # Without this, Ctrl+C will have no effect
-    signal.signal(signal.SIGINT, exit)
+    signal.signal(signal.SIGINT, lambda: exit(manager))
     # Ensure cleanup happens on SIGTERM
-    signal.signal(signal.SIGTERM, exit)
+    signal.signal(signal.SIGTERM, lambda: exit(manager))
 
     timer = QtCore.QTimer()
     timer.start(100)  # You may change this if you wish.
