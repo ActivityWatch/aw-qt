@@ -7,7 +7,7 @@ from typing import Optional, List
 
 import aw_core
 
-from .config import QTSettings
+from .config import AwQtSettings
 
 logger = logging.getLogger(__name__)
 
@@ -129,22 +129,20 @@ class Module:
 
 class Manager:
     def __init__(self, testing: bool = False) -> None:
-        self.settings = QTSettings(testing)
+        self.settings = AwQtSettings(testing)
         self.modules = {}
         for name in self.settings.possible_modules:
             if _locate_executable(name):
                 self.modules[name] = Module(name, testing=testing)
             else:
-                print("Module '{}' not found".format(name))
+                logger.warning("Module '{}' not found".format(name))
 
     def get_unexpected_stops(self):
-        return list(filter(lambda x: x.started and not x.is_alive(), self.modules.values()))
+        return list(filter(lambda x: x.started and not x.is_alive(), self.modules))
 
     def start(self, module_name):
-        if module_name in self.modules.keys():
+        if module_name in self.modules:
             self.modules[module_name].start()
-        else:
-            logger.error("Unable to start module '{}': No such module".format(module_name))
 
     def autostart(self, autostart_modules):
 
@@ -163,7 +161,7 @@ class Manager:
             self.start(module_name)
 
     def stop_all(self):
-        for module in filter(lambda m: m.is_alive(), self.modules.values()):
+        for module in filter(lambda m: m.is_alive(), self.modules):
             module.stop()
 
 
