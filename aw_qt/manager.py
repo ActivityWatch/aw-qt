@@ -138,8 +138,10 @@ class Manager:
             # "aw-watcher-network"
         ]
 
-        # TODO: Filter away all modules not available on system
-        self.modules = {name: Module(name, testing=testing) for name in _possible_modules}
+        self.modules = []
+        for name in _possible_modules:
+            if not _locate_executable(name):
+                self.modules.append(Module(name, testing=testing))
 
     def get_unexpected_stops(self):
         return list(filter(lambda x: x.started and not x.is_alive(), self.modules.values()))
