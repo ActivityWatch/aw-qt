@@ -73,9 +73,9 @@ class TrayIcon(QSystemTrayIcon):
         # Seems to be in agreement with: https://github.com/OtterBrowser/otter-browser/issues/1313
         #   "it seems that the bug is also triggered when creating a QIcon with an invalid path"
         if exitIcon.availableSizes():
-            menu.addAction(exitIcon, "Quit ActivityWatch", exit_dialog)
+            menu.addAction(exitIcon, "Quit ActivityWatch", lambda: exit(self.manager))
         else:
-            menu.addAction("Quit ActivityWatch", exit_dialog)
+            menu.addAction("Quit ActivityWatch", lambda: exit(self.manager))
 
         self.setContextMenu(menu)
 
@@ -125,21 +125,11 @@ class TrayIcon(QSystemTrayIcon):
                 add_module_menuitem(self.manager.modules[module_name])
 
 
-def exit_dialog():
+def exit(manager: Manager):
     # TODO: Do cleanup actions
     # TODO: Save state for resume
-    options = QMessageBox.Yes | QMessageBox.No
-    default = QMessageBox.No
-    answer = QMessageBox.question(None, "ActivityWatch", "Are you sure you want to quit?", options, default)
-
-    if answer == QMessageBox.Yes:
-        exit()
-
-
-def exit(*args):
-    # TODO: Stop all services
     print("Shutdown initiated, stopping all services...")
-
+    manager.stop_all()
     # Terminate entire process group, just in case.
     # os.killpg(0, signal.SIGINT)
 
@@ -153,9 +143,9 @@ def run(manager, testing=False):
     app = QApplication(sys.argv)
 
     # Without this, Ctrl+C will have no effect
-    signal.signal(signal.SIGINT, exit)
+    signal.signal(signal.SIGINT, lambda: exit(manager))
     # Ensure cleanup happens on SIGTERM
-    signal.signal(signal.SIGTERM, exit)
+    signal.signal(signal.SIGTERM, lambda: exit(manager))
 
     timer = QtCore.QTimer()
     timer.start(100)  # You may change this if you wish.
