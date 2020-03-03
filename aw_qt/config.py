@@ -1,4 +1,5 @@
 from configparser import ConfigParser
+from typing import ClassVar, List
 
 from aw_core.config import load_config
 import json
@@ -25,5 +26,5 @@ class AwQtSettings:
     def __init__(self, testing: bool):
         config_section = qt_config["aw-qt" if not testing else "aw-qt-testing"]
 
-        self.possible_modules = json.loads(config_section["possible_modules"])
-        self.autostart_modules = json.loads(config_section["autostart_modules"])
+        self.possible_modules: List[str] = json.loads(config_section["possible_modules"])
+        self.autostart_modules: List[str] = json.loads(config_section["autostart_modules"])

@@ -3,7 +3,7 @@ import platform
 from time import sleep
 import logging
 import subprocess
-from typing import Optional, List
+from typing import Optional, List, Dict, Set
 
 import aw_core
 
@@ -129,27 +129,30 @@ class Module:
 
 class Manager:
     def __init__(self, testing: bool = False) -> None:
-        self.settings = AwQtSettings(testing)
-        self.modules = {}
+        self.settings: AwQtSettings = AwQtSettings(testing)
+        self.modules: Dict[str, Module] = {}
+        self.autostart_modules: Set[str] = set(self.settings.autostart_modules)
+
         for name in self.settings.possible_modules:
             if _locate_executable(name):
                 self.modules[name] = Module(name, testing=testing)
             else:
-                logger.warning("Module '{}' not found".format(name))
+                logger.warning("Module '{}' not found but was in possible modules".format(name))
 
     def get_unexpected_stops(self):
-        return list(filter(lambda x: x.started and not x.is_alive(), self.modules))
+        return list(filter(lambda x: x.started and not x.is_alive(), self.modules.values()))
 
     def start(self, module_name):
-        if module_name in self.modules:
+        if module_name in self.modules.keys():
             self.modules[module_name].start()
 
     def autostart(self, autostart_modules):
-
         if autostart_modules is None:
-            # Modules to start are not specified. Fallback on configuration.
+            logger.info("Modules to start weren't specified in CLI arguments. Falling back to configuration.")
             autostart_modules = self.settings.autostart_modules
 
+        # We only want to autostart modules that are both in found modules and are asked to autostart.
+        autostart_modules = autostart_modules.intersection(set(self.modules.keys()))
         # Always start aw-server first
         if "aw-server" in autostart_modules:
             self.start("aw-server")
@@ -161,7 +164,7 @@ class Manager:
             self.start(module_name)
 
     def stop_all(self):
-        for module in filter(lambda m: m.is_alive(), self.modules):
+        for module in filter(lambda m: m.is_alive(), self.modules.values()):
             module.stop()
 
 
