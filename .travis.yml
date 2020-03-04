@@ -1,5 +1,10 @@
 dist: xenial
 language: python
+
+cache:
+  directories:
+   - $HOME/.cache/pip
+
 matrix:
   include:
   - python: "3.6"
