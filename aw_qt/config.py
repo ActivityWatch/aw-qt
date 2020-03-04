@@ -1,5 +1,5 @@
 from configparser import ConfigParser
-from typing import ClassVar, List
+from typing import List
 
 from aw_core.config import load_config
 import json

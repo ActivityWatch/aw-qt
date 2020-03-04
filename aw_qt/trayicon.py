@@ -118,11 +118,8 @@ class TrayIcon(QSystemTrayIcon):
             ac.setCheckable(True)
             ac.setChecked(module.is_alive())
 
-        add_module_menuitem(self.manager.modules["aw-server"])
-
         for module_name in sorted(self.manager.modules.keys()):
-            if module_name != "aw-server":
-                add_module_menuitem(self.manager.modules[module_name])
+            add_module_menuitem(self.manager.modules[module_name])
 
 
 def exit(manager: Manager):
