@@ -1,8 +1,10 @@
 import os
 import platform
+from glob import glob
 from time import sleep
 import logging
 import subprocess
+import shutil
 from typing import Optional, List, Dict, Set
 
 import aw_core
@@ -11,39 +13,81 @@ from .config import AwQtSettings
 
 logger = logging.getLogger(__name__)
 
+_module_dir = os.path.dirname(os.path.realpath(__file__))
+_parent_dir = os.path.abspath(os.path.join(_module_dir, os.pardir))
+_search_paths = [_module_dir, _parent_dir]
 
-def _locate_executable(name: str) -> List[str]:
-    """
-    Will start module from localdir if present there,
-    otherwise will try to call what is available in PATH.
 
-    Returns it as a Popen cmd list.
-    """
-    curr_filepath = os.path.realpath(__file__)
-    curr_dir = os.path.dirname(curr_filepath)
-    program_dir = os.path.abspath(os.path.join(curr_dir, os.pardir))
-    search_paths = [curr_dir, program_dir, os.path.join(program_dir, name)]
+def _locate_bundled_executable(name: str) -> Optional[str]:
+    """Returns the path to the module executable if it exists in the bundle, else None."""
+    _exec_paths = [os.path.join(path, name) for path in _search_paths]
 
-    exec_end = ".exe" if platform.system() == "Windows" else ""
-    exec_paths = [os.path.join(path, name + exec_end) for path in search_paths]
-
-    for exec_path in exec_paths:
+    # Look for it in the installation path
+    for exec_path in _exec_paths:
         if os.path.isfile(exec_path):
             # logger.debug("Found executable for {} in: {}".format(name, exec_path))
-            return [exec_path]
-            break  # this break is redundant, but kept due to for-else semantics
+            return exec_path
+    return None
+
+
+def _is_system_module(name) -> bool:
+    """Checks if a module with a particular name exists in PATH"""
+    return shutil.which(name) is not None
+
+
+def _locate_executable(name: str) -> Optional[str]:
+    """
+    Will return the path to the executable if bundled,
+    otherwise returns the name if it is available in PATH.
+
+    Used when calling Popen.
+    """
+    exec_path = _locate_bundled_executable(name)
+    if exec_path is not None:  # Check if it exists in bundle
+        return exec_path
+    elif _is_system_module(name):  # Check if it's in PATH
+        return name
     else:
-        # TODO: Actually check if it is in PATH
-        logger.debug("Trying to start {} using PATH (executable not found in: {})"
-                     .format(name, exec_paths))
-        return [name]
+        logger.warning("Could not find module '{}' in installation directory or PATH".format(name))
+        return None
+
+
+def _discover_modules_bundled() -> List[str]:
+    # Look for modules in source dir and parent dir
+    modules = []
+    for path in _search_paths:
+        matches = glob(os.path.join(path, "aw-*"))
+        for match in matches:
+            if os.path.isfile(match) and os.access(match, os.X_OK):
+                name = os.path.basename(match)
+                modules.append(name)
+            else:
+                logger.warning("Found matching file but was not executable: {}".format(path))
+
+    logger.info("Found bundled modules: {}".format(set(modules)))
+    return modules
+
+
+def _discover_modules_system() -> List[str]:
+    search_paths = os.environ["PATH"].split(":")
+    modules = []
+    for path in search_paths:
+        if os.path.isdir(path):
+            files = os.listdir(path)
+            for filename in files:
+                if "aw-" in filename:
+                    modules.append(filename)
+
+    logger.info("Found system modules: {}".format(set(modules)))
+    return modules
 
 
 class Module:
     def __init__(self, name: str, testing: bool = False) -> None:
         self.name = name
-        self.started = False
+        self.started = False  # Should be True if module is supposed to be running, else False
         self.testing = testing
+        self.location = "system" if _is_system_module(name) else "bundled"
         self._process = None  # type: Optional[subprocess.Popen]
         self._last_process = None  # type: Optional[subprocess.Popen]
 
@@ -51,13 +95,18 @@ class Module:
         logger.info("Starting module {}".format(self.name))
 
         # Create a process group, become its leader
+        # TODO: This shouldn't go here
         if platform.system() != "Windows":
             os.setpgrp()  # type: ignore
 
-        exec_cmd = _locate_executable(self.name)
-        if self.testing:
-            exec_cmd.append("--testing")
-        # logger.debug("Running: {}".format(exec_cmd))
+        exec_path = _locate_executable(self.name)
+        if exec_path is None:
+            return
+        else:
+            exec_cmd = [exec_path]
+            if self.testing:
+                exec_cmd.append("--testing")
+            # logger.debug("Running: {}".format(exec_cmd))
 
         # Don't display a console window on Windows
         # See: https://github.com/ActivityWatch/activitywatch/issues/212
@@ -74,7 +123,6 @@ class Module:
         # See: https://github.com/ActivityWatch/aw-server/issues/27
         self._process = subprocess.Popen(exec_cmd, universal_newlines=True, startupinfo=startupinfo)
 
-        # Should be True if module is supposed to be running, else False
         self.started = True
 
     def stop(self) -> None:
@@ -138,6 +186,18 @@ class Manager:
                 self.modules[name] = Module(name, testing=testing)
             else:
                 logger.warning("Module '{}' not found but was in possible modules".format(name))
+        # Is this actually a good way to do this? merged from dev/autodetect-modules
+        self.discover_modules()
+
+    def discover_modules(self):
+        # These should always be bundled with aw-qt
+        found_modules = set(_discover_modules_bundled())
+        found_modules |= set(_discover_modules_system())
+        found_modules ^= {"aw-qt"}  # Exclude self
+
+        for m_name in found_modules:
+            if m_name not in self.modules:
+                self.modules[m_name] = Module(m_name, testing=self.testing)
 
     def get_unexpected_stops(self):
         return list(filter(lambda x: x.started and not x.is_alive(), self.modules.values()))

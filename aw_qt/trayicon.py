@@ -4,6 +4,7 @@ import signal
 import webbrowser
 import os
 import subprocess
+from collections import defaultdict
 
 from PyQt5 import QtCore
 from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QMessageBox, QMenu, QWidget, QPushButton
@@ -93,12 +94,18 @@ class TrayIcon(QSystemTrayIcon):
             box.show()
 
         def rebuild_modules_menu():
-            for module in modulesMenu.actions():
-                name = module.text()
-                alive = self.manager.modules[name].is_alive()
-                module.setChecked(alive)
-                # print(module.text(), alive)
+            for action in modulesMenu.actions():
+                if action.isEnabled():
+                    name = action.module.name
+                    alive = self.manager.modules[name].is_alive()
+                    action.setChecked(alive)
+                    # print(module.text(), alive)
 
+            # TODO: Do it in a better way, singleShot isn't pretty...
+            QtCore.QTimer.singleShot(2000, rebuild_modules_menu)
+        QtCore.QTimer.singleShot(2000, rebuild_modules_menu)
+
+        def check_module_status():
             unexpected_exits = self.manager.get_unexpected_stops()
             if unexpected_exits:
                 for module in unexpected_exits:
@@ -107,19 +114,30 @@ class TrayIcon(QSystemTrayIcon):
 
             # TODO: Do it in a better way, singleShot isn't pretty...
             QtCore.QTimer.singleShot(2000, rebuild_modules_menu)
-
-        QtCore.QTimer.singleShot(2000, rebuild_modules_menu)
+        QtCore.QTimer.singleShot(2000, check_module_status)
 
     def _build_modulemenu(self, moduleMenu):
         moduleMenu.clear()
 
         def add_module_menuitem(module):
-            ac = moduleMenu.addAction(module.name, lambda: module.toggle())
+            title = module.name
+            ac = moduleMenu.addAction(title, lambda: module.toggle())
+            # Kind of nasty, but a quick way to affiliate the module to the menu action for when it needs updating
+            ac.module = module
             ac.setCheckable(True)
             ac.setChecked(module.is_alive())
 
-        for module_name in sorted(self.manager.modules.keys()):
-            add_module_menuitem(self.manager.modules[module_name])
+        # Merged from branch dev/autodetect-modules, still kind of in progress with making this actually work
+        modules_by_location = defaultdict(lambda: list())
+        for module in sorted(self.manager.modules.values(), key=lambda m: m.name):
+            modules_by_location[module.location].append(module)
+
+        for location, modules in sorted(modules_by_location.items(), key=lambda kv: kv[0]):
+            header = moduleMenu.addAction(location)
+            header.setEnabled(False)
+
+        for module in sorted(modules, key=lambda m: m.name):
+            add_module_menuitem(self.manager.modules[module.name])
 
 
 def exit(manager: Manager):
