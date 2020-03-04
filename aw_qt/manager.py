@@ -209,23 +209,23 @@ class Manager:
         else:
             logger.debug("Manager tried to start nonexistent module {}".format(module_name))
 
-    def autostart(self, autostart_modules: Optional[Set[str]]) -> None:
+    def autostart(self, autostart_modules: Optional[List[str]]) -> None:
         if autostart_modules is None:
-            autostart_modules = set()
+            autostart_modules = []
         if len(autostart_modules) > 0:
             logger.info("Modules to start weren't specified in CLI arguments. Falling back to configuration.")
-            autostart_modules = set(self.settings.autostart_modules)
-
+            autostart_modules = self.settings.autostart_modules
         # We only want to autostart modules that are both in found modules and are asked to autostart.
-        autostart_modules = autostart_modules.intersection(set(self.modules.keys()))
-        # Always start aw-server first
-        if "aw-server" in autostart_modules:
-            self.start("aw-server")
-        elif "aw-server-rust" in autostart_modules:
-            self.start("aw-server-rust")
+        modules_to_start = set(autostart_modules).intersection(set(self.modules.keys()))
 
-        autostart_modules = set(autostart_modules) - {"aw-server", "aw-server-rust"}
-        for module_name in autostart_modules:
+        # Start aw-server-rust first
+        if "aw-server-rust" in modules_to_start:
+            self.start("aw-server-rust")
+        elif "aw-server" in modules_to_start:
+            self.start("aw-server")
+
+        modules_to_start = set(autostart_modules) - {"aw-server", "aw-server-rust"}
+        for module_name in modules_to_start:
             self.start(module_name)
 
     def stop_all(self) -> None:

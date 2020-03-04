@@ -1,7 +1,7 @@
 import sys
 import logging
 import argparse
-from typing import Set
+from typing import List
 from typing_extensions import TypedDict
 
 from aw_core.log import setup_logging
@@ -25,7 +25,7 @@ def main() -> None:
     sys.exit(error_code)
 
 
-CommandLineArgs = TypedDict('CommandLineArgs', {'testing': bool, 'autostart_modules': Set[str]}, total=False)
+CommandLineArgs = TypedDict('CommandLineArgs', {'testing': bool, 'autostart_modules': List[str]}, total=False)
 
 
 def parse_args() -> CommandLineArgs:
