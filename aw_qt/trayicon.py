@@ -159,11 +159,10 @@ def run(manager: Manager, testing: bool = False) -> Any:
 
     app = QApplication(sys.argv)
 
-    # FIXME: remove ignores after https://github.com/python/mypy/issues/2955 has been fixed
-    # Without this, Ctrl+C will have no effect
-    signal.signal(signal.SIGINT, lambda: exit(manager)) #type: ignore
-    # Ensure cleanup happens on SIGTERM
-    signal.signal(signal.SIGTERM, lambda: exit(manager)) #type: ignore
+    # Ensure cleanup happens on SIGTERM and SIGINT (kill and ctrl+c etc)
+    # The 2 un-used variables are necessary
+    signal.signal(signal.SIGINT, lambda _, __: exit(manager))
+    signal.signal(signal.SIGTERM, lambda _, __: exit(manager))
 
     timer = QtCore.QTimer()
     timer.start(100)  # You may change this if you wish.
