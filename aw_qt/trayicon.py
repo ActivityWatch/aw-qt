@@ -5,6 +5,7 @@ import webbrowser
 import os
 import subprocess
 from collections import defaultdict
+from typing import Any, DefaultDict, List, Optional
 
 from PyQt5 import QtCore
 from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QMessageBox, QMenu, QWidget, QPushButton
@@ -12,22 +13,22 @@ from PyQt5.QtGui import QIcon
 
 import aw_core
 
-from .manager import Manager
+from .manager import Manager, Module
 
 logger = logging.getLogger(__name__)
 
 
-def open_webui(root_url):
+def open_webui(root_url: str) -> None:
     print("Opening dashboard")
     webbrowser.open(root_url)
 
 
-def open_apibrowser(root_url):
+def open_apibrowser(root_url: str) -> None:
     print("Opening api browser")
     webbrowser.open(root_url + "/api")
 
 
-def open_dir(d):
+def open_dir(d: str)-> None:
     """From: http://stackoverflow.com/a/1795849/965332"""
     if sys.platform == 'win32':
         os.startfile(d)
@@ -38,8 +39,9 @@ def open_dir(d):
 
 
 class TrayIcon(QSystemTrayIcon):
-    def __init__(self, manager: Manager, icon, parent=None, testing=False) -> None:
+    def __init__(self, manager: Manager, icon: QIcon, parent: Optional[QWidget]=None, testing: bool=False) -> None:
         QSystemTrayIcon.__init__(self, icon, parent)
+        self._parent = parent # QSystemTrayIcon also tries to save parent info but it screws up the type info
         self.setToolTip("ActivityWatch" + (" (testing)" if testing else ""))
 
         self.manager = manager
@@ -47,8 +49,8 @@ class TrayIcon(QSystemTrayIcon):
 
         self._build_rootmenu()
 
-    def _build_rootmenu(self):
-        menu = QMenu(self.parent())
+    def _build_rootmenu(self) -> None:
+        menu = QMenu(self._parent)
 
         root_url = "http://localhost:{port}".format(port=5666 if self.testing else 5600)
 
@@ -80,8 +82,8 @@ class TrayIcon(QSystemTrayIcon):
 
         self.setContextMenu(menu)
 
-        def show_module_failed_dialog(module):
-            box = QMessageBox(self.parent())
+        def show_module_failed_dialog(module: Module) -> None:
+            box = QMessageBox(self._parent)
             box.setIcon(QMessageBox.Warning)
             box.setText("Module {} quit unexpectedly".format(module.name))
             box.setDetailedText(module.read_log())
@@ -93,10 +95,10 @@ class TrayIcon(QSystemTrayIcon):
 
             box.show()
 
-        def rebuild_modules_menu():
+        def rebuild_modules_menu() -> None:
             for action in modulesMenu.actions():
                 if action.isEnabled():
-                    name = action.module.name
+                    name = action.data().name
                     alive = self.manager.modules[name].is_alive()
                     action.setChecked(alive)
                     # print(module.text(), alive)
@@ -105,7 +107,7 @@ class TrayIcon(QSystemTrayIcon):
             QtCore.QTimer.singleShot(2000, rebuild_modules_menu)
         QtCore.QTimer.singleShot(2000, rebuild_modules_menu)
 
-        def check_module_status():
+        def check_module_status() -> None:
             unexpected_exits = self.manager.get_unexpected_stops()
             if unexpected_exits:
                 for module in unexpected_exits:
@@ -116,19 +118,19 @@ class TrayIcon(QSystemTrayIcon):
             QtCore.QTimer.singleShot(2000, rebuild_modules_menu)
         QtCore.QTimer.singleShot(2000, check_module_status)
 
-    def _build_modulemenu(self, moduleMenu):
+    def _build_modulemenu(self, moduleMenu: QMenu) -> None:
         moduleMenu.clear()
 
-        def add_module_menuitem(module):
+        def add_module_menuitem(module: Module) -> None:
             title = module.name
             ac = moduleMenu.addAction(title, lambda: module.toggle())
-            # Kind of nasty, but a quick way to affiliate the module to the menu action for when it needs updating
-            ac.module = module
+
+            ac.setData(module)
             ac.setCheckable(True)
             ac.setChecked(module.is_alive())
 
         # Merged from branch dev/autodetect-modules, still kind of in progress with making this actually work
-        modules_by_location = defaultdict(lambda: list())
+        modules_by_location: DefaultDict[str, List[Module]] = defaultdict(lambda: list())
         for module in sorted(self.manager.modules.values(), key=lambda m: m.name):
             modules_by_location[module.location].append(module)
 
@@ -140,7 +142,7 @@ class TrayIcon(QSystemTrayIcon):
             add_module_menuitem(self.manager.modules[module.name])
 
 
-def exit(manager: Manager):
+def exit(manager: Manager) -> None:
     # TODO: Do cleanup actions
     # TODO: Save state for resume
     print("Shutdown initiated, stopping all services...")
@@ -151,16 +153,17 @@ def exit(manager: Manager):
     QApplication.quit()
 
 
-def run(manager, testing=False):
+def run(manager: Manager, testing: bool = False) -> Any:
     logger.info("Creating trayicon...")
     # print(QIcon.themeSearchPaths())
 
     app = QApplication(sys.argv)
 
+    # FIXME: remove ignores after https://github.com/python/mypy/issues/2955 has been fixed
     # Without this, Ctrl+C will have no effect
-    signal.signal(signal.SIGINT, lambda: exit(manager))
+    signal.signal(signal.SIGINT, lambda: exit(manager)) #type: ignore
     # Ensure cleanup happens on SIGTERM
-    signal.signal(signal.SIGTERM, lambda: exit(manager))
+    signal.signal(signal.SIGTERM, lambda: exit(manager)) #type: ignore
 
     timer = QtCore.QTimer()
     timer.start(100)  # You may change this if you wish.

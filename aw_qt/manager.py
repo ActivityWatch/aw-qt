@@ -30,7 +30,7 @@ def _locate_bundled_executable(name: str) -> Optional[str]:
     return None
 
 
-def _is_system_module(name) -> bool:
+def _is_system_module(name: str) -> bool:
     """Checks if a module with a particular name exists in PATH"""
     return shutil.which(name) is not None
 
@@ -88,8 +88,8 @@ class Module:
         self.started = False  # Should be True if module is supposed to be running, else False
         self.testing = testing
         self.location = "system" if _is_system_module(name) else "bundled"
-        self._process = None  # type: Optional[subprocess.Popen]
-        self._last_process = None  # type: Optional[subprocess.Popen]
+        self._process: Optional[subprocess.Popen[str]] = None
+        self._last_process: Optional[subprocess.Popen[str]] = None
 
     def start(self) -> None:
         logger.info("Starting module {}".format(self.name))
@@ -97,11 +97,11 @@ class Module:
         # Create a process group, become its leader
         # TODO: This shouldn't go here
         if platform.system() != "Windows":
-            os.setpgrp()  # type: ignore
+            os.setpgrp()
 
         exec_path = _locate_executable(self.name)
         if exec_path is None:
-            return
+            logger.error("Tried to start nonexistent module {}".format(self.name))
         else:
             exec_cmd = [exec_path]
             if self.testing:
@@ -112,8 +112,8 @@ class Module:
         # See: https://github.com/ActivityWatch/activitywatch/issues/212
         startupinfo = None
         if platform.system() == "Windows":
-            startupinfo = subprocess.STARTUPINFO()  # type: ignore
-            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW  # type: ignore
+            startupinfo = subprocess.STARTUPINFO() #type: ignore
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW #type: ignore
         elif platform.system() == "Darwin":
             logger.info("Macos: Disable dock icon")
             import AppKit
@@ -122,7 +122,6 @@ class Module:
         # There is a very good reason stdout and stderr is not PIPE here
         # See: https://github.com/ActivityWatch/aw-server/issues/27
         self._process = subprocess.Popen(exec_cmd, universal_newlines=True, startupinfo=startupinfo)
-
         self.started = True
 
     def stop(self) -> None:
@@ -137,7 +136,7 @@ class Module:
             logger.warning("Tried to stop module {}, but it wasn't running".format(self.name))
         else:
             if not self._process:
-                logger.error("No reference to process object")
+                logger.error("")
             logger.debug("Stopping module {}".format(self.name))
             if self._process:
                 self._process.terminate()
@@ -180,6 +179,7 @@ class Manager:
         self.settings: AwQtSettings = AwQtSettings(testing)
         self.modules: Dict[str, Module] = {}
         self.autostart_modules: Set[str] = set(self.settings.autostart_modules)
+        self.testing = testing
 
         for name in self.settings.possible_modules:
             if _locate_executable(name):
@@ -189,7 +189,7 @@ class Manager:
         # Is this actually a good way to do this? merged from dev/autodetect-modules
         self.discover_modules()
 
-    def discover_modules(self):
+    def discover_modules(self) -> None:
         # These should always be bundled with aw-qt
         found_modules = set(_discover_modules_bundled())
         found_modules |= set(_discover_modules_system())
@@ -199,17 +199,19 @@ class Manager:
             if m_name not in self.modules:
                 self.modules[m_name] = Module(m_name, testing=self.testing)
 
-    def get_unexpected_stops(self):
+    def get_unexpected_stops(self) -> List[Module]:
         return list(filter(lambda x: x.started and not x.is_alive(), self.modules.values()))
 
-    def start(self, module_name):
+    def start(self, module_name: str) -> None:
         if module_name in self.modules.keys():
             self.modules[module_name].start()
+        else:
+            logger.debug("Manager tried to start nonexistent module {}".format(module_name))
 
-    def autostart(self, autostart_modules):
-        if autostart_modules is None:
+    def autostart(self, autostart_modules: Set[str] = set()) -> None:
+        if autostart_modules and len(autostart_modules) > 0:
             logger.info("Modules to start weren't specified in CLI arguments. Falling back to configuration.")
-            autostart_modules = self.settings.autostart_modules
+            autostart_modules = set(self.settings.autostart_modules)
 
         # We only want to autostart modules that are both in found modules and are asked to autostart.
         autostart_modules = autostart_modules.intersection(set(self.modules.keys()))
@@ -223,7 +225,7 @@ class Manager:
         for module_name in autostart_modules:
             self.start(module_name)
 
-    def stop_all(self):
+    def stop_all(self) -> None:
         for module in filter(lambda m: m.is_alive(), self.modules.values()):
             module.stop()
 
