@@ -41,7 +41,7 @@ strict-rfc3339 = "^0.7"
 mongo = ["pymongo (^3.10.0)"]
 
 [package.source]
-reference = "c7d74e729bc0cd4d7f7326e0fbc5ae1528d8d2f7"
+reference = "f43bbf47d2f192e1d104babff94e2aa8f9f5f226"
 type = "git"
 url = "https://github.com/ActivityWatch/aw-core.git"
 [[package]]
@@ -51,7 +51,7 @@ marker = "python_version < \"3.8\""
 name = "importlib-metadata"
 optional = false
 python-versions = "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,>=2.7"
-version = "1.3.0"
+version = "1.5.0"
 
 [package.dependencies]
 zipp = ">=0.5"
@@ -89,15 +89,6 @@ version = "*"
 [package.extras]
 format = ["idna", "jsonpointer (>1.13)", "rfc3987", "strict-rfc3339", "webcolors"]
 format_nongpl = ["idna", "jsonpointer (>1.13)", "webcolors", "rfc3986-validator (>0.1.0)", "rfc3339-validator"]
-
-[[package]]
-category = "main"
-description = "More routines for operating on iterables, beyond itertools"
-marker = "python_version < \"3.8\""
-name = "more-itertools"
-optional = false
-python-versions = ">=3.5"
-version = "8.0.2"
 
 [[package]]
 category = "dev"
@@ -262,7 +253,7 @@ pyobjc-framework-libdispatch = "6.1"
 [[package]]
 category = "main"
 description = "Python<->ObjC Interoperability Module"
-marker = "sys_platform == \"darwin\" and platform_release < \"12.0\" or sys_platform == \"darwin\" or sys_platform == \"darwin\" and platform_release < \"13.0\" or sys_platform == \"darwin\" and platform_release >= \"10.0\" or platform_release >= \"10.0\" and platform_release < \"13.0\" and sys_platform == \"darwin\" or sys_platform == \"darwin\" and platform_release >= \"11.0\" or sys_platform == \"darwin\" and platform_release >= \"12.0\" or sys_platform == \"darwin\" and platform_release >= \"13.0\" or sys_platform == \"darwin\" and platform_release >= \"14.0\" or sys_platform == \"darwin\" and platform_release >= \"15.0\" or sys_platform == \"darwin\" and platform_release >= \"16.0\" or sys_platform == \"darwin\" and platform_release >= \"17.0\" or sys_platform == \"darwin\" and platform_release >= \"18.0\" or sys_platform == \"darwin\" and platform_release >= \"19.0\" or sys_platform == \"darwin\" and platform_release >= \"9.0\" or platform_release >= \"9.0\" and platform_release < \"11.0\" and sys_platform == \"darwin\" or platform_release >= \"9.0\" and platform_release < \"19.0\" and sys_platform == \"darwin\""
+marker = "sys_platform == \"darwin\" and platform_release >= \"9.0\" or sys_platform == \"darwin\" or sys_platform == \"darwin\" and platform_release < \"12.0\" or sys_platform == \"darwin\" and platform_release < \"13.0\" or sys_platform == \"darwin\" and platform_release >= \"10.0\" or platform_release >= \"10.0\" and platform_release < \"13.0\" and sys_platform == \"darwin\" or sys_platform == \"darwin\" and platform_release >= \"11.0\" or sys_platform == \"darwin\" and platform_release >= \"12.0\" or sys_platform == \"darwin\" and platform_release >= \"13.0\" or sys_platform == \"darwin\" and platform_release >= \"14.0\" or sys_platform == \"darwin\" and platform_release >= \"15.0\" or sys_platform == \"darwin\" and platform_release >= \"16.0\" or sys_platform == \"darwin\" and platform_release >= \"17.0\" or sys_platform == \"darwin\" and platform_release >= \"18.0\" or sys_platform == \"darwin\" and platform_release >= \"19.0\" or platform_release >= \"9.0\" and platform_release < \"11.0\" and sys_platform == \"darwin\" or platform_release >= \"9.0\" and platform_release < \"19.0\" and sys_platform == \"darwin\""
 name = "pyobjc-core"
 optional = false
 python-versions = ">=3.6"
@@ -460,7 +451,7 @@ pyobjc-framework-CoreLocation = ">=6.1"
 [[package]]
 category = "main"
 description = "Wrappers for the Cocoa frameworks on macOS"
-marker = "sys_platform == \"darwin\" and platform_release < \"12.0\" or sys_platform == \"darwin\" or sys_platform == \"darwin\" and platform_release < \"13.0\" or sys_platform == \"darwin\" and platform_release >= \"10.0\" or platform_release >= \"10.0\" and platform_release < \"13.0\" and sys_platform == \"darwin\" or sys_platform == \"darwin\" and platform_release >= \"11.0\" or sys_platform == \"darwin\" and platform_release >= \"12.0\" or sys_platform == \"darwin\" and platform_release >= \"13.0\" or sys_platform == \"darwin\" and platform_release >= \"14.0\" or sys_platform == \"darwin\" and platform_release >= \"15.0\" or sys_platform == \"darwin\" and platform_release >= \"16.0\" or sys_platform == \"darwin\" and platform_release >= \"17.0\" or sys_platform == \"darwin\" and platform_release >= \"18.0\" or sys_platform == \"darwin\" and platform_release >= \"19.0\" or sys_platform == \"darwin\" and platform_release >= \"9.0\" or platform_release >= \"9.0\" and platform_release < \"11.0\" and sys_platform == \"darwin\" or platform_release >= \"9.0\" and platform_release < \"19.0\" and sys_platform == \"darwin\""
+marker = "sys_platform == \"darwin\" and platform_release >= \"9.0\" or sys_platform == \"darwin\" or sys_platform == \"darwin\" and platform_release < \"12.0\" or sys_platform == \"darwin\" and platform_release < \"13.0\" or sys_platform == \"darwin\" and platform_release >= \"10.0\" or platform_release >= \"10.0\" and platform_release < \"13.0\" and sys_platform == \"darwin\" or sys_platform == \"darwin\" and platform_release >= \"11.0\" or sys_platform == \"darwin\" and platform_release >= \"12.0\" or sys_platform == \"darwin\" and platform_release >= \"13.0\" or sys_platform == \"darwin\" and platform_release >= \"14.0\" or sys_platform == \"darwin\" and platform_release >= \"15.0\" or sys_platform == \"darwin\" and platform_release >= \"16.0\" or sys_platform == \"darwin\" and platform_release >= \"17.0\" or sys_platform == \"darwin\" and platform_release >= \"18.0\" or sys_platform == \"darwin\" and platform_release >= \"19.0\" or platform_release >= \"9.0\" and platform_release < \"11.0\" and sys_platform == \"darwin\" or platform_release >= \"9.0\" and platform_release < \"19.0\" and sys_platform == \"darwin\""
 name = "pyobjc-framework-cocoa"
 optional = false
 python-versions = ">=3.6"
@@ -1823,7 +1814,18 @@ description = "The sip module support for PyQt5"
 name = "pyqt5-sip"
 optional = false
 python-versions = ">=3.5"
-version = "12.7.0"
+version = "12.7.1"
+
+[[package]]
+category = "dev"
+description = "PEP561 stub files for the PyQt5 framework"
+name = "pyqt5-stubs"
+optional = false
+python-versions = "*"
+version = "5.13.1.4"
+
+[package.dependencies]
+PyQt5 = ">=5.13.0,<5.14.0"
 
 [[package]]
 category = "main"
@@ -1831,7 +1833,7 @@ description = "Persistent/Functional/Immutable data structures"
 name = "pyrsistent"
 optional = false
 python-versions = "*"
-version = "0.15.6"
+version = "0.15.7"
 
 [package.dependencies]
 six = "*"
@@ -1849,8 +1851,8 @@ category = "main"
 description = "Python 2 and 3 compatibility utilities"
 name = "six"
 optional = false
-python-versions = ">=2.6, !=3.0.*, !=3.1.*"
-version = "1.13.0"
+python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*"
+version = "1.14.0"
 
 [[package]]
 category = "main"
@@ -1874,7 +1876,7 @@ description = "a fork of Python 2 and 3 ast modules with type comment support"
 name = "typed-ast"
 optional = false
 python-versions = "*"
-version = "1.4.0"
+version = "1.4.1"
 
 [[package]]
 category = "dev"
@@ -1890,18 +1892,15 @@ description = "Backport of pathlib-compatible object wrapper for zip files"
 marker = "python_version < \"3.8\""
 name = "zipp"
 optional = false
-python-versions = ">=2.7"
-version = "0.6.0"
-
-[package.dependencies]
-more-itertools = "*"
+python-versions = ">=3.6"
+version = "3.1.0"
 
 [package.extras]
 docs = ["sphinx", "jaraco.packaging (>=3.2)", "rst.linker (>=1.9)"]
-testing = ["pathlib2", "contextlib2", "unittest2"]
+testing = ["jaraco.itertools", "func-timeout"]
 
 [metadata]
-content-hash = "3bdefe463f45342bec4935839c49cb251bc28ca48cf3426fcf251a489448bdb5"
+content-hash = "443f596a850b8f20ef0e3ed9029ff4a9db74240c89f2622421c9946a2ccb11f1"
 python-versions = "^3.6"
 
 [metadata.files]
@@ -1915,8 +1914,8 @@ attrs = [
 ]
 aw-core = []
 importlib-metadata = [
-    {file = "importlib_metadata-1.3.0-py2.py3-none-any.whl", hash = "sha256:d95141fbfa7ef2ec65cfd945e2af7e5a6ddbd7c8d9a25e66ff3be8e3daf9f60f"},
-    {file = "importlib_metadata-1.3.0.tar.gz", hash = "sha256:073a852570f92da5f744a3472af1b61e28e9f78ccf0c9117658dc32b15de7b45"},
+    {file = "importlib_metadata-1.5.0-py2.py3-none-any.whl", hash = "sha256:b97607a1a18a5100839aec1dc26a1ea17ee0d93b20b0f008d80a5a050afb200b"},
+    {file = "importlib_metadata-1.5.0.tar.gz", hash = "sha256:06f5b3a99029c7134207dd882428a66992a9de2bef7c2b699b5641f9886c3302"},
 ]
 iso8601 = [
     {file = "iso8601-0.1.12-py2.py3-none-any.whl", hash = "sha256:210e0134677cc0d02f6028087fee1df1e1d76d372ee1db0bf30bf66c5c1c89a3"},
@@ -1926,10 +1925,6 @@ iso8601 = [
 jsonschema = [
     {file = "jsonschema-3.2.0-py2.py3-none-any.whl", hash = "sha256:4e5b3cf8216f577bee9ce139cbe72eca3ea4f292ec60928ff24758ce626cd163"},
     {file = "jsonschema-3.2.0.tar.gz", hash = "sha256:c8a85b28d377cc7737e46e2d9f2b4f44ee3c0e1deac6bf46ddefc7187d30797a"},
-]
-more-itertools = [
-    {file = "more-itertools-8.0.2.tar.gz", hash = "sha256:b84b238cce0d9adad5ed87e745778d20a3f8487d0f0cb8b8a586816c7496458d"},
-    {file = "more_itertools-8.0.2-py3-none-any.whl", hash = "sha256:c833ef592a0324bcc6a60e48440da07645063c453880c9477ceb22490aec1564"},
 ]
 mypy = [
     {file = "mypy-0.761-cp35-cp35m-macosx_10_6_x86_64.whl", hash = "sha256:7f672d02fffcbace4db2b05369142e0506cdcde20cea0e07c7c2171c4fd11dd6"},
@@ -2559,33 +2554,36 @@ pyqt5 = [
     {file = "PyQt5-5.13.2-5.13.2-cp35.cp36.cp37.cp38-none-win_amd64.whl", hash = "sha256:509daab1c5aca22e3cf9508128abf38e6e5ae311d7426b21f4189ffd66b196e9"},
 ]
 pyqt5-sip = [
-    {file = "PyQt5_sip-12.7.0-cp35-cp35m-macosx_10_6_intel.whl", hash = "sha256:1910c1cb5a388d4e59ebb2895d7015f360f3f6eeb1700e7e33e866c53137eb9e"},
-    {file = "PyQt5_sip-12.7.0-cp35-cp35m-manylinux1_x86_64.whl", hash = "sha256:b43ba2f18999d41c3df72f590348152e14cd4f6dcea2058c734d688dfb1ec61f"},
-    {file = "PyQt5_sip-12.7.0-cp35-cp35m-win32.whl", hash = "sha256:fabff832046643cdb93920ddaa8f77344df90768930fbe6bb33d211c4dcd0b5e"},
-    {file = "PyQt5_sip-12.7.0-cp35-cp35m-win_amd64.whl", hash = "sha256:8274ed50f4ffbe91d0f4cc5454394631edfecd75dc327aa01be8bc5818a57e88"},
-    {file = "PyQt5_sip-12.7.0-cp36-cp36m-macosx_10_6_intel.whl", hash = "sha256:ef3c7a0bf78674b0dda86ff5809d8495019903a096c128e1f160984b37848f73"},
-    {file = "PyQt5_sip-12.7.0-cp36-cp36m-manylinux1_x86_64.whl", hash = "sha256:3c330ff1f70b3eaa6f63dce9274df996dffea82ad9726aa8e3d6cbe38e986b2f"},
-    {file = "PyQt5_sip-12.7.0-cp36-cp36m-win32.whl", hash = "sha256:9047d887d97663790d811ac4e0d2e895f1bf2ecac4041691487de40c30239480"},
-    {file = "PyQt5_sip-12.7.0-cp36-cp36m-win_amd64.whl", hash = "sha256:9f6ab1417ecfa6c1ce6ce941e0cebc03e3ec9cd9925058043229a5f003ae5e40"},
-    {file = "PyQt5_sip-12.7.0-cp37-cp37m-macosx_10_9_x86_64.whl", hash = "sha256:06bc66b50556fb949f14875a4c224423dbf03f972497ccb883fb19b7b7c3b346"},
-    {file = "PyQt5_sip-12.7.0-cp37-cp37m-manylinux1_x86_64.whl", hash = "sha256:482a910fa73ee0e36c258d7646ef38f8061774bbc1765a7da68c65056b573341"},
-    {file = "PyQt5_sip-12.7.0-cp37-cp37m-win32.whl", hash = "sha256:1c7ad791ec86247f35243bbbdd29cd59989afbe0ab678e0a41211f4407f21dd8"},
-    {file = "PyQt5_sip-12.7.0-cp37-cp37m-win_amd64.whl", hash = "sha256:da69ba17f6ece9a85617743cb19de689f2d63025bf8001e2facee2ec9bcff18f"},
-    {file = "PyQt5_sip-12.7.0-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:02d94786bada670ab17a2b62ce95b3cf8e3b40c99d36007593a6334d551840bb"},
-    {file = "PyQt5_sip-12.7.0-cp38-cp38-manylinux1_x86_64.whl", hash = "sha256:c3ab9ea1bc3f4ce8c57ebc66fb25cd044ef92ed1ca2afa3729854ecc59658905"},
-    {file = "PyQt5_sip-12.7.0-cp38-cp38-win32.whl", hash = "sha256:7695dfafb4f5549ce1290ae643d6508dfc2646a9003c989218be3ce42a1aa422"},
-    {file = "PyQt5_sip-12.7.0-cp38-cp38-win_amd64.whl", hash = "sha256:091fbbe10a7aebadc0e8897a9449cda08d3c3f663460d812eca3001ca1ed3526"},
-    {file = "PyQt5_sip-12.7.0.tar.gz", hash = "sha256:0a067ade558befe4d46335b13d8b602b5044363bfd601419b556d4ec659bca18"},
+    {file = "PyQt5_sip-12.7.1-cp35-cp35m-macosx_10_6_intel.whl", hash = "sha256:f314f31f5fd39b06897f013f425137e511d45967150eb4e424a363d8138521c6"},
+    {file = "PyQt5_sip-12.7.1-cp35-cp35m-manylinux1_x86_64.whl", hash = "sha256:b42021229424aa44e99b3b49520b799fd64ff6ae8b53f79f903bbd85719a28e4"},
+    {file = "PyQt5_sip-12.7.1-cp35-cp35m-win32.whl", hash = "sha256:6b4860c4305980db509415d0af802f111d15f92016c9422eb753bc8883463456"},
+    {file = "PyQt5_sip-12.7.1-cp35-cp35m-win_amd64.whl", hash = "sha256:d46b0f8effc554de52a1466b1bd80e5cb4bce635a75ac4e7ad6247c965dec5b9"},
+    {file = "PyQt5_sip-12.7.1-cp36-cp36m-macosx_10_6_intel.whl", hash = "sha256:3f665376d9e52faa9855c3736a66ce6d825f85c86d7774d3c393f09da23f4f86"},
+    {file = "PyQt5_sip-12.7.1-cp36-cp36m-manylinux1_x86_64.whl", hash = "sha256:1115728644bbadcde5fc8a16e7918bd31915a42dd6fb36b10d4afb78c582753e"},
+    {file = "PyQt5_sip-12.7.1-cp36-cp36m-win32.whl", hash = "sha256:cbeeae6b45234a1654657f79943f8bccd3d14b4e7496746c62cf6fbce69442c7"},
+    {file = "PyQt5_sip-12.7.1-cp36-cp36m-win_amd64.whl", hash = "sha256:8da842d3d7bf8931d1093105fb92702276b6dbb7e801abbaaa869405d616171a"},
+    {file = "PyQt5_sip-12.7.1-cp37-cp37m-macosx_10_9_x86_64.whl", hash = "sha256:1f4289276d355b6521dc2cc956189315da6f13adfb6bbab8f25ebd15e3bce1d4"},
+    {file = "PyQt5_sip-12.7.1-cp37-cp37m-manylinux1_x86_64.whl", hash = "sha256:c1e730a9eb2ec3869ed5d81b0f99f6e2460fb4d77750444c0ec183b771d798f7"},
+    {file = "PyQt5_sip-12.7.1-cp37-cp37m-win32.whl", hash = "sha256:b5b4906445fe980aee76f20400116b6904bf5f30d0767489c13370e42a764020"},
+    {file = "PyQt5_sip-12.7.1-cp37-cp37m-win_amd64.whl", hash = "sha256:7ffa39763097f64de129cf5cc770a651c3f65d2466b4fe05bef2bd2efbaa38e6"},
+    {file = "PyQt5_sip-12.7.1-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:288c6dc18a8d6a20981c07b715b5695d9b66880778565f3792bc6e38f14f20fb"},
+    {file = "PyQt5_sip-12.7.1-cp38-cp38-manylinux1_x86_64.whl", hash = "sha256:ee1a12f09d5af2304273bfd2f6b43835c1467d5ed501a6c95f5405637fa7750a"},
+    {file = "PyQt5_sip-12.7.1-cp38-cp38-win32.whl", hash = "sha256:8a18e6f45d482ddfe381789979d09ee13aa6450caa3a0476503891bccb3ac709"},
+    {file = "PyQt5_sip-12.7.1-cp38-cp38-win_amd64.whl", hash = "sha256:e28c3abc9b62a1b7e796891648b9f14f8167b31c8e7990fae79654777252bb4d"},
+    {file = "PyQt5_sip-12.7.1.tar.gz", hash = "sha256:e6078f5ee7d31c102910d0c277a110e1c2a20a3fc88cd017a39e170120586d3f"},
+]
+pyqt5-stubs = [
+    {file = "PyQt5-stubs-5.13.1.4.tar.gz", hash = "sha256:c396d3a6de0e92b3d9465aa318e945464b7fa35bceeae1e68e5233715c8a0c90"},
 ]
 pyrsistent = [
-    {file = "pyrsistent-0.15.6.tar.gz", hash = "sha256:f3b280d030afb652f79d67c5586157c5c1355c9a58dfc7940566e28d28f3df1b"},
+    {file = "pyrsistent-0.15.7.tar.gz", hash = "sha256:cdc7b5e3ed77bed61270a47d35434a30617b9becdf2478af76ad2c6ade307280"},
 ]
 python-json-logger = [
     {file = "python-json-logger-0.1.11.tar.gz", hash = "sha256:b7a31162f2a01965a5efb94453ce69230ed208468b0bbc7fdfc56e6d8df2e281"},
 ]
 six = [
-    {file = "six-1.13.0-py2.py3-none-any.whl", hash = "sha256:1f1b7d42e254082a9db6279deae68afb421ceba6158efa6131de7b3003ee93fd"},
-    {file = "six-1.13.0.tar.gz", hash = "sha256:30f610279e8b2578cab6db20741130331735c781b56053c59c4076da27f06b66"},
+    {file = "six-1.14.0-py2.py3-none-any.whl", hash = "sha256:8f3cd2e254d8f793e7f3d6d9df77b92252b52637291d0f0da013c76ea2724b6c"},
+    {file = "six-1.14.0.tar.gz", hash = "sha256:236bdbdce46e6e6a3d61a337c0f8b763ca1e8717c03b369e87a7ec7ce1319c0a"},
 ]
 strict-rfc3339 = [
     {file = "strict-rfc3339-0.7.tar.gz", hash = "sha256:5cad17bedfc3af57b399db0fed32771f18fc54bbd917e85546088607ac5e1277"},
@@ -2594,26 +2592,27 @@ takethetime = [
     {file = "TakeTheTime-0.3.1.tar.gz", hash = "sha256:dbe30453a1b596a38f9e2e3fa8e1adc5af2dbf646ca0837ad5c2059a16fe2ff9"},
 ]
 typed-ast = [
-    {file = "typed_ast-1.4.0-cp35-cp35m-manylinux1_i686.whl", hash = "sha256:262c247a82d005e43b5b7f69aff746370538e176131c32dda9cb0f324d27141e"},
-    {file = "typed_ast-1.4.0-cp35-cp35m-manylinux1_x86_64.whl", hash = "sha256:71211d26ffd12d63a83e079ff258ac9d56a1376a25bc80b1cdcdf601b855b90b"},
-    {file = "typed_ast-1.4.0-cp35-cp35m-win32.whl", hash = "sha256:630968c5cdee51a11c05a30453f8cd65e0cc1d2ad0d9192819df9978984529f4"},
-    {file = "typed_ast-1.4.0-cp35-cp35m-win_amd64.whl", hash = "sha256:ffde2fbfad571af120fcbfbbc61c72469e72f550d676c3342492a9dfdefb8f12"},
-    {file = "typed_ast-1.4.0-cp36-cp36m-macosx_10_9_x86_64.whl", hash = "sha256:4e0b70c6fc4d010f8107726af5fd37921b666f5b31d9331f0bd24ad9a088e631"},
-    {file = "typed_ast-1.4.0-cp36-cp36m-manylinux1_i686.whl", hash = "sha256:bc6c7d3fa1325a0c6613512a093bc2a2a15aeec350451cbdf9e1d4bffe3e3233"},
-    {file = "typed_ast-1.4.0-cp36-cp36m-manylinux1_x86_64.whl", hash = "sha256:cc34a6f5b426748a507dd5d1de4c1978f2eb5626d51326e43280941206c209e1"},
-    {file = "typed_ast-1.4.0-cp36-cp36m-win32.whl", hash = "sha256:d896919306dd0aa22d0132f62a1b78d11aaf4c9fc5b3410d3c666b818191630a"},
-    {file = "typed_ast-1.4.0-cp36-cp36m-win_amd64.whl", hash = "sha256:354c16e5babd09f5cb0ee000d54cfa38401d8b8891eefa878ac772f827181a3c"},
-    {file = "typed_ast-1.4.0-cp37-cp37m-macosx_10_9_x86_64.whl", hash = "sha256:95bd11af7eafc16e829af2d3df510cecfd4387f6453355188342c3e79a2ec87a"},
-    {file = "typed_ast-1.4.0-cp37-cp37m-manylinux1_i686.whl", hash = "sha256:18511a0b3e7922276346bcb47e2ef9f38fb90fd31cb9223eed42c85d1312344e"},
-    {file = "typed_ast-1.4.0-cp37-cp37m-manylinux1_x86_64.whl", hash = "sha256:d7c45933b1bdfaf9f36c579671fec15d25b06c8398f113dab64c18ed1adda01d"},
-    {file = "typed_ast-1.4.0-cp37-cp37m-win32.whl", hash = "sha256:d755f03c1e4a51e9b24d899561fec4ccaf51f210d52abdf8c07ee2849b212a36"},
-    {file = "typed_ast-1.4.0-cp37-cp37m-win_amd64.whl", hash = "sha256:2b907eb046d049bcd9892e3076c7a6456c93a25bebfe554e931620c90e6a25b0"},
-    {file = "typed_ast-1.4.0-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:fdc1c9bbf79510b76408840e009ed65958feba92a88833cdceecff93ae8fff66"},
-    {file = "typed_ast-1.4.0-cp38-cp38-manylinux1_i686.whl", hash = "sha256:7954560051331d003b4e2b3eb822d9dd2e376fa4f6d98fee32f452f52dd6ebb2"},
-    {file = "typed_ast-1.4.0-cp38-cp38-manylinux1_x86_64.whl", hash = "sha256:48e5b1e71f25cfdef98b013263a88d7145879fbb2d5185f2a0c79fa7ebbeae47"},
-    {file = "typed_ast-1.4.0-cp38-cp38-win32.whl", hash = "sha256:1170afa46a3799e18b4c977777ce137bb53c7485379d9706af8a59f2ea1aa161"},
-    {file = "typed_ast-1.4.0-cp38-cp38-win_amd64.whl", hash = "sha256:838997f4310012cf2e1ad3803bce2f3402e9ffb71ded61b5ee22617b3a7f6b6e"},
-    {file = "typed_ast-1.4.0.tar.gz", hash = "sha256:66480f95b8167c9c5c5c87f32cf437d585937970f3fc24386f313a4c97b44e34"},
+    {file = "typed_ast-1.4.1-cp35-cp35m-manylinux1_i686.whl", hash = "sha256:73d785a950fc82dd2a25897d525d003f6378d1cb23ab305578394694202a58c3"},
+    {file = "typed_ast-1.4.1-cp35-cp35m-manylinux1_x86_64.whl", hash = "sha256:aaee9905aee35ba5905cfb3c62f3e83b3bec7b39413f0a7f19be4e547ea01ebb"},
+    {file = "typed_ast-1.4.1-cp35-cp35m-win32.whl", hash = "sha256:0c2c07682d61a629b68433afb159376e24e5b2fd4641d35424e462169c0a7919"},
+    {file = "typed_ast-1.4.1-cp35-cp35m-win_amd64.whl", hash = "sha256:4083861b0aa07990b619bd7ddc365eb7fa4b817e99cf5f8d9cf21a42780f6e01"},
+    {file = "typed_ast-1.4.1-cp36-cp36m-macosx_10_9_x86_64.whl", hash = "sha256:269151951236b0f9a6f04015a9004084a5ab0d5f19b57de779f908621e7d8b75"},
+    {file = "typed_ast-1.4.1-cp36-cp36m-manylinux1_i686.whl", hash = "sha256:24995c843eb0ad11a4527b026b4dde3da70e1f2d8806c99b7b4a7cf491612652"},
+    {file = "typed_ast-1.4.1-cp36-cp36m-manylinux1_x86_64.whl", hash = "sha256:fe460b922ec15dd205595c9b5b99e2f056fd98ae8f9f56b888e7a17dc2b757e7"},
+    {file = "typed_ast-1.4.1-cp36-cp36m-win32.whl", hash = "sha256:4e3e5da80ccbebfff202a67bf900d081906c358ccc3d5e3c8aea42fdfdfd51c1"},
+    {file = "typed_ast-1.4.1-cp36-cp36m-win_amd64.whl", hash = "sha256:249862707802d40f7f29f6e1aad8d84b5aa9e44552d2cc17384b209f091276aa"},
+    {file = "typed_ast-1.4.1-cp37-cp37m-macosx_10_9_x86_64.whl", hash = "sha256:8ce678dbaf790dbdb3eba24056d5364fb45944f33553dd5869b7580cdbb83614"},
+    {file = "typed_ast-1.4.1-cp37-cp37m-manylinux1_i686.whl", hash = "sha256:c9e348e02e4d2b4a8b2eedb48210430658df6951fa484e59de33ff773fbd4b41"},
+    {file = "typed_ast-1.4.1-cp37-cp37m-manylinux1_x86_64.whl", hash = "sha256:bcd3b13b56ea479b3650b82cabd6b5343a625b0ced5429e4ccad28a8973f301b"},
+    {file = "typed_ast-1.4.1-cp37-cp37m-win32.whl", hash = "sha256:d5d33e9e7af3b34a40dc05f498939f0ebf187f07c385fd58d591c533ad8562fe"},
+    {file = "typed_ast-1.4.1-cp37-cp37m-win_amd64.whl", hash = "sha256:0666aa36131496aed8f7be0410ff974562ab7eeac11ef351def9ea6fa28f6355"},
+    {file = "typed_ast-1.4.1-cp38-cp38-macosx_10_15_x86_64.whl", hash = "sha256:d205b1b46085271b4e15f670058ce182bd1199e56b317bf2ec004b6a44f911f6"},
+    {file = "typed_ast-1.4.1-cp38-cp38-manylinux1_i686.whl", hash = "sha256:6daac9731f172c2a22ade6ed0c00197ee7cc1221aa84cfdf9c31defeb059a907"},
+    {file = "typed_ast-1.4.1-cp38-cp38-manylinux1_x86_64.whl", hash = "sha256:498b0f36cc7054c1fead3d7fc59d2150f4d5c6c56ba7fb150c013fbc683a8d2d"},
+    {file = "typed_ast-1.4.1-cp38-cp38-win32.whl", hash = "sha256:715ff2f2df46121071622063fc7543d9b1fd19ebfc4f5c8895af64a77a8c852c"},
+    {file = "typed_ast-1.4.1-cp38-cp38-win_amd64.whl", hash = "sha256:fc0fea399acb12edbf8a628ba8d2312f583bdbdb3335635db062fa98cf71fca4"},
+    {file = "typed_ast-1.4.1-cp39-cp39-macosx_10_15_x86_64.whl", hash = "sha256:d43943ef777f9a1c42bf4e552ba23ac77a6351de620aa9acf64ad54933ad4d34"},
+    {file = "typed_ast-1.4.1.tar.gz", hash = "sha256:8c8aaad94455178e3187ab22c8b01a3837f8ee50e09cf31f1ba129eb293ec30b"},
 ]
 typing-extensions = [
     {file = "typing_extensions-3.7.4.1-py2-none-any.whl", hash = "sha256:910f4656f54de5993ad9304959ce9bb903f90aadc7c67a0bef07e678014e892d"},
@@ -2621,6 +2620,6 @@ typing-extensions = [
     {file = "typing_extensions-3.7.4.1.tar.gz", hash = "sha256:091ecc894d5e908ac75209f10d5b4f118fbdb2eb1ede6a63544054bb1edb41f2"},
 ]
 zipp = [
-    {file = "zipp-0.6.0-py2.py3-none-any.whl", hash = "sha256:f06903e9f1f43b12d371004b4ac7b06ab39a44adc747266928ae6debfa7b3335"},
-    {file = "zipp-0.6.0.tar.gz", hash = "sha256:3718b1cbcd963c7d4c5511a8240812904164b7f381b647143a89d3b98f9bcd8e"},
+    {file = "zipp-3.1.0-py3-none-any.whl", hash = "sha256:aa36550ff0c0b7ef7fa639055d797116ee891440eac1a56f378e2d3179e0320b"},
+    {file = "zipp-3.1.0.tar.gz", hash = "sha256:c599e4d75c98f6798c509911d08a22e6c021d074469042177c8c86fb92eefd96"},
 ]

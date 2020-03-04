@@ -24,7 +24,7 @@ test-integration:
 	python3 ./tests/integration_tests.py --no-modules
 
 typecheck:
-	mypy aw_qt --strict
+	mypy aw_qt --strict --pretty
 
 precommit:
 	make typecheck

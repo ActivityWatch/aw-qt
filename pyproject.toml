@@ -20,6 +20,7 @@ aw-core = {git = "https://github.com/ActivityWatch/aw-core.git"}
 
 [tool.poetry.dev-dependencies]
 mypy = "^0.761"
+PyQt5-stubs = "^5.13"
 
 [build-system]
 requires = ["poetry>=0.12"]
