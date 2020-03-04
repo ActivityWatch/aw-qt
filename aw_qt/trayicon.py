@@ -189,5 +189,6 @@ def run(manager: Manager, testing: bool = False) -> Any:
 
     QApplication.setQuitOnLastWindowClosed(False)
 
+    logger.info("Initialized aw-qt and trayicon succesfully")
     # Run the application, blocks until quit
     return app.exec_()

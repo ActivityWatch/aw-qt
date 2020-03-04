@@ -62,8 +62,9 @@ def _discover_modules_bundled() -> List[str]:
                 name = os.path.basename(match)
                 modules.append(name)
             else:
-                logger.warning("Found matching file but was not executable: {}".format(path))
+                logger.warning("Found matching file but was not executable: {}".format(match))
 
+    # This prints "Found... set()" if we found 0 bundled modules. Can be a bit misleading.
     logger.info("Found bundled modules: {}".format(set(modules)))
     return modules
 
@@ -208,8 +209,10 @@ class Manager:
         else:
             logger.debug("Manager tried to start nonexistent module {}".format(module_name))
 
-    def autostart(self, autostart_modules: Set[str] = set()) -> None:
-        if autostart_modules and len(autostart_modules) > 0:
+    def autostart(self, autostart_modules: Optional[Set[str]]) -> None:
+        if autostart_modules is None:
+            autostart_modules = set()
+        if len(autostart_modules) > 0:
             logger.info("Modules to start weren't specified in CLI arguments. Falling back to configuration.")
             autostart_modules = set(self.settings.autostart_modules)
 
