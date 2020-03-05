@@ -52,9 +52,7 @@ def _locate_executable(name: str) -> Optional[str]:
         return None
 
 
-"""
-Look for modules in given directory path and recursively in subdirs matching aw-*
-"""
+""" Look for modules in given directory path and recursively in subdirs matching aw-* """
 def _discover_modules_in_directory(modules: List[str], search_path: str) -> None:
     matches = glob(os.path.join(search_path, "aw-*"))
     for match in matches:
@@ -66,7 +64,7 @@ def _discover_modules_in_directory(modules: List[str], search_path: str) -> None
         else:
             logger.warning("Found matching file but was not executable: {}".format(match))
 
-
+""" Use _discover_modules_in_directory to find all bundled modules """
 def _discover_modules_bundled() -> List[str]:
     modules: List[str] = []
     cwd = os.getcwd()
@@ -78,7 +76,7 @@ def _discover_modules_bundled() -> List[str]:
         logger.info("Found no bundles modules")
     return modules
 
-
+""" Find all aw- modules in PATH """
 def _discover_modules_system() -> List[str]:
     search_paths = os.environ["PATH"].split(":")
     modules = []

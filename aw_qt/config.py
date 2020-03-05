@@ -17,7 +17,10 @@ default_config['aw-qt'] = default_settings
 default_config['aw-qt-testing'] = default_settings
 qt_config = load_config("aw-qt", default_config)
 
-
+"""
+An instance of loaded settings, containing a list of modules to autostart.
+Constructor takes a `testing` boolean as an argument
+"""
 class AwQtSettings:
     def __init__(self, testing: bool):
         config_section = qt_config["aw-qt" if not testing else "aw-qt-testing"]
