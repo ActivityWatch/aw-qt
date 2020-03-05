@@ -5,10 +5,6 @@ from aw_core.config import load_config
 import json
 
 default_settings = {
-    "possible_modules": json.dumps(["aw-server",
-                                    "aw-server-rust",
-                                    "aw-watcher-afk",
-                                    "aw-watcher-window", ]),
     "autostart_modules": json.dumps(["aw-server-rust",
                                      "aw-server",
                                      "aw-watcher-afk",
@@ -26,5 +22,4 @@ class AwQtSettings:
     def __init__(self, testing: bool):
         config_section = qt_config["aw-qt" if not testing else "aw-qt-testing"]
 
-        self.possible_modules: List[str] = json.loads(config_section["possible_modules"])
         self.autostart_modules: List[str] = json.loads(config_section["autostart_modules"])

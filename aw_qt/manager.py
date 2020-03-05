@@ -182,12 +182,6 @@ class Manager:
         self.autostart_modules: Set[str] = set(self.settings.autostart_modules)
         self.testing = testing
 
-        for name in self.settings.possible_modules:
-            if _locate_executable(name):
-                self.modules[name] = Module(name, testing=testing)
-            else:
-                logger.warning("Module '{}' not found but was in possible modules".format(name))
-        # Is this actually a good way to do this? merged from dev/autodetect-modules
         self.discover_modules()
 
     def discover_modules(self) -> None:
