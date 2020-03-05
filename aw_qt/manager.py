@@ -52,20 +52,30 @@ def _locate_executable(name: str) -> Optional[str]:
         return None
 
 
-def _discover_modules_bundled() -> List[str]:
-    # Look for modules in source dir and parent dir
-    modules = []
-    for path in _search_paths:
-        matches = glob(os.path.join(path, "aw-*"))
-        for match in matches:
-            if os.path.isfile(match) and os.access(match, os.X_OK):
-                name = os.path.basename(match)
-                modules.append(name)
-            else:
-                logger.warning("Found matching file but was not executable: {}".format(match))
+"""
+Look for modules in given directory path and recursively in subdirs matching aw-*
+"""
+def _discover_modules_in_directory(modules: List[str], search_path: str) -> None:
+    matches = glob(os.path.join(search_path, "aw-*"))
+    for match in matches:
+        if os.path.isfile(match) and os.access(match, os.X_OK):
+            name = os.path.basename(match)
+            modules.append(name)
+        elif os.path.isdir(match) and os.access(match, os.X_OK):
+            _discover_modules_in_directory(modules, match)
+        else:
+            logger.warning("Found matching file but was not executable: {}".format(match))
 
-    # This prints "Found... set()" if we found 0 bundled modules. Can be a bit misleading.
-    logger.info("Found bundled modules: {}".format(set(modules)))
+
+def _discover_modules_bundled() -> List[str]:
+    modules: List[str] = []
+    cwd = os.getcwd()
+    _discover_modules_in_directory(modules, cwd)
+
+    if len(modules) > 0:
+        logger.info("Found bundled modules: {}".format(set(modules)))
+    else:
+        logger.info("Found no bundles modules")
     return modules
 
 
