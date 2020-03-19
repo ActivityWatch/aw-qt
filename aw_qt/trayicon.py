@@ -143,9 +143,9 @@ def run(manager, testing=False):
     app = QApplication(sys.argv)
 
     # Without this, Ctrl+C will have no effect
-    signal.signal(signal.SIGINT, lambda: exit(manager))
+    signal.signal(signal.SIGINT, lambda *args: exit(manager))
     # Ensure cleanup happens on SIGTERM
-    signal.signal(signal.SIGTERM, lambda: exit(manager))
+    signal.signal(signal.SIGTERM, lambda *args: exit(manager))
 
     timer = QtCore.QTimer()
     timer.start(100)  # You may change this if you wish.
