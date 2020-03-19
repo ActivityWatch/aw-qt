@@ -23,10 +23,8 @@ before_install:
      fi
  - python3 -V
  - pip3 -V
- - pip3 install --upgrade pip
+ - pip3 install --upgrade pip poetry
  - pip3 install pyinstaller
- - pip3 install poetry
- - poetry install --no-root  # Installs dev-dependencies
 
 install:
  - make build
