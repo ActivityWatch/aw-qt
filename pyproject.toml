@@ -13,8 +13,8 @@ packages = [
 aw-qt = "aw_qt:main"
 
 [tool.poetry.dependencies]
-python = "^3.6"
-PyQt5 = "5.13.2"
+python = "^3.6, <3.8"
+PyQt5 = "5.10.1"
 pyobjc = { version = "^6.1", platform = "darwin" }
 aw-core = {git = "https://github.com/ActivityWatch/aw-core.git"}
 
