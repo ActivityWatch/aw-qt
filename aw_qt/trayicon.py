@@ -157,12 +157,9 @@ def run(manager, testing=False):
 
     widget = QWidget()
     if sys.platform == "darwin":
-        from Foundation import NSUserDefaults
-        style = NSUserDefaults.standardUserDefaults().stringForKey_('AppleInterfaceStyle')
-        if style == "Dark":
-            icon = QIcon(":/white-monochrome-logo.png")
-        else:
-            icon = QIcon(":/black-monochrome-logo.png")
+        icon = QIcon(":/black-monochrome-logo.png")
+        # Allow macOS to use filters for changing the icon's color
+        icon.setIsMask(True)
     else:
         icon = QIcon(":/logo.png")
 
