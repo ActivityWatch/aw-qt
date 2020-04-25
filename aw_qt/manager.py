@@ -78,7 +78,7 @@ def _discover_modules_bundled() -> List[str]:
 
 """ Find all aw- modules in PATH """
 def _discover_modules_system() -> List[str]:
-    search_paths = os.environ["PATH"].split(":")
+    search_paths = os.get_exec_path()
     modules = []
     for path in search_paths:
         if os.path.isdir(path):
