@@ -1,9 +1,9 @@
 import sys
 import logging
 import signal
-import webbrowser
 import os
 import subprocess
+import webbrowser
 
 from PyQt5 import QtCore
 from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QMessageBox, QMenu, QWidget, QPushButton
@@ -16,14 +16,40 @@ from .manager import Manager
 logger = logging.getLogger(__name__)
 
 
+def get_env():
+    """
+    Necessary for xdg-open to work properly when PyInstaller overrides LD_LIBRARY_PATH
+
+    https://github.com/ActivityWatch/activitywatch/issues/208#issuecomment-417346407
+    """
+    env = dict(os.environ)  # make a copy of the environment
+    lp_key = 'LD_LIBRARY_PATH'  # for GNU/Linux and *BSD.
+    lp_orig = env.get(lp_key + '_ORIG')
+    if lp_orig is not None:
+        env[lp_key] = lp_orig  # restore the original, unmodified value
+    else:
+        # This happens when LD_LIBRARY_PATH was not set.
+        # Remove the env var as a last resort:
+        env.pop(lp_key, None)
+    return env
+
+
+def open_url(url):
+    if sys.platform == "linux":
+        env = get_env()
+        subprocess.Popen(["xdg-open", url], env=env)
+    else:
+        webbrowser.open(url)
+
+
 def open_webui(root_url):
     print("Opening dashboard")
-    webbrowser.open(root_url)
+    open_url(root_url)
 
 
 def open_apibrowser(root_url):
     print("Opening api browser")
-    webbrowser.open(root_url + "/api")
+    open_url(root_url + "/api")
 
 
 def open_dir(d):
