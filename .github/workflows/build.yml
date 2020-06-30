@@ -1,0 +1,59 @@
+name: Build
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    name: Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-18.04, windows-latest, macOS-latest]
+        python_version: [3.6]
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: 'recursive'
+    - name: Set up Python
+      uses: actions/setup-python@v1
+      with:
+        python-version: ${{ matrix.python_version }}
+    - name: Create virtualenv
+      shell: bash
+      run: |
+        pip install virtualenv
+        python -m virtualenv venv
+    - name: Install dependencies
+      shell: bash
+      run: |
+        pip install poetry
+        source venv/bin/activate || source venv/Scripts/activate
+        poetry install
+    - name: Build
+      shell: bash
+      run: |
+        source venv/bin/activate || source venv/Scripts/activate
+        make build
+    - name: Run tests
+      shell: bash
+      run: |
+        source venv/bin/activate || source venv/Scripts/activate
+        make test
+        make typecheck
+    - name: Run integration tests
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get install -y libdbus-1-3 libxkbcommon-x11-0;  # Workaround for issue with Qt integration test on xenial: https://github.com/pytest-dev/pytest-qt/issues/266#issuecomment-510035926
+        sudo apt-get install xvfb;
+        source venv/bin/activate || source venv/Scripts/activate
+        xvfb-run --auto-servernum make test-integration;
+    - name: Package
+      shell: bash
+      run: |
+        source venv/bin/activate || source venv/Scripts/activate
+        pip install pyinstaller==3.5
+        make package
