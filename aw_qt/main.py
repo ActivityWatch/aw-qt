@@ -1,9 +1,7 @@
 import sys
 import logging
-import argparse
 import click
-from typing import List, Optional
-from typing_extensions import TypedDict
+from typing import Optional
 
 from aw_core.log import setup_logging
 

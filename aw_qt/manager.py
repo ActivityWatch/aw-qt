@@ -1,16 +1,13 @@
 import os
-import platform
 import sys
 import logging
 import subprocess
 import shutil
 from glob import glob
 from time import sleep
-from typing import Optional, List, Dict, Set, Tuple
+from typing import Optional, List, Dict, Tuple
 
 import aw_core
-
-from .config import AwQtSettings
 
 logger = logging.getLogger(__name__)
 
