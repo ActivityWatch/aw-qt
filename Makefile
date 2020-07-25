@@ -1,16 +1,10 @@
 .PHONY: build install test test-integration typecheck package clean
 
-ifdef DEV
-installcmd := poetry install
-else
-installcmd := pip3 install .
-endif
-
 build: aw_qt/resources.py
 	# Workaround for https://github.com/python-poetry/poetry/issues/1338#issuecomment-571618450
 	cp .gitignore .gitignore.backup
 	grep -v 'aw_qt/resources.py' .gitignore.backup > .gitignore
-	$(installcmd)
+	poetry install
 	mv .gitignore.backup .gitignore
 	rm -f .gitignore.backup
 
@@ -18,10 +12,10 @@ install:
 	bash scripts/config-autostart.sh
 
 test:
-	python3 -c 'import aw_qt'
+	python -c 'import aw_qt'
 
 test-integration:
-	python3 ./tests/integration_tests.py --no-modules
+	python ./tests/integration_tests.py --no-modules
 
 typecheck:
 	mypy aw_qt --strict --pretty
