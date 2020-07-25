@@ -4,6 +4,7 @@ from typing import List
 from aw_core.config import load_config
 import json
 
+# NOTE: Updating this won't update the defaults for users, this is an issue with how aw_core.config works
 default_settings = {
     "autostart_modules": json.dumps(
         ["aw-server", "aw-watcher-afk", "aw-watcher-window",]

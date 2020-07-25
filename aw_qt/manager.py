@@ -5,7 +5,7 @@ from time import sleep
 import logging
 import subprocess
 import shutil
-from typing import Optional, List, Dict, Set
+from typing import Optional, List, Dict, Set, Tuple
 
 import aw_core
 
@@ -35,7 +35,7 @@ def _is_system_module(name: str) -> bool:
     return shutil.which(name) is not None
 
 
-def _locate_executable(name: str) -> Optional[str]:
+def _locate_executable(name: str) -> Tuple[Optional[str], Optional[str]]:
     """
     Will return the path to the executable if bundled,
     otherwise returns the name if it is available in PATH.
@@ -44,41 +44,38 @@ def _locate_executable(name: str) -> Optional[str]:
     """
     exec_path = _locate_bundled_executable(name)
     if exec_path is not None:  # Check if it exists in bundle
-        return exec_path
+        return exec_path, "bundle"
     elif _is_system_module(name):  # Check if it's in PATH
-        return name
+        return name, "system"
     else:
         logger.warning(
             "Could not find module '{}' in installation directory or PATH".format(name)
         )
-        return None
+        return None, None
 
 
-def _discover_modules_in_directory(modules: List[str], search_path: str) -> None:
+def _discover_modules_in_directory(search_path: str) -> List[str]:
     """Look for modules in given directory path and recursively in subdirs matching aw-*"""
+    modules = []
     matches = glob(os.path.join(search_path, "aw-*"))
     for match in matches:
         if os.path.isfile(match) and os.access(match, os.X_OK):
             name = os.path.basename(match)
             modules.append(name)
         elif os.path.isdir(match) and os.access(match, os.X_OK):
-            _discover_modules_in_directory(modules, match)
+            modules.extend(_discover_modules_in_directory(match))
         else:
             logger.warning(
                 "Found matching file but was not executable: {}".format(match)
             )
+    return modules
 
 
 def _discover_modules_bundled() -> List[str]:
     """Use ``_discover_modules_in_directory`` to find all bundled modules """
-    modules: List[str] = []
     cwd = os.getcwd()
-    _discover_modules_in_directory(modules, cwd)
-
-    if len(modules) > 0:
-        logger.info("Found bundled modules: {}".format(set(modules)))
-    else:
-        logger.info("Found no bundles modules")
+    modules = _discover_modules_in_directory(cwd)
+    logger.info("Found bundled modules: {}".format(set(modules)))
     return modules
 
 
@@ -90,7 +87,7 @@ def _discover_modules_system() -> List[str]:
         if os.path.isdir(path):
             files = os.listdir(path)
             for filename in files:
-                if "aw-" in filename:
+                if filename.startswith("aw-"):
                     modules.append(filename)
 
     logger.info("Found system modules: {}".format(set(modules)))
@@ -116,9 +113,10 @@ class Module:
         if platform.system() != "Windows":
             os.setpgrp()
 
-        exec_path = _locate_executable(self.name)
+        exec_path, location = _locate_executable(self.name)
         if exec_path is None:
             logger.error("Tried to start nonexistent module {}".format(self.name))
+            return
         else:
             exec_cmd = [exec_path]
             if self.testing:
@@ -132,7 +130,7 @@ class Module:
             startupinfo = subprocess.STARTUPINFO()  # type: ignore
             startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW  # type: ignore
         elif platform.system() == "Darwin":
-            logger.info("Macos: Disable dock icon")
+            logger.info("macOS: Disable dock icon")
             import AppKit
 
             AppKit.NSBundle.mainBundle().infoDictionary()["LSBackgroundOnly"] = "1"
@@ -200,9 +198,7 @@ class Module:
 
 class Manager:
     def __init__(self, testing: bool = False) -> None:
-        self.settings: AwQtSettings = AwQtSettings(testing)
         self.modules: Dict[str, Module] = {}
-        self.autostart_modules: Set[str] = set(self.settings.autostart_modules)
         self.testing = testing
 
         self.discover_modules()
@@ -211,7 +207,7 @@ class Manager:
         # These should always be bundled with aw-qt
         found_modules = set(_discover_modules_bundled())
         found_modules |= set(_discover_modules_system())
-        found_modules ^= {"aw-qt"}  # Exclude self
+        found_modules ^= {"aw-qt", "aw-client"}  # Exclude self
 
         for m_name in found_modules:
             if m_name not in self.modules:
@@ -230,26 +226,26 @@ class Manager:
                 "Manager tried to start nonexistent module {}".format(module_name)
             )
 
-    def autostart(self, autostart_modules: Optional[List[str]]) -> None:
-        if autostart_modules is None:
-            autostart_modules = []
-        if len(autostart_modules) > 0:
-            logger.info(
-                "Modules to start weren't specified in CLI arguments. Falling back to configuration."
-            )
-            autostart_modules = self.settings.autostart_modules
+    def autostart(self, autostart_modules: List[str]) -> None:
         # We only want to autostart modules that are both in found modules and are asked to autostart.
-        modules_to_start = set(autostart_modules).intersection(set(self.modules.keys()))
+        not_found = []
+        for name in autostart_modules:
+            if name not in self.modules.keys():
+                logger.error(f"Module {name} not found")
+                not_found.append(name)
+        autostart_modules = list(set(autostart_modules) - set(not_found))
 
         # Start aw-server-rust first
-        if "aw-server-rust" in modules_to_start:
+        if "aw-server-rust" in autostart_modules:
             self.start("aw-server-rust")
-        elif "aw-server" in modules_to_start:
+        elif "aw-server" in autostart_modules:
             self.start("aw-server")
 
-        modules_to_start = set(autostart_modules) - {"aw-server", "aw-server-rust"}
-        for module_name in modules_to_start:
-            self.start(module_name)
+        autostart_modules = list(
+            set(autostart_modules) - {"aw-server", "aw-server-rust"}
+        )
+        for name in autostart_modules:
+            self.start(name)
 
     def stop_all(self) -> None:
         for module in filter(lambda m: m.is_alive(), self.modules.values()):

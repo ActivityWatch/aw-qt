@@ -18,6 +18,7 @@ PyQt5 = "5.10.1"
 sip = "4.19.8"
 pyobjc = { version = "^6.1", platform = "darwin" }
 aw-core = {git = "https://github.com/ActivityWatch/aw-core.git"}
+click = "^7.1.2"
 
 [tool.poetry.dev-dependencies]
 mypy = "^0.761"
