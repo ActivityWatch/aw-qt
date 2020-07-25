@@ -4,7 +4,7 @@ import signal
 import os
 import subprocess
 from collections import defaultdict
-from typing import Any, DefaultDict, List, Optional
+from typing import Any, DefaultDict, List, Optional, Dict
 import webbrowser
 
 from PyQt5 import QtCore
@@ -25,7 +25,7 @@ from .manager import Manager, Module
 logger = logging.getLogger(__name__)
 
 
-def get_env():
+def get_env() -> Dict[str, str]:
     """
     Necessary for xdg-open to work properly when PyInstaller overrides LD_LIBRARY_PATH
 
@@ -43,7 +43,7 @@ def get_env():
     return env
 
 
-def open_url(url):
+def open_url(url: str) -> None:
     if sys.platform == "linux":
         env = get_env()
         subprocess.Popen(["xdg-open", url], env=env)
