@@ -1,78 +1,143 @@
 import os
-import platform
-from time import sleep
+import sys
 import logging
 import subprocess
-from typing import Optional, List
+import shutil
+from glob import glob
+from time import sleep
+from typing import Optional, List, Dict, Tuple
 
 import aw_core
 
 logger = logging.getLogger(__name__)
 
+_module_dir = os.path.dirname(os.path.realpath(__file__))
+_parent_dir = os.path.abspath(os.path.join(_module_dir, os.pardir))
+_search_paths = [_module_dir, _parent_dir]
 
-def _locate_executable(name: str) -> List[str]:
-    """
-    Will start module from localdir if present there,
-    otherwise will try to call what is available in PATH.
 
-    Returns it as a Popen cmd list.
-    """
-    curr_filepath = os.path.realpath(__file__)
-    curr_dir = os.path.dirname(curr_filepath)
-    program_dir = os.path.abspath(os.path.join(curr_dir, os.pardir))
-    search_paths = [curr_dir, program_dir, os.path.join(program_dir, name)]
+def _locate_bundled_executable(name: str) -> Optional[str]:
+    """Returns the path to the module executable if it exists in the bundle, else None."""
+    _exec_paths = [os.path.join(path, name) for path in _search_paths]
 
-    exec_end = ".exe" if platform.system() == "Windows" else ""
-    exec_paths = [os.path.join(path, name + exec_end) for path in search_paths]
-
-    for exec_path in exec_paths:
+    # Look for it in the installation path
+    for exec_path in _exec_paths:
         if os.path.isfile(exec_path):
             # logger.debug("Found executable for {} in: {}".format(name, exec_path))
-            return [exec_path]
-            break  # this break is redundant, but kept due to for-else semantics
+            return exec_path
+    return None
+
+
+def _is_system_module(name: str) -> bool:
+    """Checks if a module with a particular name exists in PATH"""
+    return shutil.which(name) is not None
+
+
+def _locate_executable(name: str) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Will return the path to the executable if bundled,
+    otherwise returns the name if it is available in PATH.
+
+    Used when calling Popen.
+    """
+    exec_path = _locate_bundled_executable(name)
+    if exec_path is not None:  # Check if it exists in bundle
+        return exec_path, "bundle"
+    elif _is_system_module(name):  # Check if it's in PATH
+        return name, "system"
     else:
-        # TODO: Actually check if it is in PATH
-        logger.debug("Trying to start {} using PATH (executable not found in: {})"
-                     .format(name, exec_paths))
-        return [name]
+        logger.warning(
+            "Could not find module '{}' in installation directory or PATH".format(name)
+        )
+        return None, None
+
+
+def _discover_modules_in_directory(search_path: str) -> List[str]:
+    """Look for modules in given directory path and recursively in subdirs matching aw-*"""
+    modules = []
+    matches = glob(os.path.join(search_path, "aw-*"))
+    for match in matches:
+        if os.path.isfile(match) and os.access(match, os.X_OK):
+            name = os.path.basename(match)
+            modules.append(name)
+        elif os.path.isdir(match) and os.access(match, os.X_OK):
+            modules.extend(_discover_modules_in_directory(match))
+        else:
+            logger.warning(
+                "Found matching file but was not executable: {}".format(match)
+            )
+    return modules
+
+
+def _discover_modules_bundled() -> List[str]:
+    """Use ``_discover_modules_in_directory`` to find all bundled modules """
+    cwd = os.getcwd()
+    modules = _discover_modules_in_directory(cwd)
+    logger.info("Found bundled modules: {}".format(set(modules)))
+    return modules
+
+
+def _discover_modules_system() -> List[str]:
+    """Find all aw- modules in PATH"""
+    search_paths = os.get_exec_path()
+    modules = []
+    for path in search_paths:
+        if os.path.isdir(path):
+            files = os.listdir(path)
+            for filename in files:
+                if filename.startswith("aw-"):
+                    modules.append(filename)
+
+    logger.info("Found system modules: {}".format(set(modules)))
+    return modules
 
 
 class Module:
     def __init__(self, name: str, testing: bool = False) -> None:
         self.name = name
-        self.started = False
+        self.started = (
+            False  # Should be True if module is supposed to be running, else False
+        )
         self.testing = testing
-        self._process = None  # type: Optional[subprocess.Popen]
-        self._last_process = None  # type: Optional[subprocess.Popen]
+        self.location = "system" if _is_system_module(name) else "bundled"
+        self._process: Optional[subprocess.Popen[str]] = None
+        self._last_process: Optional[subprocess.Popen[str]] = None
 
     def start(self) -> None:
         logger.info("Starting module {}".format(self.name))
 
         # Create a process group, become its leader
-        if platform.system() != "Windows":
-            os.setpgrp()  # type: ignore
+        # TODO: This shouldn't go here
+        if sys.platform != "win32":
+            os.setpgrp()
 
-        exec_cmd = _locate_executable(self.name)
-        if self.testing:
-            exec_cmd.append("--testing")
-        # logger.debug("Running: {}".format(exec_cmd))
+        exec_path, location = _locate_executable(self.name)
+        if exec_path is None:
+            logger.error("Tried to start nonexistent module {}".format(self.name))
+            return
+        else:
+            exec_cmd = [exec_path]
+            if self.testing:
+                exec_cmd.append("--testing")
+            # logger.debug("Running: {}".format(exec_cmd))
 
         # Don't display a console window on Windows
         # See: https://github.com/ActivityWatch/activitywatch/issues/212
         startupinfo = None
-        if platform.system() == "Windows":
-            startupinfo = subprocess.STARTUPINFO()  # type: ignore
-            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW  # type: ignore
-        elif platform.system() == "Darwin":
-            logger.info("Macos: Disable dock icon")
+        if sys.platform == "win32" or sys.platform == "cygwin":
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        elif sys.platform == "darwin":
+            logger.info("macOS: Disable dock icon")
             import AppKit
+
             AppKit.NSBundle.mainBundle().infoDictionary()["LSBackgroundOnly"] = "1"
 
         # There is a very good reason stdout and stderr is not PIPE here
         # See: https://github.com/ActivityWatch/aw-server/issues/27
-        self._process = subprocess.Popen(exec_cmd, universal_newlines=True, startupinfo=startupinfo)
-
-        # Should be True if module is supposed to be running, else False
+        self._process = subprocess.Popen(
+            exec_cmd, universal_newlines=True, startupinfo=startupinfo
+        )
         self.started = True
 
     def stop(self) -> None:
@@ -81,10 +146,14 @@ class Module:
         """
         # TODO: What if a module doesn't stop? Add timeout to p.wait() and then do a p.kill() if timeout is hit
         if not self.started:
-            logger.warning("Tried to stop module {}, but it hasn't been started".format(self.name))
+            logger.warning(
+                "Tried to stop module {}, but it hasn't been started".format(self.name)
+            )
             return
         elif not self.is_alive():
-            logger.warning("Tried to stop module {}, but it wasn't running".format(self.name))
+            logger.warning(
+                "Tried to stop module {}, but it wasn't running".format(self.name)
+            )
         else:
             if not self._process:
                 logger.error("No reference to process object")
@@ -126,42 +195,57 @@ class Module:
 
 
 class Manager:
-    def __init__(self, testing: bool=False) -> None:
-        # TODO: Fetch these from somewhere appropriate (auto detect or a config file)
-        #       Save to config wether they should autostart or not.
-        _possible_modules = [
-            "aw-server",
-            "aw-server-rust",
-            "aw-watcher-afk",
-            "aw-watcher-window",
-            # "aw-watcher-spotify",
-            # "aw-watcher-network"
-        ]
+    def __init__(self, testing: bool = False) -> None:
+        self.modules: Dict[str, Module] = {}
+        self.testing = testing
 
-        # TODO: Filter away all modules not available on system
-        self.modules = {name: Module(name, testing=testing) for name in _possible_modules}
+        self.discover_modules()
 
-    def get_unexpected_stops(self):
-        return list(filter(lambda x: x.started and not x.is_alive(), self.modules.values()))
+    def discover_modules(self) -> None:
+        # These should always be bundled with aw-qt
+        found_modules = set(_discover_modules_bundled())
+        found_modules |= set(_discover_modules_system())
+        found_modules ^= {"aw-qt", "aw-client"}  # Exclude self
 
-    def start(self, module_name):
+        for m_name in found_modules:
+            if m_name not in self.modules:
+                self.modules[m_name] = Module(m_name, testing=self.testing)
+
+    def get_unexpected_stops(self) -> List[Module]:
+        return list(
+            filter(lambda x: x.started and not x.is_alive(), self.modules.values())
+        )
+
+    def start(self, module_name: str) -> None:
         if module_name in self.modules.keys():
             self.modules[module_name].start()
         else:
-            logger.error("Unable to start module '{}': No such module".format(module_name))
+            logger.debug(
+                "Manager tried to start nonexistent module {}".format(module_name)
+            )
 
-    def autostart(self, autostart_modules):
-        # Always start aw-server first
-        if "aw-server" in autostart_modules:
-            self.start("aw-server")
-        elif "aw-server-rust" in autostart_modules:
+    def autostart(self, autostart_modules: List[str]) -> None:
+        # We only want to autostart modules that are both in found modules and are asked to autostart.
+        not_found = []
+        for name in autostart_modules:
+            if name not in self.modules.keys():
+                logger.error(f"Module {name} not found")
+                not_found.append(name)
+        autostart_modules = list(set(autostart_modules) - set(not_found))
+
+        # Start aw-server-rust first
+        if "aw-server-rust" in autostart_modules:
             self.start("aw-server-rust")
+        elif "aw-server" in autostart_modules:
+            self.start("aw-server")
 
-        autostart_modules = set(autostart_modules) - {"aw-server", "aw-server-rust"}
-        for module_name in autostart_modules:
-            self.start(module_name)
+        autostart_modules = list(
+            set(autostart_modules) - {"aw-server", "aw-server-rust"}
+        )
+        for name in autostart_modules:
+            self.start(name)
 
-    def stop_all(self):
+    def stop_all(self) -> None:
         for module in filter(lambda m: m.is_alive(), self.modules.values()):
             module.stop()
 
