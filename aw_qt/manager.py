@@ -1,10 +1,11 @@
 import os
 import platform
-from glob import glob
-from time import sleep
+import sys
 import logging
 import subprocess
 import shutil
+from glob import glob
+from time import sleep
 from typing import Optional, List, Dict, Set, Tuple
 
 import aw_core
@@ -110,7 +111,7 @@ class Module:
 
         # Create a process group, become its leader
         # TODO: This shouldn't go here
-        if platform.system() != "Windows":
+        if sys.platform != "win32":
             os.setpgrp()
 
         exec_path, location = _locate_executable(self.name)
@@ -126,10 +127,10 @@ class Module:
         # Don't display a console window on Windows
         # See: https://github.com/ActivityWatch/activitywatch/issues/212
         startupinfo = None
-        if platform.system() == "Windows":
-            startupinfo = subprocess.STARTUPINFO()  # type: ignore
-            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW  # type: ignore
-        elif platform.system() == "Darwin":
+        if sys.platform == "win32" or sys.platform == "cygwin":
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        elif sys.platform == "darwin":
             logger.info("macOS: Disable dock icon")
             import AppKit
 
