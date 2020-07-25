@@ -1,12 +1,7 @@
 .PHONY: build install test test-integration typecheck package clean
 
 build: aw_qt/resources.py
-	# Workaround for https://github.com/python-poetry/poetry/issues/1338#issuecomment-571618450
-	cp .gitignore .gitignore.backup
-	grep -v 'aw_qt/resources.py' .gitignore.backup > .gitignore
 	poetry install
-	mv .gitignore.backup .gitignore
-	rm -f .gitignore.backup
 
 install:
 	bash scripts/config-autostart.sh
