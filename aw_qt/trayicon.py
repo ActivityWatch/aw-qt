@@ -129,7 +129,7 @@ class TrayIcon(QSystemTrayIcon):
             box = QMessageBox(self._parent)
             box.setIcon(QMessageBox.Warning)
             box.setText("Module {} quit unexpectedly".format(module.name))
-            box.setDetailedText(module.read_log())
+            box.setDetailedText(module.read_log(self.testing))
 
             restart_button = QPushButton("Restart", box)
             restart_button.clicked.connect(module.start)
@@ -141,8 +141,8 @@ class TrayIcon(QSystemTrayIcon):
         def rebuild_modules_menu() -> None:
             for action in modulesMenu.actions():
                 if action.isEnabled():
-                    name = action.data().name
-                    alive = self.manager.modules[name].is_alive()
+                    module: Module = action.data()
+                    alive = module.is_alive()
                     action.setChecked(alive)
                     # print(module.text(), alive)
 
@@ -168,27 +168,21 @@ class TrayIcon(QSystemTrayIcon):
 
         def add_module_menuitem(module: Module) -> None:
             title = module.name
-            ac = moduleMenu.addAction(title, lambda: module.toggle())
+            ac = moduleMenu.addAction(title, lambda: module.toggle(self.testing))
 
             ac.setData(module)
             ac.setCheckable(True)
             ac.setChecked(module.is_alive())
 
-        # Merged from branch dev/autodetect-modules, still kind of in progress with making this actually work
-        modules_by_location: DefaultDict[str, List[Module]] = defaultdict(
-            lambda: list()
-        )
-        for module in sorted(self.manager.modules.values(), key=lambda m: m.name):
-            modules_by_location[module.location].append(module)
-
-        for location, modules in sorted(
-            modules_by_location.items(), key=lambda kv: kv[0]
-        ):
+        for location, modules in [
+            ("bundled", self.manager.modules_bundled),
+            ("system", self.manager.modules_system),
+        ]:
             header = moduleMenu.addAction(location)
             header.setEnabled(False)
 
-        for module in sorted(modules, key=lambda m: m.name):
-            add_module_menuitem(self.manager.modules[module.name])
+            for module in sorted(modules, key=lambda m: m.name):
+                add_module_menuitem(module)
 
 
 def exit(manager: Manager) -> None:
