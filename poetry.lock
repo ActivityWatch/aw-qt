@@ -1,82 +1,80 @@
 [[package]]
-category = "main"
-description = "A small Python module for determining appropriate platform-specific dirs, e.g. a \"user data dir\"."
 name = "appdirs"
+version = "1.4.4"
+description = "A small Python module for determining appropriate platform-specific dirs, e.g. a \"user data dir\"."
+category = "main"
 optional = false
 python-versions = "*"
-version = "1.4.4"
 
 [[package]]
-category = "main"
-description = "Classes Without Boilerplate"
 name = "attrs"
+version = "20.2.0"
+description = "Classes Without Boilerplate"
+category = "main"
 optional = false
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
-version = "19.3.0"
 
 [package.extras]
-azure-pipelines = ["coverage", "hypothesis", "pympler", "pytest (>=4.3.0)", "six", "zope.interface", "pytest-azurepipelines"]
-dev = ["coverage", "hypothesis", "pympler", "pytest (>=4.3.0)", "six", "zope.interface", "sphinx", "pre-commit"]
-docs = ["sphinx", "zope.interface"]
-tests = ["coverage", "hypothesis", "pympler", "pytest (>=4.3.0)", "six", "zope.interface"]
+dev = ["coverage[toml] (>=5.0.2)", "hypothesis", "pympler", "pytest (>=4.3.0)", "six", "zope.interface", "sphinx", "sphinx-rtd-theme", "pre-commit"]
+docs = ["sphinx", "sphinx-rtd-theme", "zope.interface"]
+tests = ["coverage[toml] (>=5.0.2)", "hypothesis", "pympler", "pytest (>=4.3.0)", "six", "zope.interface"]
+tests_no_zope = ["coverage[toml] (>=5.0.2)", "hypothesis", "pympler", "pytest (>=4.3.0)", "six"]
 
 [[package]]
-category = "main"
-description = ""
 name = "aw-core"
+version = "0.4.2"
+description = "Core library for ActivityWatch"
+category = "main"
 optional = false
 python-versions = "^3.6"
-version = "0.4.2"
 
 [package.dependencies]
-TakeTheTime = "^0.3.1"
-appdirs = "^1.4.3"
-iso8601 = "^0.1.12"
-jsonschema = "^3.1"
-peewee = "3.*"
-python-json-logger = "^0.1.11"
-strict-rfc3339 = "^0.7"
+appdirs = ">=1.4.3,<2.0.0"
+iso8601 = ">=0.1.12,<0.2.0"
+jsonschema = ">=3.1,<4.0"
+peewee = ">=3.0.0,<4.0.0"
+python-json-logger = ">=0.1.11,<0.2.0"
+strict-rfc3339 = ">=0.7,<0.8"
+TakeTheTime = ">=0.3.1,<0.4.0"
 
 [package.extras]
-mongo = ["pymongo (^3.10.0)"]
+mongo = ["pymongo (>=3.10.0,<4.0.0)"]
 
 [package.source]
-reference = "548f4fcecb2704f64cf8cc9a35f377f68f0d3bf2"
 type = "git"
 url = "https://github.com/ActivityWatch/aw-core.git"
+reference = "master"
+resolved_reference = "2f8539bf47d95d2e77d521f4ecc666e0faf45c88"
+
 [[package]]
-category = "main"
-description = "Composable command line interface toolkit"
 name = "click"
+version = "7.1.2"
+description = "Composable command line interface toolkit"
+category = "main"
 optional = false
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*"
-version = "7.1.2"
 
 [[package]]
-category = "dev"
-description = "the modular source code checker: pep8 pyflakes and co"
 name = "flake8"
+version = "3.8.4"
+description = "the modular source code checker: pep8 pyflakes and co"
+category = "dev"
 optional = false
 python-versions = "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,>=2.7"
-version = "3.8.3"
 
 [package.dependencies]
+importlib-metadata = {version = "*", markers = "python_version < \"3.8\""}
 mccabe = ">=0.6.0,<0.7.0"
 pycodestyle = ">=2.6.0a1,<2.7.0"
 pyflakes = ">=2.2.0,<2.3.0"
 
-[package.dependencies.importlib-metadata]
-python = "<3.8"
-version = "*"
-
 [[package]]
-category = "main"
-description = "Read metadata from Python packages"
-marker = "python_version < \"3.8\""
 name = "importlib-metadata"
+version = "2.0.0"
+description = "Read metadata from Python packages"
+category = "main"
 optional = false
 python-versions = "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,>=2.7"
-version = "1.7.0"
 
 [package.dependencies]
 zipp = ">=0.5"
@@ -86,50 +84,46 @@ docs = ["sphinx", "rst.linker"]
 testing = ["packaging", "pep517", "importlib-resources (>=1.3)"]
 
 [[package]]
-category = "main"
-description = "Simple module to parse ISO 8601 dates"
 name = "iso8601"
+version = "0.1.13"
+description = "Simple module to parse ISO 8601 dates"
+category = "main"
 optional = false
 python-versions = "*"
-version = "0.1.12"
 
 [[package]]
-category = "main"
-description = "An implementation of JSON Schema validation for Python"
 name = "jsonschema"
+version = "3.2.0"
+description = "An implementation of JSON Schema validation for Python"
+category = "main"
 optional = false
 python-versions = "*"
-version = "3.2.0"
 
 [package.dependencies]
 attrs = ">=17.4.0"
+importlib-metadata = {version = "*", markers = "python_version < \"3.8\""}
 pyrsistent = ">=0.14.0"
-setuptools = "*"
 six = ">=1.11.0"
-
-[package.dependencies.importlib-metadata]
-python = "<3.8"
-version = "*"
 
 [package.extras]
 format = ["idna", "jsonpointer (>1.13)", "rfc3987", "strict-rfc3339", "webcolors"]
 format_nongpl = ["idna", "jsonpointer (>1.13)", "webcolors", "rfc3986-validator (>0.1.0)", "rfc3339-validator"]
 
 [[package]]
-category = "dev"
-description = "McCabe checker, plugin for flake8"
 name = "mccabe"
+version = "0.6.1"
+description = "McCabe checker, plugin for flake8"
+category = "dev"
 optional = false
 python-versions = "*"
-version = "0.6.1"
 
 [[package]]
-category = "dev"
-description = "Optional static typing for Python"
 name = "mypy"
+version = "0.761"
+description = "Optional static typing for Python"
+category = "dev"
 optional = false
 python-versions = ">=3.5"
-version = "0.761"
 
 [package.dependencies]
 mypy-extensions = ">=0.4.3,<0.5.0"
@@ -140,249 +134,241 @@ typing-extensions = ">=3.7.4"
 dmypy = ["psutil (>=4.0)"]
 
 [[package]]
-category = "dev"
-description = "Experimental type system extensions for programs checked with the mypy typechecker."
 name = "mypy-extensions"
-optional = false
-python-versions = "*"
 version = "0.4.3"
-
-[[package]]
-category = "main"
-description = "a little orm"
-name = "peewee"
+description = "Experimental type system extensions for programs checked with the mypy typechecker."
+category = "dev"
 optional = false
 python-versions = "*"
+
+[[package]]
+name = "peewee"
 version = "3.13.3"
-
-[[package]]
-category = "dev"
-description = "Python style guide checker"
-name = "pycodestyle"
-optional = false
-python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
-version = "2.6.0"
-
-[[package]]
-category = "dev"
-description = "passive checker of Python programs"
-name = "pyflakes"
-optional = false
-python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
-version = "2.2.0"
-
-[[package]]
+description = "a little orm"
 category = "main"
-description = "Python<->ObjC Interoperability Module"
-marker = "sys_platform == \"darwin\""
+optional = false
+python-versions = "*"
+
+[[package]]
+name = "pycodestyle"
+version = "2.6.0"
+description = "Python style guide checker"
+category = "dev"
+optional = false
+python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
+
+[[package]]
+name = "pyflakes"
+version = "2.2.0"
+description = "passive checker of Python programs"
+category = "dev"
+optional = false
+python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
+
+[[package]]
 name = "pyobjc"
+version = "6.2.2"
+description = "Python<->ObjC Interoperability Module"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = "6.2.2"
-pyobjc-framework-AVFoundation = "6.2.2"
-pyobjc-framework-AVKit = "6.2.2"
-pyobjc-framework-Accounts = "6.2.2"
-pyobjc-framework-AdSupport = "6.2.2"
+pyobjc-framework-Accounts = {version = "6.2.2", markers = "platform_release >= \"12.0\""}
 pyobjc-framework-AddressBook = "6.2.2"
+pyobjc-framework-AdSupport = {version = "6.2.2", markers = "platform_release >= \"18.0\""}
 pyobjc-framework-AppleScriptKit = "6.2.2"
-pyobjc-framework-AppleScriptObjC = "6.2.2"
+pyobjc-framework-AppleScriptObjC = {version = "6.2.2", markers = "platform_release >= \"10.0\""}
 pyobjc-framework-ApplicationServices = "6.2.2"
-pyobjc-framework-AuthenticationServices = "6.2.2"
-pyobjc-framework-AutomaticAssessmentConfiguration = "6.2.2"
+pyobjc-framework-AuthenticationServices = {version = "6.2.2", markers = "platform_release >= \"19.0\""}
+pyobjc-framework-AutomaticAssessmentConfiguration = {version = "6.2.2", markers = "platform_release >= \"19.0\""}
 pyobjc-framework-Automator = "6.2.2"
-pyobjc-framework-BusinessChat = "6.2.2"
+pyobjc-framework-AVFoundation = {version = "6.2.2", markers = "platform_release >= \"11.0\""}
+pyobjc-framework-AVKit = {version = "6.2.2", markers = "platform_release >= \"13.0\""}
+pyobjc-framework-BusinessChat = {version = "6.2.2", markers = "platform_release >= \"18.0\""}
+pyobjc-framework-CalendarStore = {version = "6.2.2", markers = "platform_release >= \"9.0\""}
 pyobjc-framework-CFNetwork = "6.2.2"
-pyobjc-framework-CalendarStore = "6.2.2"
-pyobjc-framework-CloudKit = "6.2.2"
+pyobjc-framework-CloudKit = {version = "6.2.2", markers = "platform_release >= \"14.0\""}
 pyobjc-framework-Cocoa = "6.2.2"
-pyobjc-framework-Collaboration = "6.2.2"
-pyobjc-framework-ColorSync = "6.2.2"
-pyobjc-framework-Contacts = "6.2.2"
-pyobjc-framework-ContactsUI = "6.2.2"
+pyobjc-framework-Collaboration = {version = "6.2.2", markers = "platform_release >= \"9.0\""}
+pyobjc-framework-ColorSync = {version = "6.2.2", markers = "platform_release >= \"17.0\""}
+pyobjc-framework-Contacts = {version = "6.2.2", markers = "platform_release >= \"15.0\""}
+pyobjc-framework-ContactsUI = {version = "6.2.2", markers = "platform_release >= \"15.0\""}
 pyobjc-framework-CoreAudio = "6.2.2"
 pyobjc-framework-CoreAudioKit = "6.2.2"
-pyobjc-framework-CoreBluetooth = "6.2.2"
+pyobjc-framework-CoreBluetooth = {version = "6.2.2", markers = "platform_release >= \"14.0\""}
 pyobjc-framework-CoreData = "6.2.2"
-pyobjc-framework-CoreHaptics = "6.2.2"
-pyobjc-framework-CoreLocation = "6.2.2"
-pyobjc-framework-CoreML = "6.2.2"
-pyobjc-framework-CoreMedia = "6.2.2"
-pyobjc-framework-CoreMediaIO = "6.2.2"
-pyobjc-framework-CoreMotion = "6.2.2"
+pyobjc-framework-CoreHaptics = {version = "6.2.2", markers = "platform_release >= \"19.0\""}
+pyobjc-framework-CoreLocation = {version = "6.2.2", markers = "platform_release >= \"10.0\""}
+pyobjc-framework-CoreMedia = {version = "6.2.2", markers = "platform_release >= \"11.0\""}
+pyobjc-framework-CoreMediaIO = {version = "6.2.2", markers = "platform_release >= \"11.0\""}
+pyobjc-framework-CoreML = {version = "6.2.2", markers = "platform_release >= \"17.0\""}
+pyobjc-framework-CoreMotion = {version = "6.2.2", markers = "platform_release >= \"19.0\""}
 pyobjc-framework-CoreServices = "6.2.2"
-pyobjc-framework-CoreSpotlight = "6.2.2"
+pyobjc-framework-CoreSpotlight = {version = "6.2.2", markers = "platform_release >= \"17.0\""}
 pyobjc-framework-CoreText = "6.2.2"
-pyobjc-framework-CoreWLAN = "6.2.2"
-pyobjc-framework-CryptoTokenKit = "6.2.2"
-pyobjc-framework-DVDPlayback = "6.2.2"
-pyobjc-framework-DeviceCheck = "6.2.2"
-pyobjc-framework-DictionaryServices = "6.2.2"
+pyobjc-framework-CoreWLAN = {version = "6.2.2", markers = "platform_release >= \"10.0\""}
+pyobjc-framework-CryptoTokenKit = {version = "6.2.2", markers = "platform_release >= \"14.0\""}
+pyobjc-framework-DeviceCheck = {version = "6.2.2", markers = "platform_release >= \"19.0\""}
+pyobjc-framework-DictionaryServices = {version = "6.2.2", markers = "platform_release >= \"9.0\""}
 pyobjc-framework-DiscRecording = "6.2.2"
 pyobjc-framework-DiscRecordingUI = "6.2.2"
 pyobjc-framework-DiskArbitration = "6.2.2"
-pyobjc-framework-EventKit = "6.2.2"
+pyobjc-framework-DVDPlayback = "6.2.2"
+pyobjc-framework-EventKit = {version = "6.2.2", markers = "platform_release >= \"12.0\""}
 pyobjc-framework-ExceptionHandling = "6.2.2"
-pyobjc-framework-ExecutionPolicy = "6.2.2"
-pyobjc-framework-ExternalAccessory = "6.2.2"
-pyobjc-framework-FSEvents = "6.2.2"
-pyobjc-framework-FileProvider = "6.2.2"
-pyobjc-framework-FileProviderUI = "6.2.2"
-pyobjc-framework-FinderSync = "6.2.2"
-pyobjc-framework-GameCenter = "6.2.2"
-pyobjc-framework-GameController = "6.2.2"
-pyobjc-framework-GameKit = "6.2.2"
-pyobjc-framework-GameplayKit = "6.2.2"
-pyobjc-framework-IMServicePlugIn = "6.2.2"
-pyobjc-framework-IOSurface = "6.2.2"
-pyobjc-framework-ImageCaptureCore = "6.2.2"
-pyobjc-framework-InputMethodKit = "6.2.2"
+pyobjc-framework-ExecutionPolicy = {version = "6.2.2", markers = "platform_release >= \"19.0\""}
+pyobjc-framework-ExternalAccessory = {version = "6.2.2", markers = "platform_release >= \"17.0\""}
+pyobjc-framework-FileProvider = {version = "6.2.2", markers = "platform_release >= \"19.0\""}
+pyobjc-framework-FileProviderUI = {version = "6.2.2", markers = "platform_release >= \"19.0\""}
+pyobjc-framework-FinderSync = {version = "6.2.2", markers = "platform_release >= \"14.0\""}
+pyobjc-framework-FSEvents = {version = "6.2.2", markers = "platform_release >= \"9.0\""}
+pyobjc-framework-GameCenter = {version = "6.2.2", markers = "platform_release >= \"12.0\""}
+pyobjc-framework-GameController = {version = "6.2.2", markers = "platform_release >= \"13.0\""}
+pyobjc-framework-GameKit = {version = "6.2.2", markers = "platform_release >= \"12.0\""}
+pyobjc-framework-GameplayKit = {version = "6.2.2", markers = "platform_release >= \"15.0\""}
+pyobjc-framework-ImageCaptureCore = {version = "6.2.2", markers = "platform_release >= \"10.0\""}
+pyobjc-framework-IMServicePlugIn = {version = "6.2.2", markers = "platform_release >= \"11.0\""}
+pyobjc-framework-InputMethodKit = {version = "6.2.2", markers = "platform_release >= \"9.0\""}
 pyobjc-framework-InstallerPlugins = "6.2.2"
-pyobjc-framework-InstantMessage = "6.2.2"
-pyobjc-framework-Intents = "6.2.2"
-pyobjc-framework-InterfaceBuilderKit = "6.2.2"
+pyobjc-framework-InstantMessage = {version = "6.2.2", markers = "platform_release >= \"9.0\""}
+pyobjc-framework-Intents = {version = "6.2.2", markers = "platform_release >= \"16.0\""}
+pyobjc-framework-InterfaceBuilderKit = {version = "6.2.2", markers = "platform_release >= \"9.0\" and platform_release < \"11.0\""}
+pyobjc-framework-IOSurface = {version = "6.2.2", markers = "platform_release >= \"10.0\""}
+pyobjc-framework-iTunesLibrary = {version = "6.2.2", markers = "platform_release >= \"10.0\""}
 pyobjc-framework-LatentSemanticMapping = "6.2.2"
 pyobjc-framework-LaunchServices = "6.2.2"
-pyobjc-framework-LinkPresentation = "6.2.2"
-pyobjc-framework-LocalAuthentication = "6.2.2"
-pyobjc-framework-MapKit = "6.2.2"
-pyobjc-framework-MediaAccessibility = "6.2.2"
-pyobjc-framework-MediaLibrary = "6.2.2"
-pyobjc-framework-MediaPlayer = "6.2.2"
-pyobjc-framework-MediaToolbox = "6.2.2"
-pyobjc-framework-Message = "6.2.2"
-pyobjc-framework-Metal = "6.2.2"
-pyobjc-framework-MetalKit = "6.2.2"
-pyobjc-framework-ModelIO = "6.2.2"
-pyobjc-framework-MultipeerConnectivity = "6.2.2"
-pyobjc-framework-NaturalLanguage = "6.2.2"
-pyobjc-framework-NetFS = "6.2.2"
-pyobjc-framework-Network = "6.2.2"
-pyobjc-framework-NetworkExtension = "6.2.2"
-pyobjc-framework-NotificationCenter = "6.2.2"
+pyobjc-framework-libdispatch = {version = "6.2.2", markers = "platform_release >= \"12.0\""}
+pyobjc-framework-LinkPresentation = {version = "6.2.2", markers = "platform_release >= \"19.0\""}
+pyobjc-framework-LocalAuthentication = {version = "6.2.2", markers = "platform_release >= \"14.0\""}
+pyobjc-framework-MapKit = {version = "6.2.2", markers = "platform_release >= \"13.0\""}
+pyobjc-framework-MediaAccessibility = {version = "6.2.2", markers = "platform_release >= \"13.0\""}
+pyobjc-framework-MediaLibrary = {version = "6.2.2", markers = "platform_release >= \"13.0\""}
+pyobjc-framework-MediaPlayer = {version = "6.2.2", markers = "platform_release >= \"16.0\""}
+pyobjc-framework-MediaToolbox = {version = "6.2.2", markers = "platform_release >= \"13.0\""}
+pyobjc-framework-Message = {version = "6.2.2", markers = "platform_release < \"13.0\""}
+pyobjc-framework-Metal = {version = "6.2.2", markers = "platform_release >= \"15.0\""}
+pyobjc-framework-MetalKit = {version = "6.2.2", markers = "platform_release >= \"15.0\""}
+pyobjc-framework-ModelIO = {version = "6.2.2", markers = "platform_release >= \"15.0\""}
+pyobjc-framework-MultipeerConnectivity = {version = "6.2.2", markers = "platform_release >= \"14.0\""}
+pyobjc-framework-NaturalLanguage = {version = "6.2.2", markers = "platform_release >= \"18.0\""}
+pyobjc-framework-NetFS = {version = "6.2.2", markers = "platform_release >= \"10.0\""}
+pyobjc-framework-Network = {version = "6.2.2", markers = "platform_release >= \"18.0\""}
+pyobjc-framework-NetworkExtension = {version = "6.2.2", markers = "platform_release >= \"15.0\""}
+pyobjc-framework-NotificationCenter = {version = "6.2.2", markers = "platform_release >= \"14.0\""}
+pyobjc-framework-OpenDirectory = {version = "6.2.2", markers = "platform_release >= \"10.0\""}
 pyobjc-framework-OSAKit = "6.2.2"
-pyobjc-framework-OSLog = "6.2.2"
-pyobjc-framework-OpenDirectory = "6.2.2"
-pyobjc-framework-PencilKit = "6.2.2"
-pyobjc-framework-Photos = "6.2.2"
-pyobjc-framework-PhotosUI = "6.2.2"
+pyobjc-framework-OSLog = {version = "6.2.2", markers = "platform_release >= \"19.0\""}
+pyobjc-framework-PencilKit = {version = "6.2.2", markers = "platform_release >= \"19.0\""}
+pyobjc-framework-Photos = {version = "6.2.2", markers = "platform_release >= \"15.0\""}
+pyobjc-framework-PhotosUI = {version = "6.2.2", markers = "platform_release >= \"15.0\""}
 pyobjc-framework-PreferencePanes = "6.2.2"
-pyobjc-framework-PubSub = "6.2.2"
-pyobjc-framework-PushKit = "6.2.2"
-pyobjc-framework-QTKit = "6.2.2"
+pyobjc-framework-PubSub = {version = "6.2.2", markers = "platform_release >= \"9.0\" and platform_release < \"18.0\""}
+pyobjc-framework-PushKit = {version = "6.2.2", markers = "platform_release >= \"19.0\""}
+pyobjc-framework-QTKit = {version = "6.2.2", markers = "platform_release >= \"9.0\" and platform_release < \"19.0\""}
 pyobjc-framework-Quartz = "6.2.2"
-pyobjc-framework-QuickLookThumbnailing = "6.2.2"
-pyobjc-framework-SafariServices = "6.2.2"
-pyobjc-framework-SceneKit = "6.2.2"
+pyobjc-framework-QuickLookThumbnailing = {version = "6.2.2", markers = "platform_release >= \"19.0\""}
+pyobjc-framework-SafariServices = {version = "6.2.2", markers = "platform_release >= \"15.0\""}
+pyobjc-framework-SceneKit = {version = "6.2.2", markers = "platform_release >= \"11.0\""}
 pyobjc-framework-ScreenSaver = "6.2.2"
-pyobjc-framework-ScriptingBridge = "6.2.2"
+pyobjc-framework-ScriptingBridge = {version = "6.2.2", markers = "platform_release >= \"9.0\""}
 pyobjc-framework-SearchKit = "6.2.2"
 pyobjc-framework-Security = "6.2.2"
 pyobjc-framework-SecurityFoundation = "6.2.2"
 pyobjc-framework-SecurityInterface = "6.2.2"
-pyobjc-framework-ServerNotification = "6.2.2"
-pyobjc-framework-ServiceManagement = "6.2.2"
-pyobjc-framework-Social = "6.2.2"
-pyobjc-framework-SoundAnalysis = "6.2.2"
-pyobjc-framework-Speech = "6.2.2"
-pyobjc-framework-SpriteKit = "6.2.2"
-pyobjc-framework-StoreKit = "6.2.2"
+pyobjc-framework-ServerNotification = {version = "6.2.2", markers = "platform_release >= \"10.0\" and platform_release < \"13.0\""}
+pyobjc-framework-ServiceManagement = {version = "6.2.2", markers = "platform_release >= \"10.0\""}
+pyobjc-framework-Social = {version = "6.2.2", markers = "platform_release >= \"12.0\""}
+pyobjc-framework-SoundAnalysis = {version = "6.2.2", markers = "platform_release >= \"19.0\""}
+pyobjc-framework-Speech = {version = "6.2.2", markers = "platform_release >= \"19.0\""}
+pyobjc-framework-SpriteKit = {version = "6.2.2", markers = "platform_release >= \"13.0\""}
+pyobjc-framework-StoreKit = {version = "6.2.2", markers = "platform_release >= \"11.0\""}
 pyobjc-framework-SyncServices = "6.2.2"
 pyobjc-framework-SystemConfiguration = "6.2.2"
-pyobjc-framework-SystemExtensions = "6.2.2"
-pyobjc-framework-UserNotifications = "6.2.2"
-pyobjc-framework-VideoSubscriberAccount = "6.2.2"
-pyobjc-framework-VideoToolbox = "6.2.2"
-pyobjc-framework-Vision = "6.2.2"
+pyobjc-framework-SystemExtensions = {version = "6.2.2", markers = "platform_release >= \"19.0\""}
+pyobjc-framework-UserNotifications = {version = "6.2.2", markers = "platform_release >= \"18.0\""}
+pyobjc-framework-VideoSubscriberAccount = {version = "6.2.2", markers = "platform_release >= \"18.0\""}
+pyobjc-framework-VideoToolbox = {version = "6.2.2", markers = "platform_release >= \"12.0\""}
+pyobjc-framework-Vision = {version = "6.2.2", markers = "platform_release >= \"17.0\""}
 pyobjc-framework-WebKit = "6.2.2"
-pyobjc-framework-XgridFoundation = "6.2.2"
-pyobjc-framework-iTunesLibrary = "6.2.2"
-pyobjc-framework-libdispatch = "6.2.2"
+pyobjc-framework-XgridFoundation = {version = "6.2.2", markers = "platform_release < \"12.0\""}
 
 [[package]]
-category = "main"
-description = "Python<->ObjC Interoperability Module"
-marker = "sys_platform == \"darwin\" and platform_release >= \"9.0\" or sys_platform == \"darwin\" or sys_platform == \"darwin\" and platform_release < \"12.0\" or sys_platform == \"darwin\" and platform_release < \"13.0\" or sys_platform == \"darwin\" and platform_release >= \"10.0\" or platform_release >= \"10.0\" and platform_release < \"13.0\" and sys_platform == \"darwin\" or sys_platform == \"darwin\" and platform_release >= \"11.0\" or sys_platform == \"darwin\" and platform_release >= \"12.0\" or sys_platform == \"darwin\" and platform_release >= \"13.0\" or sys_platform == \"darwin\" and platform_release >= \"14.0\" or sys_platform == \"darwin\" and platform_release >= \"15.0\" or sys_platform == \"darwin\" and platform_release >= \"16.0\" or sys_platform == \"darwin\" and platform_release >= \"17.0\" or sys_platform == \"darwin\" and platform_release >= \"18.0\" or sys_platform == \"darwin\" and platform_release >= \"19.0\" or platform_release >= \"9.0\" and platform_release < \"11.0\" and sys_platform == \"darwin\" or platform_release >= \"9.0\" and platform_release < \"18.0\" and sys_platform == \"darwin\" or platform_release >= \"9.0\" and platform_release < \"19.0\" and sys_platform == \"darwin\""
 name = "pyobjc-core"
+version = "6.2.2"
+description = "Python<->ObjC Interoperability Module"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework Accounts on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"12.0\" or sys_platform == \"darwin\" and platform_release >= \"14.0\""
 name = "pyobjc-framework-accounts"
+version = "6.2.2"
+description = "Wrappers for the framework Accounts on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework AddressBook on macOS"
-marker = "sys_platform == \"darwin\""
 name = "pyobjc-framework-addressbook"
+version = "6.2.2"
+description = "Wrappers for the framework AddressBook on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework AdSupport on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"18.0\""
 name = "pyobjc-framework-adsupport"
+version = "6.2.2"
+description = "Wrappers for the framework AdSupport on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework AppleScriptKit on macOS"
-marker = "sys_platform == \"darwin\""
 name = "pyobjc-framework-applescriptkit"
+version = "6.2.2"
+description = "Wrappers for the framework AppleScriptKit on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework AppleScriptObjC on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"10.0\""
 name = "pyobjc-framework-applescriptobjc"
+version = "6.2.2"
+description = "Wrappers for the framework AppleScriptObjC on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework ApplicationServices on macOS"
-marker = "sys_platform == \"darwin\""
 name = "pyobjc-framework-applicationservices"
+version = "6.2.2"
+description = "Wrappers for the framework ApplicationServices on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
@@ -390,52 +376,48 @@ pyobjc-framework-Cocoa = ">=6.2.2"
 pyobjc-framework-Quartz = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework AuthenticationServices on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"19.0\""
 name = "pyobjc-framework-authenticationservices"
+version = "6.2.2"
+description = "Wrappers for the framework AuthenticationServices on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework AutomaticAssessmentConfiguration on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"19.0\""
 name = "pyobjc-framework-automaticassessmentconfiguration"
+version = "6.2.2"
+description = "Wrappers for the framework AutomaticAssessmentConfiguration on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework Automator on macOS"
-marker = "sys_platform == \"darwin\""
 name = "pyobjc-framework-automator"
+version = "6.2.2"
+description = "Wrappers for the framework Automator on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework AVFoundation on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"11.0\" or sys_platform == \"darwin\" and platform_release >= \"16.0\""
 name = "pyobjc-framework-avfoundation"
+version = "6.2.2"
+description = "Wrappers for the framework AVFoundation on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
@@ -444,13 +426,12 @@ pyobjc-framework-CoreMedia = ">=6.2.2"
 pyobjc-framework-Quartz = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework AVKit on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"13.0\""
 name = "pyobjc-framework-avkit"
+version = "6.2.2"
+description = "Wrappers for the framework AVKit on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
@@ -458,52 +439,48 @@ pyobjc-framework-Cocoa = ">=6.2.2"
 pyobjc-framework-Quartz = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework BusinessChat on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"18.0\""
 name = "pyobjc-framework-businesschat"
+version = "6.2.2"
+description = "Wrappers for the framework BusinessChat on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework CalendarStore on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"9.0\""
 name = "pyobjc-framework-calendarstore"
+version = "6.2.2"
+description = "Wrappers for the framework CalendarStore on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework CFNetwork on macOS"
-marker = "sys_platform == \"darwin\""
 name = "pyobjc-framework-cfnetwork"
+version = "6.2.2"
+description = "Wrappers for the framework CFNetwork on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework CloudKit on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"14.0\""
 name = "pyobjc-framework-cloudkit"
+version = "6.2.2"
+description = "Wrappers for the framework CloudKit on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
@@ -513,64 +490,59 @@ pyobjc-framework-CoreData = ">=6.2.2"
 pyobjc-framework-CoreLocation = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the Cocoa frameworks on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"9.0\" or sys_platform == \"darwin\" or sys_platform == \"darwin\" and platform_release < \"12.0\" or sys_platform == \"darwin\" and platform_release < \"13.0\" or sys_platform == \"darwin\" and platform_release >= \"10.0\" or platform_release >= \"10.0\" and platform_release < \"13.0\" and sys_platform == \"darwin\" or sys_platform == \"darwin\" and platform_release >= \"11.0\" or sys_platform == \"darwin\" and platform_release >= \"12.0\" or sys_platform == \"darwin\" and platform_release >= \"13.0\" or sys_platform == \"darwin\" and platform_release >= \"14.0\" or sys_platform == \"darwin\" and platform_release >= \"15.0\" or sys_platform == \"darwin\" and platform_release >= \"16.0\" or sys_platform == \"darwin\" and platform_release >= \"17.0\" or sys_platform == \"darwin\" and platform_release >= \"18.0\" or sys_platform == \"darwin\" and platform_release >= \"19.0\" or platform_release >= \"9.0\" and platform_release < \"11.0\" and sys_platform == \"darwin\" or platform_release >= \"9.0\" and platform_release < \"18.0\" and sys_platform == \"darwin\" or platform_release >= \"9.0\" and platform_release < \"19.0\" and sys_platform == \"darwin\""
 name = "pyobjc-framework-cocoa"
+version = "6.2.2"
+description = "Wrappers for the Cocoa frameworks on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework Collaboration on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"9.0\""
 name = "pyobjc-framework-collaboration"
+version = "6.2.2"
+description = "Wrappers for the framework Collaboration on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework ColorSync on Mac OS X"
-marker = "sys_platform == \"darwin\" and platform_release >= \"17.0\""
 name = "pyobjc-framework-colorsync"
+version = "6.2.2"
+description = "Wrappers for the framework ColorSync on Mac OS X"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework Contacts on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"15.0\""
 name = "pyobjc-framework-contacts"
+version = "6.2.2"
+description = "Wrappers for the framework Contacts on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework ContactsUI on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"15.0\""
 name = "pyobjc-framework-contactsui"
+version = "6.2.2"
+description = "Wrappers for the framework ContactsUI on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
@@ -578,26 +550,24 @@ pyobjc-framework-Cocoa = ">=6.2.2"
 pyobjc-framework-Contacts = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework CoreAudio on macOS"
-marker = "sys_platform == \"darwin\""
 name = "pyobjc-framework-coreaudio"
+version = "6.2.2"
+description = "Wrappers for the framework CoreAudio on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework CoreAudioKit on macOS"
-marker = "sys_platform == \"darwin\""
 name = "pyobjc-framework-coreaudiokit"
+version = "6.2.2"
+description = "Wrappers for the framework CoreAudioKit on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
@@ -605,143 +575,132 @@ pyobjc-framework-Cocoa = ">=6.2.2"
 pyobjc-framework-CoreAudio = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework CoreBluetooth on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"14.0\""
 name = "pyobjc-framework-corebluetooth"
+version = "6.2.2"
+description = "Wrappers for the framework CoreBluetooth on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework CoreData on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"14.0\" or sys_platform == \"darwin\""
 name = "pyobjc-framework-coredata"
+version = "6.2.2"
+description = "Wrappers for the framework CoreData on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework CoreHaptics on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"19.0\""
 name = "pyobjc-framework-corehaptics"
+version = "6.2.2"
+description = "Wrappers for the framework CoreHaptics on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework CoreLocation on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"10.0\" or sys_platform == \"darwin\" and platform_release >= \"13.0\" or sys_platform == \"darwin\" and platform_release >= \"14.0\""
 name = "pyobjc-framework-corelocation"
+version = "6.2.2"
+description = "Wrappers for the framework CoreLocation on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework CoreMedia on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"11.0\" or sys_platform == \"darwin\" and platform_release >= \"12.0\" or sys_platform == \"darwin\" and platform_release >= \"16.0\" or sys_platform == \"darwin\" and platform_release >= \"19.0\""
 name = "pyobjc-framework-coremedia"
+version = "6.2.2"
+description = "Wrappers for the framework CoreMedia on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework CoreMediaIO on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"11.0\""
 name = "pyobjc-framework-coremediaio"
+version = "6.2.2"
+description = "Wrappers for the framework CoreMediaIO on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework CoreML on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"17.0\""
 name = "pyobjc-framework-coreml"
+version = "6.2.2"
+description = "Wrappers for the framework CoreML on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework CoreMotion on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"19.0\""
 name = "pyobjc-framework-coremotion"
+version = "6.2.2"
+description = "Wrappers for the framework CoreMotion on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework CoreServices on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"9.0\" or sys_platform == \"darwin\""
 name = "pyobjc-framework-coreservices"
+version = "6.2.2"
+description = "Wrappers for the framework CoreServices on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-FSEvents = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework CoreSpotlight on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"17.0\""
 name = "pyobjc-framework-corespotlight"
+version = "6.2.2"
+description = "Wrappers for the framework CoreSpotlight on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework CoreText on macOS"
-marker = "sys_platform == \"darwin\""
 name = "pyobjc-framework-coretext"
+version = "6.2.2"
+description = "Wrappers for the framework CoreText on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
@@ -749,78 +708,72 @@ pyobjc-framework-Cocoa = ">=6.2.2"
 pyobjc-framework-Quartz = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework CoreWLAN on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"10.0\""
 name = "pyobjc-framework-corewlan"
+version = "6.2.2"
+description = "Wrappers for the framework CoreWLAN on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework CryptoTokenKit on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"14.0\""
 name = "pyobjc-framework-cryptotokenkit"
+version = "6.2.2"
+description = "Wrappers for the framework CryptoTokenKit on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework DeviceCheck on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"19.0\""
 name = "pyobjc-framework-devicecheck"
+version = "6.2.2"
+description = "Wrappers for the framework DeviceCheck on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework DictionaryServices on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"9.0\""
 name = "pyobjc-framework-dictionaryservices"
+version = "6.2.2"
+description = "Wrappers for the framework DictionaryServices on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-CoreServices = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework DiscRecording on macOS"
-marker = "sys_platform == \"darwin\""
 name = "pyobjc-framework-discrecording"
+version = "6.2.2"
+description = "Wrappers for the framework DiscRecording on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework DiscRecordingUI on macOS"
-marker = "sys_platform == \"darwin\""
 name = "pyobjc-framework-discrecordingui"
+version = "6.2.2"
+description = "Wrappers for the framework DiscRecordingUI on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
@@ -828,169 +781,156 @@ pyobjc-framework-Cocoa = ">=6.2.2"
 pyobjc-framework-DiscRecording = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework DiskArbitration on macOS"
-marker = "sys_platform == \"darwin\""
 name = "pyobjc-framework-diskarbitration"
+version = "6.2.2"
+description = "Wrappers for the framework DiskArbitration on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework DVDPlayback on macOS"
-marker = "sys_platform == \"darwin\""
 name = "pyobjc-framework-dvdplayback"
+version = "6.2.2"
+description = "Wrappers for the framework DVDPlayback on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework Accounts on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"12.0\""
 name = "pyobjc-framework-eventkit"
+version = "6.2.2"
+description = "Wrappers for the framework Accounts on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework ExceptionHandling on macOS"
-marker = "sys_platform == \"darwin\""
 name = "pyobjc-framework-exceptionhandling"
+version = "6.2.2"
+description = "Wrappers for the framework ExceptionHandling on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework ExecutionPolicy on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"19.0\""
 name = "pyobjc-framework-executionpolicy"
+version = "6.2.2"
+description = "Wrappers for the framework ExecutionPolicy on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework ExternalAccessory on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"17.0\""
 name = "pyobjc-framework-externalaccessory"
+version = "6.2.2"
+description = "Wrappers for the framework ExternalAccessory on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework FileProvider on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"19.0\""
 name = "pyobjc-framework-fileprovider"
+version = "6.2.2"
+description = "Wrappers for the framework FileProvider on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework FileProviderUI on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"19.0\""
 name = "pyobjc-framework-fileproviderui"
+version = "6.2.2"
+description = "Wrappers for the framework FileProviderUI on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-FileProvider = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework FinderSync on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"14.0\""
 name = "pyobjc-framework-findersync"
+version = "6.2.2"
+description = "Wrappers for the framework FinderSync on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework FSEvents on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"9.0\" or sys_platform == \"darwin\""
 name = "pyobjc-framework-fsevents"
+version = "6.2.2"
+description = "Wrappers for the framework FSEvents on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework GameCenter on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"12.0\""
 name = "pyobjc-framework-gamecenter"
+version = "6.2.2"
+description = "Wrappers for the framework GameCenter on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework GameController on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"13.0\""
 name = "pyobjc-framework-gamecontroller"
+version = "6.2.2"
+description = "Wrappers for the framework GameController on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework GameKit on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"12.0\""
 name = "pyobjc-framework-gamekit"
+version = "6.2.2"
+description = "Wrappers for the framework GameKit on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
@@ -998,13 +938,12 @@ pyobjc-framework-Cocoa = ">=6.2.2"
 pyobjc-framework-Quartz = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework GameplayKit on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"15.0\""
 name = "pyobjc-framework-gameplaykit"
+version = "6.2.2"
+description = "Wrappers for the framework GameplayKit on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
@@ -1012,65 +951,60 @@ pyobjc-framework-Cocoa = ">=6.2.2"
 pyobjc-framework-SpriteKit = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework ImageCaptureCore on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"10.0\""
 name = "pyobjc-framework-imagecapturecore"
+version = "6.2.2"
+description = "Wrappers for the framework ImageCaptureCore on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework IMServicePlugIn on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"11.0\""
 name = "pyobjc-framework-imserviceplugin"
+version = "6.2.2"
+description = "Wrappers for the framework IMServicePlugIn on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework InputMethodKit on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"9.0\""
 name = "pyobjc-framework-inputmethodkit"
+version = "6.2.2"
+description = "Wrappers for the framework InputMethodKit on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework InstallerPlugins on macOS"
-marker = "sys_platform == \"darwin\""
 name = "pyobjc-framework-installerplugins"
+version = "6.2.2"
+description = "Wrappers for the framework InstallerPlugins on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework InstantMessage on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"9.0\""
 name = "pyobjc-framework-instantmessage"
+version = "6.2.2"
+description = "Wrappers for the framework InstantMessage on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
@@ -1078,103 +1012,95 @@ pyobjc-framework-Cocoa = ">=6.2.2"
 pyobjc-framework-Quartz = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework Intents on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"16.0\""
 name = "pyobjc-framework-intents"
+version = "6.2.2"
+description = "Wrappers for the framework Intents on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework InterfaceBuilderKit on macOS"
-marker = "platform_release >= \"9.0\" and platform_release < \"11.0\" and sys_platform == \"darwin\""
 name = "pyobjc-framework-interfacebuilderkit"
+version = "6.2.2"
+description = "Wrappers for the framework InterfaceBuilderKit on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework IOSurface on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"10.0\""
 name = "pyobjc-framework-iosurface"
+version = "6.2.2"
+description = "Wrappers for the framework IOSurface on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework iTunesLibrary on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"10.0\""
 name = "pyobjc-framework-ituneslibrary"
+version = "6.2.2"
+description = "Wrappers for the framework iTunesLibrary on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework LatentSemanticMapping on macOS"
-marker = "sys_platform == \"darwin\""
 name = "pyobjc-framework-latentsemanticmapping"
+version = "6.2.2"
+description = "Wrappers for the framework LatentSemanticMapping on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework LaunchServices on macOS"
-marker = "sys_platform == \"darwin\""
 name = "pyobjc-framework-launchservices"
+version = "6.2.2"
+description = "Wrappers for the framework LaunchServices on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-CoreServices = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for libdispatch on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"12.0\""
 name = "pyobjc-framework-libdispatch"
+version = "6.2.2"
+description = "Wrappers for libdispatch on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework LinkPresentation on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"19.0\""
 name = "pyobjc-framework-linkpresentation"
+version = "6.2.2"
+description = "Wrappers for the framework LinkPresentation on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
@@ -1182,26 +1108,24 @@ pyobjc-framework-Cocoa = ">=6.2.2"
 pyobjc-framework-Quartz = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework LocalAuthentication on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"14.0\""
 name = "pyobjc-framework-localauthentication"
+version = "6.2.2"
+description = "Wrappers for the framework LocalAuthentication on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework MapKit on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"13.0\""
 name = "pyobjc-framework-mapkit"
+version = "6.2.2"
+description = "Wrappers for the framework MapKit on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
@@ -1210,26 +1134,24 @@ pyobjc-framework-CoreLocation = ">=6.2.2"
 pyobjc-framework-Quartz = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework MediaAccessibility on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"13.0\""
 name = "pyobjc-framework-mediaaccessibility"
+version = "6.2.2"
+description = "Wrappers for the framework MediaAccessibility on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework MediaLibrary on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"13.0\""
 name = "pyobjc-framework-medialibrary"
+version = "6.2.2"
+description = "Wrappers for the framework MediaLibrary on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
@@ -1237,65 +1159,60 @@ pyobjc-framework-Cocoa = ">=6.2.2"
 pyobjc-framework-Quartz = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework MediaPlayer on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"16.0\""
 name = "pyobjc-framework-mediaplayer"
+version = "6.2.2"
+description = "Wrappers for the framework MediaPlayer on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-AVFoundation = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework MediaToolbox on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"13.0\""
 name = "pyobjc-framework-mediatoolbox"
+version = "6.2.2"
+description = "Wrappers for the framework MediaToolbox on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework Message on macOS"
-marker = "sys_platform == \"darwin\" and platform_release < \"13.0\""
 name = "pyobjc-framework-message"
+version = "6.2.2"
+description = "Wrappers for the framework Message on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework Metal on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"15.0\""
 name = "pyobjc-framework-metal"
+version = "6.2.2"
+description = "Wrappers for the framework Metal on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework MetalKit on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"15.0\""
 name = "pyobjc-framework-metalkit"
+version = "6.2.2"
+description = "Wrappers for the framework MetalKit on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
@@ -1303,13 +1220,12 @@ pyobjc-framework-Cocoa = ">=6.2.2"
 pyobjc-framework-Metal = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework ModelIO on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"15.0\""
 name = "pyobjc-framework-modelio"
+version = "6.2.2"
+description = "Wrappers for the framework ModelIO on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
@@ -1317,117 +1233,108 @@ pyobjc-framework-Cocoa = ">=6.2.2"
 pyobjc-framework-Quartz = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework MultipeerConnectivity on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"14.0\""
 name = "pyobjc-framework-multipeerconnectivity"
+version = "6.2.2"
+description = "Wrappers for the framework MultipeerConnectivity on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework NaturalLanguage on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"18.0\""
 name = "pyobjc-framework-naturallanguage"
+version = "6.2.2"
+description = "Wrappers for the framework NaturalLanguage on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework NetFS on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"10.0\""
 name = "pyobjc-framework-netfs"
+version = "6.2.2"
+description = "Wrappers for the framework NetFS on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework Network on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"18.0\""
 name = "pyobjc-framework-network"
+version = "6.2.2"
+description = "Wrappers for the framework Network on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework NetworkExtension on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"15.0\""
 name = "pyobjc-framework-networkextension"
+version = "6.2.2"
+description = "Wrappers for the framework NetworkExtension on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework NotificationCenter on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"14.0\""
 name = "pyobjc-framework-notificationcenter"
+version = "6.2.2"
+description = "Wrappers for the framework NotificationCenter on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework OpenDirectory on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"10.0\""
 name = "pyobjc-framework-opendirectory"
+version = "6.2.2"
+description = "Wrappers for the framework OpenDirectory on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework OSAKit on macOS"
-marker = "sys_platform == \"darwin\""
 name = "pyobjc-framework-osakit"
+version = "6.2.2"
+description = "Wrappers for the framework OSAKit on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework OSLog on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"19.0\""
 name = "pyobjc-framework-oslog"
+version = "6.2.2"
+description = "Wrappers for the framework OSLog on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
@@ -1436,91 +1343,84 @@ pyobjc-framework-CoreMedia = ">=6.2.2"
 pyobjc-framework-Quartz = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework PencilKit on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"19.0\""
 name = "pyobjc-framework-pencilkit"
+version = "6.2.2"
+description = "Wrappers for the framework PencilKit on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework Photos on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"15.0\""
 name = "pyobjc-framework-photos"
+version = "6.2.2"
+description = "Wrappers for the framework Photos on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework PhotosUI on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"15.0\""
 name = "pyobjc-framework-photosui"
+version = "6.2.2"
+description = "Wrappers for the framework PhotosUI on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework PreferencePanes on macOS"
-marker = "sys_platform == \"darwin\""
 name = "pyobjc-framework-preferencepanes"
+version = "6.2.2"
+description = "Wrappers for the framework PreferencePanes on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework PubSub on macOS"
-marker = "platform_release >= \"9.0\" and platform_release < \"18.0\" and sys_platform == \"darwin\""
 name = "pyobjc-framework-pubsub"
+version = "6.2.2"
+description = "Wrappers for the framework PubSub on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework PushKit on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"19.0\""
 name = "pyobjc-framework-pushkit"
+version = "6.2.2"
+description = "Wrappers for the framework PushKit on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework QTKit on macOS"
-marker = "platform_release >= \"9.0\" and platform_release < \"19.0\" and sys_platform == \"darwin\""
 name = "pyobjc-framework-qtkit"
+version = "6.2.2"
+description = "Wrappers for the framework QTKit on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
@@ -1528,26 +1428,24 @@ pyobjc-framework-Cocoa = ">=6.2.2"
 pyobjc-framework-Quartz = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the Quartz frameworks on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"11.0\" or sys_platform == \"darwin\" or sys_platform == \"darwin\" and platform_release >= \"12.0\" or sys_platform == \"darwin\" and platform_release >= \"13.0\" or sys_platform == \"darwin\" and platform_release >= \"15.0\" or sys_platform == \"darwin\" and platform_release >= \"16.0\" or sys_platform == \"darwin\" and platform_release >= \"17.0\" or sys_platform == \"darwin\" and platform_release >= \"19.0\" or sys_platform == \"darwin\" and platform_release >= \"9.0\" or platform_release >= \"9.0\" and platform_release < \"19.0\" and sys_platform == \"darwin\""
 name = "pyobjc-framework-quartz"
+version = "6.2.2"
+description = "Wrappers for the Quartz frameworks on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework QuickLookThumbnailing on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"19.0\""
 name = "pyobjc-framework-quicklookthumbnailing"
+version = "6.2.2"
+description = "Wrappers for the framework QuickLookThumbnailing on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
@@ -1555,26 +1453,24 @@ pyobjc-framework-Cocoa = ">=6.2.2"
 pyobjc-framework-Quartz = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework SafariServices on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"15.0\""
 name = "pyobjc-framework-safariservices"
+version = "6.2.2"
+description = "Wrappers for the framework SafariServices on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework SceneKit on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"11.0\""
 name = "pyobjc-framework-scenekit"
+version = "6.2.2"
+description = "Wrappers for the framework SceneKit on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
@@ -1582,65 +1478,60 @@ pyobjc-framework-Cocoa = ">=6.2.2"
 pyobjc-framework-Quartz = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework ScreenSaver on macOS"
-marker = "sys_platform == \"darwin\""
 name = "pyobjc-framework-screensaver"
+version = "6.2.2"
+description = "Wrappers for the framework ScreenSaver on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework ScriptingBridge on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"9.0\""
 name = "pyobjc-framework-scriptingbridge"
+version = "6.2.2"
+description = "Wrappers for the framework ScriptingBridge on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework SearchKit on macOS"
-marker = "sys_platform == \"darwin\""
 name = "pyobjc-framework-searchkit"
+version = "6.2.2"
+description = "Wrappers for the framework SearchKit on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-CoreServices = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework Security on macOS"
-marker = "sys_platform == \"darwin\""
 name = "pyobjc-framework-security"
+version = "6.2.2"
+description = "Wrappers for the framework Security on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework SecurityFoundation on macOS"
-marker = "sys_platform == \"darwin\""
 name = "pyobjc-framework-securityfoundation"
+version = "6.2.2"
+description = "Wrappers for the framework SecurityFoundation on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
@@ -1648,13 +1539,12 @@ pyobjc-framework-Cocoa = ">=6.2.2"
 pyobjc-framework-Security = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework SecurityInterface on macOS"
-marker = "sys_platform == \"darwin\""
 name = "pyobjc-framework-securityinterface"
+version = "6.2.2"
+description = "Wrappers for the framework SecurityInterface on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
@@ -1662,78 +1552,72 @@ pyobjc-framework-Cocoa = ">=6.2.2"
 pyobjc-framework-Security = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework ServerNotification on macOS"
-marker = "platform_release >= \"10.0\" and platform_release < \"13.0\" and sys_platform == \"darwin\""
 name = "pyobjc-framework-servernotification"
+version = "6.2.2"
+description = "Wrappers for the framework ServerNotification on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework ServiceManagement on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"10.0\""
 name = "pyobjc-framework-servicemanagement"
+version = "6.2.2"
+description = "Wrappers for the framework ServiceManagement on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework Social on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"12.0\""
 name = "pyobjc-framework-social"
+version = "6.2.2"
+description = "Wrappers for the framework Social on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework SoundAnalysis on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"19.0\""
 name = "pyobjc-framework-soundanalysis"
+version = "6.2.2"
+description = "Wrappers for the framework SoundAnalysis on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework Speech on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"19.0\""
 name = "pyobjc-framework-speech"
+version = "6.2.2"
+description = "Wrappers for the framework Speech on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework SpriteKit on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"13.0\" or sys_platform == \"darwin\" and platform_release >= \"15.0\""
 name = "pyobjc-framework-spritekit"
+version = "6.2.2"
+description = "Wrappers for the framework SpriteKit on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
@@ -1741,26 +1625,24 @@ pyobjc-framework-Cocoa = ">=6.2.2"
 pyobjc-framework-Quartz = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework StoreKit on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"11.0\""
 name = "pyobjc-framework-storekit"
+version = "6.2.2"
+description = "Wrappers for the framework StoreKit on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework SyncServices on macOS"
-marker = "sys_platform == \"darwin\""
 name = "pyobjc-framework-syncservices"
+version = "6.2.2"
+description = "Wrappers for the framework SyncServices on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
@@ -1768,65 +1650,60 @@ pyobjc-framework-Cocoa = ">=6.2.2"
 pyobjc-framework-CoreData = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework SystemConfiguration on macOS"
-marker = "sys_platform == \"darwin\""
 name = "pyobjc-framework-systemconfiguration"
+version = "6.2.2"
+description = "Wrappers for the framework SystemConfiguration on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework SystemExtensions on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"19.0\""
 name = "pyobjc-framework-systemextensions"
+version = "6.2.2"
+description = "Wrappers for the framework SystemExtensions on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework UserNotifications on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"18.0\""
 name = "pyobjc-framework-usernotifications"
+version = "6.2.2"
+description = "Wrappers for the framework UserNotifications on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework VideoSubscriberAccount on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"18.0\""
 name = "pyobjc-framework-videosubscriberaccount"
+version = "6.2.2"
+description = "Wrappers for the framework VideoSubscriberAccount on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework VideoToolbox on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"12.0\""
 name = "pyobjc-framework-videotoolbox"
+version = "6.2.2"
+description = "Wrappers for the framework VideoToolbox on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
@@ -1835,13 +1712,12 @@ pyobjc-framework-CoreMedia = ">=6.2.2"
 pyobjc-framework-Quartz = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework Vision on macOS"
-marker = "sys_platform == \"darwin\" and platform_release >= \"17.0\""
 name = "pyobjc-framework-vision"
+version = "6.2.2"
+description = "Wrappers for the framework Vision on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
@@ -1850,130 +1726,125 @@ pyobjc-framework-CoreML = ">=6.2.2"
 pyobjc-framework-Quartz = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework WebKit on macOS"
-marker = "sys_platform == \"darwin\""
 name = "pyobjc-framework-webkit"
+version = "6.2.2"
+description = "Wrappers for the framework WebKit on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Wrappers for the framework XgridFoundation on macOS"
-marker = "sys_platform == \"darwin\" and platform_release < \"12.0\""
 name = "pyobjc-framework-xgridfoundation"
+version = "6.2.2"
+description = "Wrappers for the framework XgridFoundation on macOS"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "6.2.2"
 
 [package.dependencies]
 pyobjc-core = ">=6.2.2"
 pyobjc-framework-Cocoa = ">=6.2.2"
 
 [[package]]
-category = "main"
-description = "Python bindings for the Qt cross platform UI and application toolkit"
 name = "pyqt5"
-optional = false
-python-versions = "*"
 version = "5.10.1"
+description = "Python bindings for the Qt cross platform UI and application toolkit"
+category = "main"
+optional = false
+python-versions = "*"
 
 [[package]]
-category = "dev"
-description = "PEP561 stub files for the PyQt5 framework"
 name = "pyqt5-stubs"
-optional = false
-python-versions = "*"
 version = "5.13.1.5"
-
-[[package]]
-category = "main"
-description = "Persistent/Functional/Immutable data structures"
-name = "pyrsistent"
+description = "PEP561 stub files for the PyQt5 framework"
+category = "dev"
 optional = false
 python-versions = "*"
-version = "0.16.0"
-
-[package.dependencies]
-six = "*"
 
 [[package]]
+name = "pyrsistent"
+version = "0.17.3"
+description = "Persistent/Functional/Immutable data structures"
 category = "main"
-description = "A python library adding a json log formatter"
+optional = false
+python-versions = ">=3.5"
+
+[[package]]
 name = "python-json-logger"
+version = "0.1.11"
+description = "A python library adding a json log formatter"
+category = "main"
 optional = false
 python-versions = ">=2.7"
-version = "0.1.11"
 
 [[package]]
-category = "main"
-description = "Python extension module generator for C and C++ libraries"
 name = "sip"
+version = "4.19.8"
+description = "Python extension module generator for C and C++ libraries"
+category = "main"
 optional = false
 python-versions = "*"
-version = "4.19.8"
 
 [[package]]
-category = "main"
-description = "Python 2 and 3 compatibility utilities"
 name = "six"
+version = "1.15.0"
+description = "Python 2 and 3 compatibility utilities"
+category = "main"
 optional = false
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*"
-version = "1.15.0"
 
 [[package]]
-category = "main"
-description = "Strict, simple, lightweight RFC3339 functions"
 name = "strict-rfc3339"
-optional = false
-python-versions = "*"
 version = "0.7"
+description = "Strict, simple, lightweight RFC3339 functions"
+category = "main"
+optional = false
+python-versions = "*"
 
 [[package]]
-category = "main"
-description = "Take The Time, a time-taking library for Python"
 name = "takethetime"
-optional = false
-python-versions = "*"
 version = "0.3.1"
-
-[[package]]
-category = "dev"
-description = "a fork of Python 2 and 3 ast modules with type comment support"
-name = "typed-ast"
-optional = false
-python-versions = "*"
-version = "1.4.1"
-
-[[package]]
-category = "dev"
-description = "Backported and Experimental Type Hints for Python 3.5+"
-name = "typing-extensions"
-optional = false
-python-versions = "*"
-version = "3.7.4.2"
-
-[[package]]
+description = "Take The Time, a time-taking library for Python"
 category = "main"
-description = "Backport of pathlib-compatible object wrapper for zip files"
-marker = "python_version < \"3.8\""
+optional = false
+python-versions = "*"
+
+[[package]]
+name = "typed-ast"
+version = "1.4.1"
+description = "a fork of Python 2 and 3 ast modules with type comment support"
+category = "dev"
+optional = false
+python-versions = "*"
+
+[[package]]
+name = "typing-extensions"
+version = "3.7.4.3"
+description = "Backported and Experimental Type Hints for Python 3.5+"
+category = "dev"
+optional = false
+python-versions = "*"
+
+[[package]]
 name = "zipp"
+version = "3.3.0"
+description = "Backport of pathlib-compatible object wrapper for zip files"
+category = "main"
 optional = false
 python-versions = ">=3.6"
-version = "3.1.0"
 
 [package.extras]
 docs = ["sphinx", "jaraco.packaging (>=3.2)", "rst.linker (>=1.9)"]
-testing = ["jaraco.itertools", "func-timeout"]
+testing = ["pytest (>=3.5,<3.7.3 || >3.7.3)", "pytest-checkdocs (>=1.2.3)", "pytest-flake8", "pytest-cov", "jaraco.test (>=3.2.0)", "jaraco.itertools", "func-timeout", "pytest-black (>=0.3.7)", "pytest-mypy"]
 
 [metadata]
-content-hash = "322de59b6eb412a254705ec393108b71416f56a61dc4494b78df210f856bbb79"
+lock-version = "1.1"
 python-versions = "^3.6, <3.8"
+content-hash = "322de59b6eb412a254705ec393108b71416f56a61dc4494b78df210f856bbb79"
 
 [metadata.files]
 appdirs = [
@@ -1981,8 +1852,8 @@ appdirs = [
     {file = "appdirs-1.4.4.tar.gz", hash = "sha256:7d5d0167b2b1ba821647616af46a749d1c653740dd0d2415100fe26e27afdf41"},
 ]
 attrs = [
-    {file = "attrs-19.3.0-py2.py3-none-any.whl", hash = "sha256:08a96c641c3a74e44eb59afb61a24f2cb9f4d7188748e76ba4bb5edfa3cb7d1c"},
-    {file = "attrs-19.3.0.tar.gz", hash = "sha256:f7b7ce16570fe9965acd6d30101a28f62fb4a7f9e926b3bbc9b61f8b04247e72"},
+    {file = "attrs-20.2.0-py2.py3-none-any.whl", hash = "sha256:fce7fc47dfc976152e82d53ff92fa0407700c21acd20886a13777a0d20e655dc"},
+    {file = "attrs-20.2.0.tar.gz", hash = "sha256:26b54ddbbb9ee1d34d5d3668dd37d6cf74990ab23c828c2888dccdceee395594"},
 ]
 aw-core = []
 click = [
@@ -1990,17 +1861,17 @@ click = [
     {file = "click-7.1.2.tar.gz", hash = "sha256:d2b5255c7c6349bc1bd1e59e08cd12acbbd63ce649f2588755783aa94dfb6b1a"},
 ]
 flake8 = [
-    {file = "flake8-3.8.3-py2.py3-none-any.whl", hash = "sha256:15e351d19611c887e482fb960eae4d44845013cc142d42896e9862f775d8cf5c"},
-    {file = "flake8-3.8.3.tar.gz", hash = "sha256:f04b9fcbac03b0a3e58c0ab3a0ecc462e023a9faf046d57794184028123aa208"},
+    {file = "flake8-3.8.4-py2.py3-none-any.whl", hash = "sha256:749dbbd6bfd0cf1318af27bf97a14e28e5ff548ef8e5b1566ccfb25a11e7c839"},
+    {file = "flake8-3.8.4.tar.gz", hash = "sha256:aadae8761ec651813c24be05c6f7b4680857ef6afaae4651a4eccaef97ce6c3b"},
 ]
 importlib-metadata = [
-    {file = "importlib_metadata-1.7.0-py2.py3-none-any.whl", hash = "sha256:dc15b2969b4ce36305c51eebe62d418ac7791e9a157911d58bfb1f9ccd8e2070"},
-    {file = "importlib_metadata-1.7.0.tar.gz", hash = "sha256:90bb658cdbbf6d1735b6341ce708fc7024a3e14e99ffdc5783edea9f9b077f83"},
+    {file = "importlib_metadata-2.0.0-py2.py3-none-any.whl", hash = "sha256:cefa1a2f919b866c5beb7c9f7b0ebb4061f30a8a9bf16d609b000e2dfaceb9c3"},
+    {file = "importlib_metadata-2.0.0.tar.gz", hash = "sha256:77a540690e24b0305878c37ffd421785a6f7e53c8b5720d211b211de8d0e95da"},
 ]
 iso8601 = [
-    {file = "iso8601-0.1.12-py2.py3-none-any.whl", hash = "sha256:210e0134677cc0d02f6028087fee1df1e1d76d372ee1db0bf30bf66c5c1c89a3"},
-    {file = "iso8601-0.1.12-py3-none-any.whl", hash = "sha256:bbbae5fb4a7abfe71d4688fd64bff70b91bbd74ef6a99d964bab18f7fdf286dd"},
-    {file = "iso8601-0.1.12.tar.gz", hash = "sha256:49c4b20e1f38aa5cf109ddcd39647ac419f928512c869dc01d5c7098eddede82"},
+    {file = "iso8601-0.1.13-py2.py3-none-any.whl", hash = "sha256:694be0743e9f1535ea873bfc7bd6fb62380c62b75822761859428073a17fd39c"},
+    {file = "iso8601-0.1.13-py3-none-any.whl", hash = "sha256:6f02f01dd13320a7f280e58516dc8d1950dfaf77527cc365a398cd9de4d3c692"},
+    {file = "iso8601-0.1.13.tar.gz", hash = "sha256:f7dec22af52025d4526be94cc1303c7d8f5379b746a3f54a8c8446384392eeb1"},
 ]
 jsonschema = [
     {file = "jsonschema-3.2.0-py2.py3-none-any.whl", hash = "sha256:4e5b3cf8216f577bee9ce139cbe72eca3ea4f292ec60928ff24758ce626cd163"},
@@ -2546,7 +2417,7 @@ pyqt5-stubs = [
     {file = "PyQt5-stubs-5.13.1.5.tar.gz", hash = "sha256:2a6f2f2ef02165391b9bfae802bd112bd19cbbd3799c0d13e3ce333efebbde2e"},
 ]
 pyrsistent = [
-    {file = "pyrsistent-0.16.0.tar.gz", hash = "sha256:28669905fe725965daa16184933676547c5bb40a5153055a8dee2a4bd7933ad3"},
+    {file = "pyrsistent-0.17.3.tar.gz", hash = "sha256:2e636185d9eb976a18a8a8e96efce62f2905fea90041958d8cc2a189756ebf3e"},
 ]
 python-json-logger = [
     {file = "python-json-logger-0.1.11.tar.gz", hash = "sha256:b7a31162f2a01965a5efb94453ce69230ed208468b0bbc7fdfc56e6d8df2e281"},
@@ -2599,11 +2470,11 @@ typed-ast = [
     {file = "typed_ast-1.4.1.tar.gz", hash = "sha256:8c8aaad94455178e3187ab22c8b01a3837f8ee50e09cf31f1ba129eb293ec30b"},
 ]
 typing-extensions = [
-    {file = "typing_extensions-3.7.4.2-py2-none-any.whl", hash = "sha256:f8d2bd89d25bc39dabe7d23df520442fa1d8969b82544370e03d88b5a591c392"},
-    {file = "typing_extensions-3.7.4.2-py3-none-any.whl", hash = "sha256:6e95524d8a547a91e08f404ae485bbb71962de46967e1b71a0cb89af24e761c5"},
-    {file = "typing_extensions-3.7.4.2.tar.gz", hash = "sha256:79ee589a3caca649a9bfd2a8de4709837400dfa00b6cc81962a1e6a1815969ae"},
+    {file = "typing_extensions-3.7.4.3-py2-none-any.whl", hash = "sha256:dafc7639cde7f1b6e1acc0f457842a83e722ccca8eef5270af2d74792619a89f"},
+    {file = "typing_extensions-3.7.4.3-py3-none-any.whl", hash = "sha256:7cb407020f00f7bfc3cb3e7881628838e69d8f3fcab2f64742a5e76b2f841918"},
+    {file = "typing_extensions-3.7.4.3.tar.gz", hash = "sha256:99d4073b617d30288f569d3f13d2bd7548c3a7e4c8de87db09a9d29bb3a4a60c"},
 ]
 zipp = [
-    {file = "zipp-3.1.0-py3-none-any.whl", hash = "sha256:aa36550ff0c0b7ef7fa639055d797116ee891440eac1a56f378e2d3179e0320b"},
-    {file = "zipp-3.1.0.tar.gz", hash = "sha256:c599e4d75c98f6798c509911d08a22e6c021d074469042177c8c86fb92eefd96"},
+    {file = "zipp-3.3.0-py3-none-any.whl", hash = "sha256:eed8ec0b8d1416b2ca33516a37a08892442f3954dee131e92cfd92d8fe3e7066"},
+    {file = "zipp-3.3.0.tar.gz", hash = "sha256:64ad89efee774d1897a58607895d80789c59778ea02185dd846ac38394a8642b"},
 ]

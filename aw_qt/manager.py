@@ -43,8 +43,8 @@ def _discover_modules_in_directory(path: str) -> List["Module"]:
 def _discover_modules_bundled() -> List["Module"]:
     """Use ``_discover_modules_in_directory`` to find all bundled modules """
     _search_paths = [_module_dir, _parent_dir]
-    print(_search_paths)
-    modules = []
+    logger.info("Search paths: {}".format(_search_paths))
+    modules: List[Module] = []
     for path in _search_paths:
         modules += _discover_modules_in_directory(path)
 
