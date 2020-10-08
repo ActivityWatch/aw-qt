@@ -28,8 +28,10 @@ def _discover_modules_in_directory(path: str) -> List["Module"]:
     modules = []
     matches = glob(os.path.join(path, "aw-*"))
     for match in matches:
+        # TODO: Filter matches the same as done by _filter_filenames
         if os.path.isfile(match) and os.access(match, os.X_OK):
-            name = os.path.basename(match)
+            filename = os.path.basename(match)
+            name = _filename_to_name(filename)
             modules.append(Module(name, Path(match), "bundled"))
         elif os.path.isdir(match) and os.access(match, os.X_OK):
             modules.extend(_discover_modules_in_directory(match))
@@ -40,10 +42,25 @@ def _discover_modules_in_directory(path: str) -> List["Module"]:
     return modules
 
 
+def _filename_to_name(filename: str) -> str:
+    return filename.replace(".exe", "")
+
+
+def _filter_filenames(filenames: List[str]) -> List[str]:
+    return [
+        fn
+        for fn in filenames
+        if fn.startswith("aw-")
+        and (".manifest" not in fn)
+        and (".desktop" not in fn)
+        and (".service" not in fn)
+    ]
+
+
 def _discover_modules_bundled() -> List["Module"]:
     """Use ``_discover_modules_in_directory`` to find all bundled modules """
     _search_paths = [_module_dir, _parent_dir]
-    logger.info("Search paths: {}".format(_search_paths))
+    logger.info("Searching for bundled modules in: {}".format(_search_paths))
     modules: List[Module] = []
     for path in _search_paths:
         modules += _discover_modules_in_directory(path)
@@ -61,18 +78,15 @@ def _discover_modules_system() -> List["Module"]:
     if _parent_dir in search_paths:
         search_paths.remove(_parent_dir)
 
-    logger.info(search_paths)
+    logger.debug("Searching for system modules in PATH: {}".format(search_paths))
     modules: List["Module"] = []
-    for path in search_paths:
-        if os.path.isdir(path):
-            files = os.listdir(path)
-            for filename in files:
-                if filename.startswith("aw-"):
-                    # Only pick the first match
-                    if filename not in [m.name for m in modules]:
-                        modules.append(
-                            Module(filename, Path(path) / filename, "system")
-                        )
+    paths = [p for p in search_paths if os.path.isdir(p)]
+    for path in paths:
+        for filename in _filter_filenames(os.listdir(path)):
+            name = _filename_to_name(filename)
+            # Only pick the first match (to respect PATH priority)
+            if name not in [m.name for m in modules]:
+                modules.append(Module(name, Path(path) / filename, "system"))
 
     logger.info("Found system modules:")
     _log_modules(modules)
