@@ -28,9 +28,11 @@ def _discover_modules_in_directory(path: str) -> List["Module"]:
     modules = []
     matches = glob(os.path.join(path, "aw-*"))
     for match in matches:
-        # TODO: Filter matches the same as done by _filter_filenames
-        if os.path.isfile(match) and os.access(match, os.X_OK):
-            filename = os.path.basename(match)
+        filename = os.path.basename(match)
+        if not _validate_module(filename):
+            continue
+        # NOTE: os.access(match, os.X_OK) seems to always return True on Windows
+        elif os.path.isfile(match) and os.access(match, os.X_OK):
             name = _filename_to_name(filename)
             modules.append(Module(name, Path(match), "bundled"))
         elif os.path.isdir(match) and os.access(match, os.X_OK):
@@ -46,15 +48,19 @@ def _filename_to_name(filename: str) -> str:
     return filename.replace(".exe", "")
 
 
-def _filter_filenames(filenames: List[str]) -> List[str]:
-    return [
-        fn
-        for fn in filenames
-        if fn.startswith("aw-")
+def _validate_module(fn: str) -> bool:
+    # NOTE: Checks for bundled non-executable files that match aw-* are needed
+    #       since the os.access(..., os.X_OS) check will always return True on Windows.
+    return (
+        fn.startswith("aw-")
         and (".manifest" not in fn)
         and (".desktop" not in fn)
         and (".service" not in fn)
-    ]
+    )
+
+
+def _filter_filenames(filenames: List[str]) -> List[str]:
+    return [fn for fn in filenames if _validate_module(fn)]
 
 
 def _discover_modules_bundled() -> List["Module"]:
@@ -219,7 +225,6 @@ class Manager:
 
     def discover_modules(self) -> None:
         # These should always be bundled with aw-qt
-        # TODO: Find a way to differentiate between bundled and system (and prefer bundled when autostarting)
         found_modules = set(_discover_modules_bundled())
         found_modules |= set(_discover_modules_system())
         found_modules = {
@@ -236,7 +241,8 @@ class Manager:
         return list(filter(lambda x: x.started and not x.is_alive(), self.modules))
 
     def start(self, module_name: str) -> None:
-        # FIXME: Impossible to run system module if bundled version exists
+        # NOTE: Will always prefer a bundled version, if available. This will not affect the
+        #       aw-qt menu since it directly calls the module's start() method.
         bundled = [m for m in self.modules_bundled if m.name == module_name]
         system = [m for m in self.modules_system if m.name == module_name]
         if bundled:
@@ -249,6 +255,8 @@ class Manager:
             )
 
     def autostart(self, autostart_modules: List[str]) -> None:
+        # NOTE: Currently impossible to autostart a system module if a bundled module with the same name exists
+
         # We only want to autostart modules that are both in found modules and are asked to autostart.
         for name in autostart_modules:
             if name not in [m.name for m in self.modules]:
