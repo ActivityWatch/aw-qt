@@ -2,6 +2,7 @@ import os
 import sys
 import logging
 import subprocess
+import platform
 from pathlib import Path
 from glob import glob
 from time import sleep
@@ -22,17 +23,30 @@ def _log_modules(modules: List["Module"]) -> None:
     for module in modules:
         logger.info(" - {} at {}".format(module.name, module.path))
 
+def is_executable(path: str) -> bool:
+    if not os.path.isfile(path):
+        return False
+    filename = os.path.basename(path)
+    # On windows all files ending with .exe are executables
+    if platform.system() == "Windows":
+        return filename.endswith(".exe")
+    # On Unix platforms all files having executable permissions are executables
+    # We do not however want to include .desktop files
+    else: # Assumes Unix
+        if not os.access(path, os.X_OK):
+            return False
+        if filename.endswith(".desktop"):
+            return False
+        return True
+
 
 def _discover_modules_in_directory(path: str) -> List["Module"]:
     """Look for modules in given directory path and recursively in subdirs matching aw-*"""
     modules = []
     matches = glob(os.path.join(path, "aw-*"))
     for match in matches:
-        filename = os.path.basename(match)
-        if not _validate_module(filename):
-            continue
-        # NOTE: os.access(match, os.X_OK) seems to always return True on Windows
-        elif os.path.isfile(match) and os.access(match, os.X_OK):
+        if is_executable(match) and match.startswith("aw-"):
+            filename = os.path.basename(match)
             name = _filename_to_name(filename)
             modules.append(Module(name, Path(match), "bundled"))
         elif os.path.isdir(match) and os.access(match, os.X_OK):
@@ -46,21 +60,6 @@ def _discover_modules_in_directory(path: str) -> List["Module"]:
 
 def _filename_to_name(filename: str) -> str:
     return filename.replace(".exe", "")
-
-
-def _validate_module(fn: str) -> bool:
-    # NOTE: Checks for bundled non-executable files that match aw-* are needed
-    #       since the os.access(..., os.X_OS) check will always return True on Windows.
-    return (
-        fn.startswith("aw-")
-        and (".manifest" not in fn)
-        and (".desktop" not in fn)
-        and (".service" not in fn)
-    )
-
-
-def _filter_filenames(filenames: List[str]) -> List[str]:
-    return [fn for fn in filenames if _validate_module(fn)]
 
 
 def _discover_modules_bundled() -> List["Module"]:
@@ -88,7 +87,11 @@ def _discover_modules_system() -> List["Module"]:
     modules: List["Module"] = []
     paths = [p for p in search_paths if os.path.isdir(p)]
     for path in paths:
-        for filename in _filter_filenames(os.listdir(path)):
+        for filename in os.listdir(path):
+            if not filename.startswith("aw-"):
+                continue
+            if not is_executable(path+"/"+filename):
+                continue
             name = _filename_to_name(filename)
             # Only pick the first match (to respect PATH priority)
             if name not in [m.name for m in modules]:
