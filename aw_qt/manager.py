@@ -90,7 +90,7 @@ def _discover_modules_system() -> List["Module"]:
         for filename in os.listdir(path):
             if not filename.startswith("aw-"):
                 continue
-            if not is_executable(path+"/"+filename):
+            if not is_executable(os.path.join(path, filename)):
                 continue
             name = _filename_to_name(filename)
             # Only pick the first match (to respect PATH priority)
