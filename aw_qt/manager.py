@@ -23,10 +23,9 @@ def _log_modules(modules: List["Module"]) -> None:
     for module in modules:
         logger.info(" - {} at {}".format(module.name, module.path))
 
-def is_executable(path: str) -> bool:
+def is_executable(path: str, filename: str) -> bool:
     if not os.path.isfile(path):
         return False
-    filename = os.path.basename(path)
     # On windows all files ending with .exe are executables
     if platform.system() == "Windows":
         return filename.endswith(".exe")
@@ -44,16 +43,16 @@ def _discover_modules_in_directory(path: str) -> List["Module"]:
     """Look for modules in given directory path and recursively in subdirs matching aw-*"""
     modules = []
     matches = glob(os.path.join(path, "aw-*"))
-    for match in matches:
-        if is_executable(match) and match.startswith("aw-"):
-            filename = os.path.basename(match)
-            name = _filename_to_name(filename)
-            modules.append(Module(name, Path(match), "bundled"))
-        elif os.path.isdir(match) and os.access(match, os.X_OK):
-            modules.extend(_discover_modules_in_directory(match))
+    for path in matches:
+        basename = os.path.basename(path)
+        if is_executable(path, basename) and basename.startswith("aw-"):
+            name = _filename_to_name(basename)
+            modules.append(Module(name, Path(path), "bundled"))
+        elif os.path.isdir(path) and os.access(path, os.X_OK):
+            modules.extend(_discover_modules_in_directory(path))
         else:
             logger.warning(
-                "Found matching file but was not executable: {}".format(match)
+                "Found matching file but was not executable: {}".format(path)
             )
     return modules
 
@@ -87,15 +86,15 @@ def _discover_modules_system() -> List["Module"]:
     modules: List["Module"] = []
     paths = [p for p in search_paths if os.path.isdir(p)]
     for path in paths:
-        for filename in os.listdir(path):
-            if not filename.startswith("aw-"):
+        for basename in os.listdir(path):
+            if not basename.startswith("aw-"):
                 continue
-            if not is_executable(os.path.join(path, filename)):
+            if not is_executable(os.path.join(path, basename), basename):
                 continue
-            name = _filename_to_name(filename)
+            name = _filename_to_name(basename)
             # Only pick the first match (to respect PATH priority)
             if name not in [m.name for m in modules]:
-                modules.append(Module(name, Path(path) / filename, "system"))
+                modules.append(Module(name, Path(path) / basename, "system"))
 
     logger.info("Found system modules:")
     _log_modules(modules)
