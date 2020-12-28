@@ -23,6 +23,7 @@ click = "^7.1.2"
 mypy = "*"
 PyQt5-stubs = "~5.14"  # 5.15 now released yet
 flake8 = "^3.8.3"
+pyinstaller = "^4.1"
 
 [build-system]
 requires = ["poetry>=0.12"]

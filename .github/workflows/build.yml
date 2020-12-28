@@ -59,5 +59,4 @@ jobs:
       shell: bash
       run: |
         source venv/bin/activate || source venv/Scripts/activate
-        pip install pyinstaller==3.5
         make package
