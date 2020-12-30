@@ -1,12 +1,8 @@
 .PHONY: build install test test-integration typecheck package clean
 
-build: aw_qt/resources.py
-	# Workaround for https://github.com/python-poetry/poetry/issues/1338#issuecomment-571618450
-	cp .gitignore .gitignore.backup
-	grep -v 'aw_qt/resources.py' .gitignore.backup > .gitignore
+build:
 	poetry install
-	mv .gitignore.backup .gitignore
-	rm -f .gitignore.backup
+	make aw_qt/resources.py
 
 install:
 	bash scripts/config-autostart.sh
@@ -36,5 +32,4 @@ clean:
 	rm -rf __pycache__ aw_qt/__pycache__
 
 aw_qt/resources.py: aw_qt/resources.qrc
-	pip3 install pyqt5
-	pyrcc5 -o aw_qt/resources.py aw_qt/resources.qrc
+	poetry run pyrcc5 -o aw_qt/resources.py aw_qt/resources.qrc
