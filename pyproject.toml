@@ -16,7 +16,7 @@ aw-qt = "aw_qt:main"
 python = "^3.6"
 aw-core = {git = "https://github.com/ActivityWatch/aw-core.git"}
 PyQt5 = "5.15.2"
-pyobjc = { version = "^6.1", platform = "darwin" }
+pyobjc-framework-Cocoa = { version = "^7.0", platform = "darwin" }
 click = "^7.1.2"
 
 [tool.poetry.dev-dependencies]
