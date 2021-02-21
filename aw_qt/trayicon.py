@@ -68,7 +68,8 @@ def open_dir(d: str) -> None:
     elif sys.platform == "darwin":
         subprocess.Popen(["open", d])
     else:
-        subprocess.Popen(["xdg-open", d])
+        env = get_env()
+        subprocess.Popen(["xdg-open", d], env=env)
 
 
 class TrayIcon(QSystemTrayIcon):
