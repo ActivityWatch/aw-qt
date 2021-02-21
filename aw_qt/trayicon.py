@@ -208,6 +208,10 @@ def run(manager: Manager, testing: bool = False) -> Any:
     # Ensure cleanup happens on SIGTERM
     signal.signal(signal.SIGTERM, lambda *args: exit(manager))
 
+    # Allow pixmaps (e.g. trayicon) to use higher DPI images to make icons less
+    # blurry when fractional scaling is used
+    app.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps)
+
     timer = QtCore.QTimer()
     timer.start(100)  # You may change this if you wish.
     timer.timeout.connect(lambda: None)  # Let the interpreter run each 500 ms.
