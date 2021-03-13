@@ -92,7 +92,7 @@ class TrayIcon(QSystemTrayIcon):
 
         self._build_rootmenu()
 
-    def on_activated(self, reason: QSystemTrayIcon.ActivationReason):
+    def on_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
         if reason == QSystemTrayIcon.DoubleClick:
             open_webui(self.root_url)
 
