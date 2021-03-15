@@ -87,20 +87,25 @@ class TrayIcon(QSystemTrayIcon):
         self.manager = manager
         self.testing = testing
 
+        self.root_url = "http://localhost:{port}".format(port=5666 if self.testing else 5600)
+        self.activated.connect(self.on_activated)
+
         self._build_rootmenu()
+
+    def on_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
+        if reason == QSystemTrayIcon.DoubleClick:
+            open_webui(self.root_url)
 
     def _build_rootmenu(self) -> None:
         menu = QMenu(self._parent)
-
-        root_url = "http://localhost:{port}".format(port=5666 if self.testing else 5600)
 
         if self.testing:
             menu.addAction("Running in testing mode")  # .setEnabled(False)
             menu.addSeparator()
 
         # openWebUIIcon = QIcon.fromTheme("open")
-        menu.addAction("Open Dashboard", lambda: open_webui(root_url))
-        menu.addAction("Open API Browser", lambda: open_apibrowser(root_url))
+        menu.addAction("Open Dashboard", lambda: open_webui(self.root_url))
+        menu.addAction("Open API Browser", lambda: open_apibrowser(self.root_url))
 
         menu.addSeparator()
 
