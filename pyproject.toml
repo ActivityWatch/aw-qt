@@ -23,8 +23,8 @@ click = "^7.1.2"
 mypy = "*"
 PyQt5-stubs = "~5.14"  # 5.15 now released yet
 flake8 = "^3.8.3"
-pyinstaller = {version = "^4.1", optional=true}
-types-click = "^0.1.14"
+pyinstaller = "^4.1"
+types-click = "*"
 
 [tool.mypy]
 python_version = 3.7

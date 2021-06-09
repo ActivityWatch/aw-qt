@@ -3,7 +3,7 @@ name = "altgraph"
 version = "0.17"
 description = "Python graph (network) package"
 category = "dev"
-optional = true
+optional = false
 python-versions = "*"
 
 [[package]]
@@ -76,7 +76,7 @@ name = "future"
 version = "0.18.2"
 description = "Clean single-source support for Python 3 and 2"
 category = "dev"
-optional = true
+optional = false
 python-versions = ">=2.6, !=3.0.*, !=3.1.*, !=3.2.*"
 
 [[package]]
@@ -126,7 +126,7 @@ name = "macholib"
 version = "1.14"
 description = "Mach-O header analysis and editing"
 category = "dev"
-optional = true
+optional = false
 python-versions = "*"
 
 [package.dependencies]
@@ -179,7 +179,7 @@ name = "pefile"
 version = "2021.5.24"
 description = "Python PE parsing module"
 category = "dev"
-optional = true
+optional = false
 python-versions = ">=3.6.0"
 
 [package.dependencies]
@@ -206,7 +206,7 @@ name = "pyinstaller"
 version = "4.3"
 description = "PyInstaller bundles a Python application and all its dependencies into a single package."
 category = "dev"
-optional = true
+optional = false
 python-versions = ">=3.6"
 
 [package.dependencies]
@@ -226,7 +226,7 @@ name = "pyinstaller-hooks-contrib"
 version = "2021.1"
 description = "Community maintained hooks for PyInstaller"
 category = "dev"
-optional = true
+optional = false
 python-versions = "*"
 
 [[package]]
@@ -296,7 +296,7 @@ name = "pywin32-ctypes"
 version = "0.2.0"
 description = ""
 category = "dev"
-optional = true
+optional = false
 python-versions = "*"
 
 [[package]]
@@ -349,7 +349,7 @@ python-versions = "*"
 
 [[package]]
 name = "types-click"
-version = "0.1.14"
+version = "7.1.0"
 description = "Typing stubs for click"
 category = "dev"
 optional = false
@@ -378,7 +378,7 @@ testing = ["pytest (>=4.6)", "pytest-checkdocs (>=1.2.3)", "pytest-flake8", "pyt
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.7"
-content-hash = "1bde2c3af195368fb6ccd36ab1afc67dcab10085207e8c54114dc697f8937091"
+content-hash = "26cb436c8ddfd05346db97043cd860df6483d1daea7d575efd7fc5768c08f40e"
 
 [metadata.files]
 altgraph = [
@@ -584,7 +584,7 @@ typed-ast = [
     {file = "typed_ast-1.4.3.tar.gz", hash = "sha256:fb1bbeac803adea29cedd70781399c99138358c26d05fcbd23c13016b7f5ec65"},
 ]
 types-click = [
-    {file = "types_click-0.1.14-py2.py3-none-any.whl", hash = "sha256:100c6f5cb3127b054b5eb6d362ee391130c3e6abad948b8e44990ef4e98c7d36"},
+    {file = "types_click-7.1.0-py2.py3-none-any.whl", hash = "sha256:1b37e9e63ec1f4e67bb8016afac882ec94bcb98a09b92bebde8f1e0f0484e6ed"},
 ]
 typing-extensions = [
     {file = "typing_extensions-3.10.0.0-py2-none-any.whl", hash = "sha256:0ac0f89795dd19de6b97debb0c6af1c70987fd80a2d62d1958f7e56fcc31b497"},
