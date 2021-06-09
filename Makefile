@@ -17,7 +17,7 @@ lint:
 	poetry run flake8 aw_qt --ignore=E501,E302,E305,E231 --per-file-ignores="__init__.py:F401"
 
 typecheck:
-	poetry run mypy aw_qt --strict --pretty
+	poetry run mypy aw_qt --pretty
 
 precommit:
 	make typecheck

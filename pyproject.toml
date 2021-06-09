@@ -13,8 +13,8 @@ packages = [
 aw-qt = "aw_qt:main"
 
 [tool.poetry.dependencies]
-python = "^3.6"
-aw-core = {git = "https://github.com/ActivityWatch/aw-core.git"}
+python = "^3.7"
+aw-core = "^0.5"
 PyQt5 = "5.15.2"
 pyobjc-framework-Cocoa = { version = "^7.0", platform = "darwin" }
 click = "^7.1.2"
@@ -23,7 +23,16 @@ click = "^7.1.2"
 mypy = "*"
 PyQt5-stubs = "~5.14"  # 5.15 now released yet
 flake8 = "^3.8.3"
-pyinstaller = "^4.1"
+pyinstaller = {version = "^4.1", optional=true}
+types-click = "^0.1.14"
+
+[tool.mypy]
+python_version = 3.7
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "*.resources"
+ignore_errors = true
 
 [build-system]
 requires = ["poetry>=0.12"]
