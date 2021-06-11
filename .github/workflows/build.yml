@@ -28,6 +28,10 @@ jobs:
       run: |
         pip install virtualenv
         python -m virtualenv venv
+    - name: Install APT dependencies
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get install -y qt5-default libfontconfig1
     - name: Install dependencies
       shell: bash
       run: |
@@ -48,11 +52,7 @@ jobs:
     - name: Run integration tests
       if: runner.os == 'Linux'
       run: |
-        sudo apt-get update
-        sudo apt-get install xvfb;
-        sudo apt-get install -y libdbus-1-3 libxkbcommon-x11-0;  # Workaround for issue with Qt integration test on xenial: https://github.com/pytest-dev/pytest-qt/issues/266#issuecomment-510035926
-        sudo apt-get install -y libxcb-randr0-dev libxcb-xtest0-dev libxcb-xinerama0-dev libxcb-shape0-dev libxcb-xkb-dev;  # Attempt at fixing: https://github.com/ActivityWatch/aw-qt/pull/67/checks?check_run_id=1617207462#step:8:67
-        sudo apt-get install -y libqt5gui5;
+        sudo apt-get install -y xvfb
         source venv/bin/activate || source venv/Scripts/activate
         env QT_DEBUG_PLUGINS=true xvfb-run --auto-servernum make test-integration;
     - name: Package
@@ -60,3 +60,8 @@ jobs:
       run: |
         source venv/bin/activate || source venv/Scripts/activate
         make package
+    - name: Upload package
+      uses: actions/upload-artifact@v2-preview
+      with:
+        name: builds-${{ runner.os }}-py${{ matrix.python_version }}
+        path: dist/aw-qt.zip

@@ -26,6 +26,7 @@ precommit:
 
 package:
 	pyinstaller --clean --noconfirm --windowed aw-qt.spec
+	cd dist && zip aw-qt.zip -r aw-qt
 
 clean:
 	rm -rf build dist
