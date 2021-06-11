@@ -64,4 +64,4 @@ jobs:
       uses: actions/upload-artifact@v2-preview
       with:
         name: builds-${{ runner.os }}-py${{ matrix.python_version }}
-        path: dist/aw-qt.zip
+        path: dist/aw-qt
