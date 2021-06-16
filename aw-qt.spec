@@ -35,6 +35,11 @@ a = Analysis(['aw_qt/__main__.py'],
              win_no_prefer_redirects=False,
              win_private_assemblies=False,
              cipher=block_cipher)
+
+# Needed to be removed due to https://github.com/ActivityWatch/activitywatch/issues/607#issuecomment-862187836
+exclude_libs = ["libfontconfig", "libfreetype"]
+a.binaries = [bin for bin in a.binaries if not any(bin[0].find(lib) >= 0 for lib in exclude_libs)]
+
 pyz = PYZ(a.pure, a.zipped_data,
              cipher=block_cipher)
 exe = EXE(pyz,
