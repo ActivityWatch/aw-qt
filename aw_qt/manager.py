@@ -18,6 +18,11 @@ _module_dir = os.path.dirname(os.path.realpath(__file__))
 # The path of the aw-qt executable (when using PyInstaller)
 _parent_dir = os.path.abspath(os.path.join(_module_dir, os.pardir))
 
+search_paths = [_module_dir, _parent_dir]
+if platform.system() == "Darwin":
+    macos_dir = Path(_parent_dir).parent / 'MacOS'
+    search_paths.append(str(macos_dir))
+
 
 def _log_modules(modules: List["Module"]) -> None:
     for module in modules:
@@ -63,10 +68,9 @@ def _filename_to_name(filename: str) -> str:
 
 def _discover_modules_bundled() -> List["Module"]:
     """Use ``_discover_modules_in_directory`` to find all bundled modules """
-    _search_paths = [_module_dir, _parent_dir]
-    logger.info("Searching for bundled modules in: {}".format(_search_paths))
+    logger.info("Searching for bundled modules in: {}".format(search_paths))
     modules: List[Module] = []
-    for path in _search_paths:
+    for path in search_paths:
         modules += _discover_modules_in_directory(path)
 
     logger.info("Found bundled modules:")
