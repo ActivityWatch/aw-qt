@@ -16,6 +16,7 @@ aw-qt = "aw_qt:main"
 python = "^3.7"
 aw-core = "^0.5"
 PyQt5 = "5.15.2"
+pyqtwebengine = "*"
 pyobjc-framework-Cocoa = { version = "^7.0", platform = "darwin" }
 click = "^7.1.2"
 
