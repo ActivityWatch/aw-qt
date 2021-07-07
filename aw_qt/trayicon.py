@@ -3,9 +3,9 @@ import logging
 import signal
 import os
 import subprocess
-from collections import defaultdict
-from typing import Any, DefaultDict, List, Optional, Dict
 import webbrowser
+from typing import Any, Optional, Dict
+
 
 from PyQt5 import QtCore
 from PyQt5.QtWidgets import (
@@ -21,6 +21,7 @@ from PyQt5.QtGui import QIcon
 import aw_core
 
 from .manager import Manager, Module
+from .webview import create_webview
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +45,10 @@ def get_env() -> Dict[str, str]:
 
 
 def open_url(url: str) -> None:
-    if sys.platform == "linux":
+    experimental = True
+    if experimental:
+        create_webview(parent=widget)
+    elif sys.platform == "linux":
         env = get_env()
         subprocess.Popen(["xdg-open", url], env=env)
     else:
@@ -87,13 +91,17 @@ class TrayIcon(QSystemTrayIcon):
         self.manager = manager
         self.testing = testing
 
-        self.root_url = "http://localhost:{port}".format(port=5666 if self.testing else 5600)
+        self.root_url = "http://localhost:{port}".format(
+            port=5666 if self.testing else 5600
+        )
         self.activated.connect(self.on_activated)
 
         self._build_rootmenu()
 
     def on_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
+        logger.info("Clicked trayicon")
         if reason == QSystemTrayIcon.DoubleClick:
+            logger.info("Double-clicked trayicon")
             open_webui(self.root_url)
 
     def _build_rootmenu(self) -> None:
@@ -229,6 +237,7 @@ def run(manager: Manager, testing: bool = False) -> Any:
         )
         sys.exit(1)
 
+    global widget
     widget = QWidget()
     if sys.platform == "darwin":
         icon = QIcon(":/black-monochrome-logo.png")

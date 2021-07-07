@@ -21,8 +21,13 @@ class MyBrowser(QWebEnginePage):
 
 class Browser(QWebEngineView):
     def __init__(self, *args, **kwargs):
-        self.view = QWebEngineView.__init__(self, *args, **kwargs)
-        # self.view.setPage(MyBrowser())
+        QWebEngineView.__init__(self, *args, **kwargs)
+        self.setPage(MyBrowser())
+
+        settings = QWebEngineSettings.globalSettings()
+        settings.setAttribute(QWebEngineSettings.JavascriptEnabled, True)
+        settings.setAttribute(QWebEngineSettings.AllowRunningInsecureContent, True)
+
         self.setWindowTitle("Loading...")
         self.titleChanged.connect(self.adjustTitle)
         # super(Browser).connect(self.ui.webView,QtCore.SIGNAL("titleChanged (const QString&amp;)"), self.adjustTitle)
@@ -33,10 +38,6 @@ class Browser(QWebEngineView):
     def adjustTitle(self):
         self.setWindowTitle(self.title())
 
-    def disableJS(self):
-        settings = QWebEngineSettings.globalSettings()
-        settings.setAttribute(QWebEngineSettings.JavascriptEnabled, False)
-
 
 def exit() -> None:
     print("Shutdown initiated, stopping all services...")
@@ -44,6 +45,14 @@ def exit() -> None:
     # os.killpg(0, signal.SIGINT)
 
     QApplication.quit()
+
+
+def create_webview(parent):
+    view = Browser(parent=parent)
+    # view.showMaximized()
+    view.load("http://localhost:5666/")
+    view.show()
+    print("Opened webview")
 
 
 if __name__ == "__main__":
@@ -59,13 +68,9 @@ if __name__ == "__main__":
     timer.start(100)  # You may change this if you wish.
     timer.timeout.connect(lambda: None)  # Let the interpreter run each 500 ms.
 
-    # widget = QWidget()
-    # widget.show()
-
-    view = Browser()
-    # view.showMaximized()
-    view.load("http://localhost:5600")
-    view.show()
+    widget = QWidget()
+    create_webview(widget)
+    widget.show()
 
     QApplication.setQuitOnLastWindowClosed(False)
 
