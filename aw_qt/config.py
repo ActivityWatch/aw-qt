@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Any
 
 from aw_core.config import load_config_toml
 
@@ -19,6 +19,6 @@ class AwQtSettings:
         Constructor takes a `testing` boolean as an argument
         """
         config = load_config_toml("aw-qt", default_config)
-        config_section = config["aw-qt" if not testing else "aw-qt-testing"]
+        config_section: Any = config["aw-qt" if not testing else "aw-qt-testing"]
 
         self.autostart_modules: List[str] = config_section["autostart_modules"]
