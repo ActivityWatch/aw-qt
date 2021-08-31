@@ -5,7 +5,7 @@ from typing import Optional
 
 from aw_core.log import setup_logging
 
-from .manager import Manager
+from aw_core.manager import Manager
 from . import trayicon
 from .config import AwQtSettings
 

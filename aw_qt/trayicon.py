@@ -3,8 +3,7 @@ import logging
 import signal
 import os
 import subprocess
-from collections import defaultdict
-from typing import Any, DefaultDict, List, Optional, Dict
+from typing import Any, Optional, Dict
 import webbrowser
 
 from PyQt5 import QtCore
@@ -20,7 +19,7 @@ from PyQt5.QtGui import QIcon
 
 import aw_core
 
-from .manager import Manager, Module
+from aw_core.manager import Manager, Module
 
 logger = logging.getLogger(__name__)
 
