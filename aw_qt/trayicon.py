@@ -73,11 +73,11 @@ def open_dir(d: str) -> None:
 
 class TrayIcon(QSystemTrayIcon):
     def __init__(
-        self,
-        manager: Manager,
-        icon: QIcon,
-        parent: Optional[QWidget] = None,
-        testing: bool = False,
+            self,
+            manager: Manager,
+            icon: QIcon,
+            parent: Optional[QWidget] = None,
+            testing: bool = False,
     ) -> None:
         QSystemTrayIcon.__init__(self, icon, parent)
         self._parent = parent  # QSystemTrayIcon also tries to save parent info but it screws up the type info
@@ -137,7 +137,8 @@ class TrayIcon(QSystemTrayIcon):
             box.setDetailedText(module.read_log(self.testing))
 
             restart_button = QPushButton("Restart", box)
-            restart_button.clicked.connect(module.start)
+            restart_button.clicked.connect(
+                lambda: module.start(self.testing, self.manager))
             box.addButton(restart_button, QMessageBox.AcceptRole)
             box.setStandardButtons(QMessageBox.Cancel)
 
@@ -173,7 +174,7 @@ class TrayIcon(QSystemTrayIcon):
 
         def add_module_menuitem(module: Module) -> None:
             title = module.name
-            ac = moduleMenu.addAction(title, lambda: module.toggle(self.testing))
+            ac = moduleMenu.addAction(title, lambda: module.toggle(self.testing, self.manager))
 
             ac.setData(module)
             ac.setCheckable(True)

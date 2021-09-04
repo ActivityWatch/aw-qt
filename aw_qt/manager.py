@@ -3,6 +3,7 @@ import sys
 import logging
 import subprocess
 import platform
+import json
 from pathlib import Path
 from glob import glob
 from time import sleep
@@ -126,7 +127,7 @@ class Module:
     def __repr__(self) -> str:
         return "<Module {} at {}>".format(self.name, self.path)
 
-    def start(self, testing: bool) -> None:
+    def start(self, testing: bool, manager: "Manager") -> None:
         logger.info("Starting module {}".format(self.name))
 
         # Create a process group, become its leader
@@ -137,6 +138,24 @@ class Module:
         exec_cmd = [str(self.path)]
         if testing:
             exec_cmd.append("--testing")
+
+        if self.name.startswith("aw-server"):
+            custom_watcher_static_directories = dict()
+
+            logger.info(f"Searching for watchers with page support...")
+
+            for module in manager.modules:
+                static_dir, name = module.static_directory, module.name
+
+                if name.startswith("aw-watcher"):
+                    if static_dir is not None:
+                        logger.info(f" - Found page support for watcher {name}")
+                        custom_watcher_static_directories[name] = str(module.static_directory.absolute())
+                    else:
+                        logger.info(f" - No static folder found in {name}")
+
+            exec_cmd.append("--custom-watcher-visualizations")
+            exec_cmd.append(json.dumps(custom_watcher_static_directories))
         # logger.debug("Running: {}".format(exec_cmd))
 
         # Don't display a console window on Windows
@@ -188,11 +207,11 @@ class Module:
         self._process = None
         self.started = False
 
-    def toggle(self, testing: bool) -> None:
+    def toggle(self, testing: bool, manager: "Manager") -> None:
         if self.started:
             self.stop()
         else:
-            self.start(testing)
+            self.start(testing, manager)
 
     def is_alive(self) -> bool:
         if self._process is None:
@@ -230,6 +249,8 @@ class Manager:
         self.modules: List[Module] = []
         self.testing = testing
 
+        self.discover_modules()
+
     @property
     def modules_system(self) -> List[Module]:
         return [m for m in self.modules if m.type == "system"]
@@ -261,9 +282,9 @@ class Manager:
         bundled = [m for m in self.modules_bundled if m.name == module_name]
         system = [m for m in self.modules_system if m.name == module_name]
         if bundled:
-            bundled[0].start(self.testing)
+            bundled[0].start(self.testing, self)
         elif system:
-            system[0].start(self.testing)
+            system[0].start(self.testing, self)
         else:
             logger.error(
                 "Manager tried to start nonexistent module {}".format(module_name)
@@ -298,7 +319,7 @@ class Manager:
 if __name__ == "__main__":
     manager = Manager()
     for module in manager.modules:
-        module.start(testing=True)
+        module.start(testing=True, manager=manager)
         sleep(2)
         assert module.is_alive()
         module.stop()
