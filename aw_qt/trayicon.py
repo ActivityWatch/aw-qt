@@ -19,7 +19,7 @@ from PyQt5.QtGui import QIcon
 
 import aw_core
 
-from aw_core.manager import Manager, Module
+from .manager import Manager, Module
 
 logger = logging.getLogger(__name__)
 
