@@ -18,15 +18,11 @@ _module_dir = os.path.dirname(os.path.realpath(__file__))
 # The path of the aw-qt executable (when using PyInstaller)
 _parent_dir = os.path.abspath(os.path.join(_module_dir, os.pardir))
 
-search_paths = [_module_dir, _parent_dir]
-if platform.system() == "Darwin":
-    macos_dir = Path(_parent_dir).parent / 'MacOS'
-    search_paths.append(str(macos_dir))
-
 
 def _log_modules(modules: List["Module"]) -> None:
     for module in modules:
         logger.info(" - {} at {}".format(module.name, module.path))
+
 
 def is_executable(path: str, filename: str) -> bool:
     if not os.path.isfile(path):
@@ -36,7 +32,7 @@ def is_executable(path: str, filename: str) -> bool:
         return filename.endswith(".exe")
     # On Unix platforms all files having executable permissions are executables
     # We do not however want to include .desktop files
-    else: # Assumes Unix
+    else:  # Assumes Unix
         if not os.access(path, os.X_OK):
             return False
         if filename.endswith(".desktop"):
@@ -68,7 +64,12 @@ def _filename_to_name(filename: str) -> str:
 
 def _discover_modules_bundled() -> List["Module"]:
     """Use ``_discover_modules_in_directory`` to find all bundled modules """
+    search_paths = [_module_dir, _parent_dir]
+    if platform.system() == "Darwin":
+        macos_dir = os.path.abspath(os.path.join(_parent_dir, os.pardir, 'MacOS'))
+        search_paths.append(macos_dir)
     logger.info("Searching for bundled modules in: {}".format(search_paths))
+
     modules: List[Module] = []
     for path in search_paths:
         modules += _discover_modules_in_directory(path)
