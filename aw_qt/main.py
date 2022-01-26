@@ -1,5 +1,7 @@
 import sys
 import logging
+import subprocess
+import platform
 import click
 from typing import Optional
 
@@ -21,13 +23,23 @@ logger = logging.getLogger(__name__)
     help="A comma-separated list of modules to autostart, or just `none` to not autostart anything.",
 )
 def main(testing: bool, autostart_modules: Optional[str]) -> None:
+    # Since the .app can crash when started from Finder for unknown reasons, we send a syslog message here to make debugging easier.
+    if platform.system() == "Darwin":
+        subprocess.call("syslog -s 'aw-qt started'", shell=True)
+
+    setup_logging("aw-qt", testing=testing, verbose=testing, log_file=True)
+    logger.info("Started aw-qt...")
+
+    # Since the .app can crash when started from Finder for unknown reasons, we send a syslog message here to make debugging easier.
+    if platform.system() == "Darwin":
+        subprocess.call("syslog -s 'aw-qt successfully started logging'", shell=True)
+
     config = AwQtSettings(testing=testing)
     _autostart_modules = (
         [m.strip() for m in autostart_modules.split(",") if m and m.lower() != "none"]
         if autostart_modules
         else config.autostart_modules
     )
-    setup_logging("aw-qt", testing=testing, verbose=testing, log_file=True)
 
     _manager = Manager(testing=testing)
     _manager.autostart(_autostart_modules)
