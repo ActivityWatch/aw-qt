@@ -7,8 +7,8 @@ from collections import defaultdict
 from typing import Any, DefaultDict, List, Optional, Dict
 import webbrowser
 
-from PyQt5 import QtCore
-from PyQt5.QtWidgets import (
+from PyQt6 import QtCore
+from PyQt6.QtWidgets import (
     QApplication,
     QSystemTrayIcon,
     QMessageBox,
@@ -16,7 +16,7 @@ from PyQt5.QtWidgets import (
     QWidget,
     QPushButton,
 )
-from PyQt5.QtGui import QIcon
+from PyQt6.QtGui import QIcon
 
 import aw_core
 

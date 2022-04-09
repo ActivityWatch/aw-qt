@@ -15,13 +15,13 @@ aw-qt = "aw_qt:main"
 [tool.poetry.dependencies]
 python = "^3.7"
 aw-core = "^0.5"
-PyQt5 = "5.15.6"
+PyQt6 = "^6.1"
 pyobjc-framework-Cocoa = { version = "*", platform = "darwin" }
 click = "^7.1.2"
 
 [tool.poetry.dev-dependencies]
 mypy = "*"
-PyQt5-stubs = "~5.14"  # 5.15 now released yet
+#PyQt6-stubs = "*"
 flake8 = "*"
 pyinstaller = "*"
 types-click = "*"
