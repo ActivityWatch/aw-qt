@@ -91,15 +91,18 @@ def _discover_modules_system() -> List["Module"]:
     modules: List["Module"] = []
     paths = [p for p in search_paths if os.path.isdir(p)]
     for path in paths:
-        for basename in os.listdir(path):
-            if not basename.startswith("aw-"):
-                continue
-            if not is_executable(os.path.join(path, basename), basename):
-                continue
-            name = _filename_to_name(basename)
-            # Only pick the first match (to respect PATH priority)
-            if name not in [m.name for m in modules]:
-                modules.append(Module(name, Path(path) / basename, "system"))
+        try:
+            for basename in os.listdir(path):
+                if not basename.startswith("aw-"):
+                    continue
+                if not is_executable(os.path.join(path, basename), basename):
+                    continue
+                name = _filename_to_name(basename)
+                # Only pick the first match (to respect PATH priority)
+                if name not in [m.name for m in modules]:
+                    modules.append(Module(name, Path(path) / basename, "system"))
+        except OSError:
+            pass
 
     logger.info("Found system modules:")
     _log_modules(modules)
