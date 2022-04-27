@@ -25,7 +25,7 @@ precommit:
 	make test-integration
 
 package:
-	pyinstaller --clean --noconfirm --windowed aw-qt.spec
+	pyinstaller --clean --noconfirm aw-qt.spec
 
 clean:
 	rm -rf build dist
