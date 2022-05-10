@@ -13,21 +13,25 @@ packages = [
 aw-qt = "aw_qt:main"
 
 [tool.poetry.dependencies]
-python = "^3.7"
+python = "^3.8"
 aw-core = "^0.5"
 PyQt5 = "5.15.6"
 pyobjc-framework-Cocoa = { version = "*", platform = "darwin" }
-click = "^7.1.2"
+click = "*"
+
+# For some reason, importlib-metadata is being uninstalled in the bundle repo CI
+# (despite needed by flask in aw-server for Python <3.10)
+importlib-metadata = {version = "*", python = "<3.10"}
 
 [tool.poetry.dev-dependencies]
 mypy = "*"
-PyQt5-stubs = "~5.14"  # 5.15 now released yet
+PyQt5-stubs = "~5.14"  # 5.15 not released yet
 flake8 = "*"
 pyinstaller = "*"
 types-click = "*"
 
 [tool.mypy]
-python_version = 3.7
+python_version = 3.8
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
