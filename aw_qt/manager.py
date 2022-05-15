@@ -91,7 +91,13 @@ def _discover_modules_system() -> List["Module"]:
     modules: List["Module"] = []
     paths = [p for p in search_paths if os.path.isdir(p)]
     for path in paths:
-        for basename in os.listdir(path):
+        try:
+            ls = os.listdir(path)
+        except PermissionError:
+            logger.warning(f"PermissionError while listing {path}, skipping")
+            continue
+
+        for basename in ls:
             if not basename.startswith("aw-"):
                 continue
             if not is_executable(os.path.join(path, basename), basename):
