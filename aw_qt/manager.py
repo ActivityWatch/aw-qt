@@ -141,7 +141,13 @@ class Module:
         # Create a process group, become its leader
         # TODO: This shouldn't go here
         if sys.platform != "win32":
-            os.setpgrp()
+            # Running setpgrp when the python process is a session leader fails,
+            # such as in a systemd service. See:
+            # https://stackoverflow.com/a/51005084/1014208
+            try:
+                os.setpgrp()
+            except PermissionError:
+                pass
 
         exec_cmd = [str(self.path)]
         if testing:
