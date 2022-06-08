@@ -1,6 +1,6 @@
 # -*- mode: python -*-
 
-# .spec files can be tricky, so here are som useful resources:
+# .spec files can be tricky, so here are some useful resources:
 #
 #  - https://pythonhosted.org/PyInstaller/spec-files.html
 #  - https://shanetully.com/2013/08/cross-platform-deployment-of-python-applications-with-pyinstaller/
