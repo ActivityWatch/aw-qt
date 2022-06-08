@@ -63,10 +63,10 @@ def _filename_to_name(filename: str) -> str:
 
 
 def _discover_modules_bundled() -> List["Module"]:
-    """Use ``_discover_modules_in_directory`` to find all bundled modules """
+    """Use ``_discover_modules_in_directory`` to find all bundled modules"""
     search_paths = [_module_dir, _parent_dir]
     if platform.system() == "Darwin":
-        macos_dir = os.path.abspath(os.path.join(_parent_dir, os.pardir, 'MacOS'))
+        macos_dir = os.path.abspath(os.path.join(_parent_dir, os.pardir, "MacOS"))
         search_paths.append(macos_dir)
     logger.info("Searching for bundled modules in: {}".format(search_paths))
 
