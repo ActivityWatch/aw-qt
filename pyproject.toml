@@ -13,7 +13,7 @@ packages = [
 aw-qt = "aw_qt:main"
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = "^3.8,<3.11"
 aw-core = "^0.5"
 PyQt5 = "5.15.6"
 pyobjc-framework-Cocoa = { version = "*", platform = "darwin" }
@@ -27,7 +27,7 @@ importlib-metadata = {version = "*", python = "<3.10"}
 mypy = "*"
 PyQt5-stubs = "~5.14"  # 5.15 not released yet
 flake8 = "*"
-pyinstaller = "*"
+pyinstaller = ">=5.1"
 types-click = "*"
 
 [tool.mypy]
