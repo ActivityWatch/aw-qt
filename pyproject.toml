@@ -23,6 +23,9 @@ click = "*"
 # (despite needed by flask in aw-server for Python <3.10)
 importlib-metadata = {version = "*", python = "<3.10"}
 
+# provides pkg_resources, needed for pyinstaller for some reason
+setuptools = "^63.1.0"
+
 [tool.poetry.dev-dependencies]
 mypy = "*"
 PyQt5-stubs = "~5.14"  # 5.15 not released yet
