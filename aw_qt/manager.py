@@ -20,8 +20,8 @@ _parent_dir = os.path.abspath(os.path.join(_module_dir, os.pardir))
 
 
 def _log_modules(modules: List["Module"]) -> None:
-    for module in modules:
-        logger.info(" - {} at {}".format(module.name, module.path))
+    for m in modules:
+        logger.info(f" - {m.name} at {m.path}")
 
 
 def is_executable(path: str, filename: str) -> bool:
@@ -53,7 +53,7 @@ def _discover_modules_in_directory(path: str) -> List["Module"]:
             modules.extend(_discover_modules_in_directory(path))
         else:
             logger.warning(
-                "Found matching file but was not executable: {}".format(path)
+                f"Found matching file but was not executable: {path}"
             )
     return modules
 
@@ -68,7 +68,7 @@ def _discover_modules_bundled() -> List["Module"]:
     if platform.system() == "Darwin":
         macos_dir = os.path.abspath(os.path.join(_parent_dir, os.pardir, "MacOS"))
         search_paths.append(macos_dir)
-    logger.info("Searching for bundled modules in: {}".format(search_paths))
+    logger.info(f"Searching for bundled modules in: {search_paths}")
 
     modules: List[Module] = []
     for path in search_paths:
@@ -87,7 +87,7 @@ def _discover_modules_system() -> List["Module"]:
     if _parent_dir in search_paths:
         search_paths.remove(_parent_dir)
 
-    logger.debug("Searching for system modules in PATH: {}".format(search_paths))
+    logger.debug(f"Searching for system modules in PATH: {search_paths}")
     modules: List["Module"] = []
     paths = [p for p in search_paths if os.path.isdir(p)]
     for path in paths:
@@ -133,21 +133,10 @@ class Module:
         return hash(self) == hash(other)
 
     def __repr__(self) -> str:
-        return "<Module {} at {}>".format(self.name, self.path)
+        return f"<Module {self.name} at {self.path}>"
 
     def start(self, testing: bool) -> None:
-        logger.info("Starting module {}".format(self.name))
-
-        # Create a process group, become its leader
-        # TODO: This shouldn't go here
-        if sys.platform != "win32":
-            # Running setpgrp when the python process is a session leader fails,
-            # such as in a systemd service. See:
-            # https://stackoverflow.com/a/51005084/1014208
-            try:
-                os.setpgrp()
-            except PermissionError:
-                pass
+        logger.info(f"Starting module {self.name}")
 
         exec_cmd = [str(self.path)]
         if testing:
@@ -180,23 +169,21 @@ class Module:
         # TODO: What if a module doesn't stop? Add timeout to p.wait() and then do a p.kill() if timeout is hit
         if not self.started:
             logger.warning(
-                "Tried to stop module {}, but it hasn't been started".format(self.name)
+                f"Tried to stop module {self.name}, but it hasn't been started"
             )
             return
         elif not self.is_alive():
-            logger.warning(
-                "Tried to stop module {}, but it wasn't running".format(self.name)
-            )
+            logger.warning(f"Tried to stop module {self.name}, but it wasn't running")
         else:
             if not self._process:
                 logger.error("No reference to process object")
-            logger.debug("Stopping module {}".format(self.name))
+            logger.debug(f"Stopping module {self.name}")
             if self._process:
                 self._process.terminate()
-            logger.debug("Waiting for module {} to shut down".format(self.name))
+            logger.debug(f"Waiting for module {self.name} to shut down")
             if self._process:
                 self._process.wait()
-            logger.info("Stopped module {}".format(self.name))
+            logger.info(f"Stopped module {self.name}")
 
         assert not self.is_alive()
         self._last_process = self._process
@@ -270,7 +257,7 @@ class Manager:
             system[0].start(self.testing)
         else:
             logger.error(
-                "Manager tried to start nonexistent module {}".format(module_name)
+                f"Manager tried to start nonexistent module {module_name}"
             )
 
     def autostart(self, autostart_modules: List[str]) -> None:

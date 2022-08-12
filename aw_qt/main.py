@@ -1,3 +1,4 @@
+import os
 import sys
 import logging
 import subprocess
@@ -33,6 +34,17 @@ def main(testing: bool, autostart_modules: Optional[str]) -> None:
     # Since the .app can crash when started from Finder for unknown reasons, we send a syslog message here to make debugging easier.
     if platform.system() == "Darwin":
         subprocess.call("syslog -s 'aw-qt successfully started logging'", shell=True)
+
+    # Create a process group, become its leader
+    # TODO: This shouldn't go here
+    if sys.platform != "win32":
+        # Running setpgrp when the python process is a session leader fails,
+        # such as in a systemd service. See:
+        # https://stackoverflow.com/a/51005084/1014208
+        try:
+            os.setpgrp()
+        except PermissionError:
+            pass
 
     config = AwQtSettings(testing=testing)
     _autostart_modules = (

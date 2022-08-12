@@ -86,7 +86,7 @@ class TrayIcon(QSystemTrayIcon):
         self.manager = manager
         self.testing = testing
 
-        self.root_url = "http://localhost:{port}".format(port=5666 if self.testing else 5600)
+        self.root_url = f"http://localhost:{5666 if self.testing else 5600}"
         self.activated.connect(self.on_activated)
 
         self._build_rootmenu()
@@ -133,7 +133,7 @@ class TrayIcon(QSystemTrayIcon):
         def show_module_failed_dialog(module: Module) -> None:
             box = QMessageBox(self._parent)
             box.setIcon(QMessageBox.Warning)
-            box.setText("Module {} quit unexpectedly".format(module.name))
+            box.setText(f"Module {module.name} quit unexpectedly")
             box.setDetailedText(module.read_log(self.testing))
 
             restart_button = QPushButton("Restart", box)
