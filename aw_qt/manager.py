@@ -6,7 +6,7 @@ import platform
 from pathlib import Path
 from glob import glob
 from time import sleep
-from typing import Optional, List, Hashable
+from typing import Optional, List, Hashable, Set, Iterable
 
 import aw_core
 
@@ -21,7 +21,16 @@ _parent_dir = os.path.abspath(os.path.join(_module_dir, os.pardir))
 
 def _log_modules(modules: List["Module"]) -> None:
     for m in modules:
-        logger.info(f" - {m.name} at {m.path}")
+        logger.debug(f" - {m.name} at {m.path}")
+
+
+ignored_filenames = ["aw-cli", "aw-client", "aw-qt", "aw-qt.desktop", "aw-qt.spec"]
+
+
+def filter_modules(modules: Iterable["Module"]) -> Set["Module"]:
+    # Remove things matching the pattern which is not a module
+    # Like aw-qt itself, or aw-cli
+    return {m for m in modules if m.name not in ignored_filenames}
 
 
 def is_executable(path: str, filename: str) -> bool:
@@ -52,9 +61,7 @@ def _discover_modules_in_directory(path: str) -> List["Module"]:
         elif os.path.isdir(path) and os.access(path, os.X_OK):
             modules.extend(_discover_modules_in_directory(path))
         else:
-            logger.warning(
-                f"Found matching file but was not executable: {path}"
-            )
+            logger.warning(f"Found matching file but was not executable: {path}")
     return modules
 
 
@@ -68,13 +75,14 @@ def _discover_modules_bundled() -> List["Module"]:
     if platform.system() == "Darwin":
         macos_dir = os.path.abspath(os.path.join(_parent_dir, os.pardir, "MacOS"))
         search_paths.append(macos_dir)
-    logger.info(f"Searching for bundled modules in: {search_paths}")
+    # logger.debug(f"Searching for bundled modules in: {search_paths}")
 
     modules: List[Module] = []
     for path in search_paths:
         modules += _discover_modules_in_directory(path)
 
-    logger.info("Found bundled modules:")
+    modules = list(filter_modules(modules))
+    logger.info(f"Found {len(modules)} bundled modules")
     _log_modules(modules)
     return modules
 
@@ -87,7 +95,7 @@ def _discover_modules_system() -> List["Module"]:
     if _parent_dir in search_paths:
         search_paths.remove(_parent_dir)
 
-    logger.debug(f"Searching for system modules in PATH: {search_paths}")
+    # logger.debug(f"Searching for system modules in PATH: {search_paths}")
     modules: List["Module"] = []
     paths = [p for p in search_paths if os.path.isdir(p)]
     for path in paths:
@@ -107,7 +115,8 @@ def _discover_modules_system() -> List["Module"]:
             if name not in [m.name for m in modules]:
                 modules.append(Module(name, Path(path) / basename, "system"))
 
-    logger.info("Found system modules:")
+    modules = list(filter_modules(modules))
+    logger.info(f"Found {len(modules)} system modules")
     _log_modules(modules)
     return modules
 
@@ -231,15 +240,12 @@ class Manager:
 
     def discover_modules(self) -> None:
         # These should always be bundled with aw-qt
-        found_modules = set(_discover_modules_bundled())
-        found_modules |= set(_discover_modules_system())
-        found_modules = {
-            m
-            for m in found_modules
-            if m.name not in ["aw-qt", "aw-qt.desktop", "aw-client"]
-        }  # Exclude self
+        modules = set(_discover_modules_bundled())
+        modules |= set(_discover_modules_system())
+        modules = filter_modules(modules)
 
-        for m in found_modules:
+        # update one by one
+        for m in modules:
             if m not in self.modules:
                 self.modules.append(m)
 
@@ -256,9 +262,7 @@ class Manager:
         elif system:
             system[0].start(self.testing)
         else:
-            logger.error(
-                f"Manager tried to start nonexistent module {module_name}"
-            )
+            logger.error(f"Manager tried to start nonexistent module {module_name}")
 
     def autostart(self, autostart_modules: List[str]) -> None:
         # NOTE: Currently impossible to autostart a system module if a bundled module with the same name exists
@@ -281,15 +285,47 @@ class Manager:
         for name in autostart_modules:
             self.start(name)
 
+    def stop(self, module_name: str) -> None:
+        for m in self.modules:
+            if m.name == module_name:
+                m.stop()
+                break
+        else:
+            logger.error(f"Manager tried to stop nonexistent module {module_name}")
+
     def stop_all(self) -> None:
         for module in filter(lambda m: m.is_alive(), self.modules):
             module.stop()
 
+    def print_status(self, module_name: Optional[str] = None) -> None:
+        header = "name                status      type"
+        if module_name:
+            # find module
+            module = next((m for m in self.modules if m.name == module_name), None)
+            if module:
+                logger.info(header)
+                self._print_status_module(module)
+            else:
+                logger.error(f"Module {module_name} not found")
+        else:
+            logger.info(header)
+            for module in self.modules:
+                self._print_status_module(module)
 
-if __name__ == "__main__":
+    def _print_status_module(self, module: Module) -> None:
+        logger.info(
+            f"{module.name:18}  {'running' if module.is_alive() else 'stopped' :10}  {module.type}"
+        )
+
+
+def main_test():
     manager = Manager()
     for module in manager.modules:
         module.start(testing=True)
         sleep(2)
         assert module.is_alive()
         module.stop()
+
+
+if __name__ == "__main__":
+    main_test()

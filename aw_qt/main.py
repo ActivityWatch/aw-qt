@@ -3,13 +3,12 @@ import sys
 import logging
 import subprocess
 import platform
-import click
 from typing import Optional
 
+import click
 from aw_core.log import setup_logging
 
 from .manager import Manager
-from . import trayicon
 from .config import AwQtSettings
 
 logger = logging.getLogger(__name__)
@@ -19,16 +18,35 @@ logger = logging.getLogger(__name__)
 @click.option(
     "--testing", is_flag=True, help="Run the trayicon and services in testing mode"
 )
+@click.option("-v", "--verbose", is_flag=True, help="Run with debug logging")
 @click.option(
     "--autostart-modules",
     help="A comma-separated list of modules to autostart, or just `none` to not autostart anything.",
 )
-def main(testing: bool, autostart_modules: Optional[str]) -> None:
+@click.option(
+    "--no-gui",
+    is_flag=True,
+    help="Start aw-qt without a graphical user interface (terminal output only)",
+)
+@click.option(
+    "-i",
+    "--interactive",
+    "interactive_cli",
+    is_flag=True,
+    help="Start aw-qt in interactive cli mode (forces --no-gui)",
+)
+def main(
+    testing: bool,
+    verbose: bool,
+    autostart_modules: Optional[str],
+    no_gui: bool,
+    interactive_cli: bool,
+) -> None:
     # Since the .app can crash when started from Finder for unknown reasons, we send a syslog message here to make debugging easier.
     if platform.system() == "Darwin":
         subprocess.call("syslog -s 'aw-qt started'", shell=True)
 
-    setup_logging("aw-qt", testing=testing, verbose=testing, log_file=True)
+    setup_logging("aw-qt", testing=testing, verbose=verbose, log_file=True)
     logger.info("Started aw-qt...")
 
     # Since the .app can crash when started from Finder for unknown reasons, we send a syslog message here to make debugging easier.
@@ -53,10 +71,55 @@ def main(testing: bool, autostart_modules: Optional[str]) -> None:
         else config.autostart_modules
     )
 
-    _manager = Manager(testing=testing)
-    _manager.autostart(_autostart_modules)
+    manager = Manager(testing=testing)
+    manager.autostart(_autostart_modules)
 
-    error_code = trayicon.run(_manager, testing=testing)
-    _manager.stop_all()
+    if not no_gui and not interactive_cli:
+        from . import trayicon  # pylint: disable=import-outside-toplevel
+
+        # run the trayicon, wait for signal to quit
+        error_code = trayicon.run(manager, testing=testing)
+    elif interactive_cli:
+        # just an experiment, don't really see the use right now
+        _interactive_cli(manager)
+        error_code = 0
+    else:
+        # wait for signals
+        import signal  # pylint: disable=import-outside-toplevel
+
+        signal.pause()
+        error_code = 0
+
+    manager.stop_all()
 
     sys.exit(error_code)
+
+
+def _interactive_cli(manager: Manager) -> None:
+    while True:
+        answer = input("> ")
+        if answer == "q":
+            break
+
+        tokens = answer.split(" ")
+        t = tokens[0]
+        if t == "start":
+            if len(tokens) == 2:
+                manager.start(tokens[1])
+            else:
+                print("Usage: start <module>")
+        elif t == "stop":
+            if len(tokens) == 2:
+                manager.stop(tokens[1])
+            else:
+                print("Usage: stop <module>")
+        elif t in ["s", "status"]:
+            if len(tokens) == 1:
+                manager.print_status()
+            elif len(tokens) == 2:
+                manager.print_status(tokens[1])
+        elif not t.strip():
+            # if t was empty string, or just whitespace, pretend like we didn't see that
+            continue
+        else:
+            print(f"Unknown command: {t}")
