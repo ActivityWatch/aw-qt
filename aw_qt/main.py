@@ -3,7 +3,9 @@ import sys
 import logging
 import subprocess
 import platform
+import signal
 from typing import Optional
+from time import sleep
 
 import click
 from aw_core.log import setup_logging
@@ -84,14 +86,19 @@ def main(
         _interactive_cli(manager)
         error_code = 0
     else:
-        # wait for signals
-        import signal  # pylint: disable=import-outside-toplevel
+        # wait for signal to quit
+        if sys.platform == "win32":
+            # Windows doesn't support signals, so we just wait for the app to quit
+            try:
+                sleep(1000 * 24 * 60 * 60)  # Sleep for 1000 days, or until interrupted
+            except KeyboardInterrupt:
+                pass
+        else:
+            signal.pause()
 
-        signal.pause()
         error_code = 0
 
     manager.stop_all()
-
     sys.exit(error_code)
 
 
