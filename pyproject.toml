@@ -15,7 +15,7 @@ aw-qt = "aw_qt:main"
 [tool.poetry.dependencies]
 python = "^3.8,<3.11"
 aw-core = "^0.5"
-PyQt5 = "5.15.6"
+PyQt6 = "6.3.1"
 pyobjc-framework-Cocoa = { version = "*", platform = "darwin" }
 click = "*"
 

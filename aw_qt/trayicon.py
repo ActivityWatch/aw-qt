@@ -6,8 +6,8 @@ import subprocess
 from typing import Any, Optional, Dict
 import webbrowser
 
-from PyQt5 import QtCore
-from PyQt5.QtWidgets import (
+from PyQt6 import QtCore
+from PyQt6.QtWidgets import (
     QApplication,
     QSystemTrayIcon,
     QMessageBox,
@@ -15,7 +15,7 @@ from PyQt5.QtWidgets import (
     QWidget,
     QPushButton,
 )
-from PyQt5.QtGui import QIcon
+from PyQt6.QtGui import QIcon
 
 import aw_core
 
@@ -92,7 +92,7 @@ class TrayIcon(QSystemTrayIcon):
         self._build_rootmenu()
 
     def on_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
-        if reason == QSystemTrayIcon.DoubleClick:
+        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
             open_webui(self.root_url)
 
     def _build_rootmenu(self) -> None:
@@ -212,10 +212,6 @@ def run(manager: Manager, testing: bool = False) -> Any:
     # Ensure cleanup happens on SIGTERM
     signal.signal(signal.SIGTERM, lambda *args: exit(manager))
 
-    # Allow pixmaps (e.g. trayicon) to use higher DPI images to make icons less
-    # blurry when fractional scaling is used
-    app.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps)
-
     timer = QtCore.QTimer()
     timer.start(100)  # You may change this if you wish.
     timer.timeout.connect(lambda: None)  # Let the interpreter run each 500 ms.
@@ -243,4 +239,4 @@ def run(manager: Manager, testing: bool = False) -> Any:
 
     logger.info("Initialized aw-qt and trayicon successfully")
     # Run the application, blocks until quit
-    return app.exec_()
+    return app.exec()
