@@ -15,7 +15,7 @@ aw-qt = "aw_qt:main"
 [tool.poetry.dependencies]
 python = "^3.8,<3.11"
 aw-core = "^0.5"
-PyQt5 = "5.15.6"
+PyQt6 = "6.3.1"
 pyobjc-framework-Cocoa = { version = "*", platform = "darwin" }
 click = "*"
 
@@ -28,7 +28,7 @@ setuptools = "*"
 
 [tool.poetry.dev-dependencies]
 mypy = "*"
-PyQt5-stubs = "~5.14"  # 5.15 not released yet
+PyQt6-stubs = { git = "https://github.com/TilmanK/PyQt6-stubs", rev = "main" }
 flake8 = "*"
 pyinstaller = ">=5.1"
 types-click = "*"

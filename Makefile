@@ -2,7 +2,6 @@
 
 build:
 	poetry install
-	make aw_qt/resources.py
 
 install:
 	bash scripts/config-autostart.sh
@@ -31,5 +30,5 @@ clean:
 	rm -rf build dist
 	rm -rf __pycache__ aw_qt/__pycache__
 
-aw_qt/resources.py: aw_qt/resources.qrc
-	poetry run pyrcc5 -o aw_qt/resources.py aw_qt/resources.qrc
+#aw_qt/resources.py: aw_qt/resources.qrc
+#	poetry run pyrcc5 -o aw_qt/resources.py aw_qt/resources.qrc
