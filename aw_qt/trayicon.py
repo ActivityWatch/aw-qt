@@ -132,14 +132,14 @@ class TrayIcon(QSystemTrayIcon):
 
         def show_module_failed_dialog(module: Module) -> None:
             box = QMessageBox(self._parent)
-            box.setIcon(QMessageBox.Warning)
+            box.setIcon(QMessageBox.Icon.Warning)
             box.setText(f"Module {module.name} quit unexpectedly")
             box.setDetailedText(module.read_log(self.testing))
 
             restart_button = QPushButton("Restart", box)
             restart_button.clicked.connect(module.start)
-            box.addButton(restart_button, QMessageBox.AcceptRole)
-            box.setStandardButtons(QMessageBox.Cancel)
+            box.addButton(restart_button, QMessageBox.ButtonRole.AcceptRole)
+            box.setStandardButtons(QMessageBox.StandardButton.Cancel)
 
             box.show()
 
@@ -207,6 +207,10 @@ def run(manager: Manager, testing: bool = False) -> Any:
 
     app = QApplication(sys.argv)
 
+    # TODO: Set icon path correctly
+    QtCore.QDir.addSearchPath("icons", "media/logo/")
+    # QtCore.QDir.addSearchPath("icons", "../media/logo/")
+
     # Without this, Ctrl+C will have no effect
     signal.signal(signal.SIGINT, lambda *args: exit(manager))
     # Ensure cleanup happens on SIGTERM
@@ -216,21 +220,23 @@ def run(manager: Manager, testing: bool = False) -> Any:
     timer.start(100)  # You may change this if you wish.
     timer.timeout.connect(lambda: None)  # Let the interpreter run each 500 ms.
 
+    # root widget
+    widget = QWidget()
+
     if not QSystemTrayIcon.isSystemTrayAvailable():
         QMessageBox.critical(
-            None,
+            widget,
             "Systray",
             "I couldn't detect any system tray on this system. Either get one or run the ActivityWatch modules from the console.",
         )
         sys.exit(1)
 
-    widget = QWidget()
     if sys.platform == "darwin":
-        icon = QIcon(":/black-monochrome-logo.png")
+        icon = QIcon("icons:black-monochrome-logo.png")
         # Allow macOS to use filters for changing the icon's color
         icon.setIsMask(True)
     else:
-        icon = QIcon(":/logo.png")
+        icon = QIcon("icons:logo.png")
 
     trayIcon = TrayIcon(manager, icon, widget, testing=testing)
     trayIcon.show()

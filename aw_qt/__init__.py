@@ -1,3 +1,3 @@
-from . import resources
+#from . import resources
 
 from .main import main
