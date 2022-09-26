@@ -3,8 +3,9 @@ import logging
 import signal
 import os
 import subprocess
-from typing import Any, Optional, Dict
 import webbrowser
+from typing import Any, Optional, Dict
+from pathlib import Path
 
 from PyQt6 import QtCore
 from PyQt6.QtWidgets import (
@@ -207,9 +208,24 @@ def run(manager: Manager, testing: bool = False) -> Any:
 
     app = QApplication(sys.argv)
 
-    # TODO: Set icon path correctly
-    QtCore.QDir.addSearchPath("icons", "media/logo/")
-    # QtCore.QDir.addSearchPath("icons", "../media/logo/")
+    # This is needed for the icons to get picked up with PyInstaller
+    scriptdir = Path(__file__).parent
+
+    # When run from source:
+    #   __file__ is aw_qt/trayicon.py
+    #   scriptdir is ./aw_qt
+    #   logodir is ./media/logo
+    QtCore.QDir.addSearchPath("icons", str(scriptdir.parent / "media/logo/"))
+
+    # When run from .app:
+    #   __file__ is ./Contents/MacOS/aw-qt
+    #   scriptdir is ./Contents/MacOS
+    #   logodir is ./Contents/Resources/aw_qt/media/logo
+    QtCore.QDir.addSearchPath(
+        "icons", str(scriptdir.parent.parent / "Resources/aw_qt/media/logo/")
+    )
+
+    # logger.info(f"search paths: {QtCore.QDir.searchPaths('icons')}")
 
     # Without this, Ctrl+C will have no effect
     signal.signal(signal.SIGINT, lambda *args: exit(manager))
