@@ -96,6 +96,11 @@ class TrayIcon(QSystemTrayIcon):
         if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
             open_webui(self.root_url)
 
+    def _open_webui(self) -> None: 
+        for module in self.manager.modules_system + self.manager.modules_bundled: 
+            if "server" in module.name and module.is_alive(): 
+                open_webui(self.root_url)
+
     def _build_rootmenu(self) -> None:
         menu = QMenu(self._parent)
 
