@@ -26,11 +26,13 @@ jobs:
     - name: Install APT dependencies
       if: runner.os == 'Linux'
       run: |
-        sudo apt-get install -y qt5-default libfontconfig1
+        # libxcb-cursor0 needed since Qt 6.5
+        # https://stackoverflow.com/a/75941575/965332
+        sudo apt-get install -y qt5-default libfontconfig1 libxcb-cursor0
     - name: Install dependencies
       shell: bash
       run: |
-        pip install poetry==1.3.2
+        pip install poetry
         python -m venv venv
         source venv/bin/activate || source venv/Scripts/activate
         poetry install
