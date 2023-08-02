@@ -13,9 +13,9 @@ packages = [
 aw-qt = "aw_qt:main"
 
 [tool.poetry.dependencies]
-python = "^3.8,<3.11"
+python = "^3.8,<3.13"
 aw-core = "^0.5"
-PyQt6 = "6.3.1"
+
 pyobjc-framework-Cocoa = { version = "*", platform = "darwin" }
 click = "*"
 
@@ -25,6 +25,9 @@ importlib-metadata = {version = "*", python = "<3.10"}
 
 # provides pkg_resources, needed for pyinstaller for some reason
 setuptools = "*"
+
+[tool.poetry.group.pyqt.dependencies]
+PyQt6 = "6.3.1"
 
 [tool.poetry.dev-dependencies]
 mypy = "*"
