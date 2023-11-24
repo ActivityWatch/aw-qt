@@ -27,7 +27,9 @@ importlib-metadata = {version = "*", python = "<3.10"}
 setuptools = "*"
 
 [tool.poetry.group.pyqt.dependencies]
-PyQt6 = "6.3.1"
+# keep these in sync
+PyQt6 = "6.5.3"
+PyQt6-Qt6 = "6.5.3"
 
 [tool.poetry.dev-dependencies]
 mypy = "*"
