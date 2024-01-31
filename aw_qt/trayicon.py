@@ -1,24 +1,23 @@
-import sys
 import logging
-import signal
 import os
+import signal
 import subprocess
+import sys
 import webbrowser
-from typing import Any, Optional, Dict
 from pathlib import Path
-
-from PyQt6 import QtCore
-from PyQt6.QtWidgets import (
-    QApplication,
-    QSystemTrayIcon,
-    QMessageBox,
-    QMenu,
-    QWidget,
-    QPushButton,
-)
-from PyQt6.QtGui import QIcon
+from typing import Any, Dict, Optional
 
 import aw_core
+from PyQt6 import QtCore
+from PyQt6.QtGui import QIcon
+from PyQt6.QtWidgets import (
+    QApplication,
+    QMenu,
+    QMessageBox,
+    QPushButton,
+    QSystemTrayIcon,
+    QWidget,
+)
 
 from .manager import Manager, Module
 
@@ -115,6 +114,9 @@ class TrayIcon(QSystemTrayIcon):
         menu.addSeparator()
         menu.addAction(
             "Open log folder", lambda: open_dir(aw_core.dirs.get_log_dir(None))
+        )
+        menu.addAction(
+            "Open config folder", lambda: open_dir(aw_core.dirs.get_config_dir(None))
         )
         menu.addSeparator()
 
