@@ -35,7 +35,7 @@ PyQt6-Qt6 = "6.5.3"
 mypy = "*"
 PyQt6-stubs = { git = "https://github.com/TilmanK/PyQt6-stubs", rev = "main" }
 flake8 = "*"
-pyinstaller = ">=5.1"
+pyinstaller = ">=6.6"
 types-click = "*"
 
 [tool.mypy]
