@@ -38,7 +38,11 @@ def is_executable(path: str, filename: str) -> bool:
         return False
     # On windows all files ending with .exe are executables
     if platform.system() == "Windows":
-        return filename.endswith(".exe")
+        return (
+            filename.endswith(".exe")
+            or filename.endswith(".bat")
+            or filename.endswith(".cmd")
+        )
     # On Unix platforms all files having executable permissions are executables
     # We do not however want to include .desktop files
     else:  # Assumes Unix
