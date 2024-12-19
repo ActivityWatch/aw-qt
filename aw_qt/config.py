@@ -5,10 +5,10 @@ from aw_core.config import load_config_toml
 
 default_config = """
 [aw-qt]
-autostart_modules = ["aw-server", "aw-watcher-afk", "aw-watcher-window"]
+autostart_modules = ["aw-server-rust", "aw-watcher-afk", "aw-watcher-window"]
 
 [aw-qt-testing]
-autostart_modules = ["aw-server", "aw-watcher-afk", "aw-watcher-window"]
+autostart_modules = ["aw-server-rust", "aw-watcher-afk", "aw-watcher-window"]
 """.strip()
 
 
