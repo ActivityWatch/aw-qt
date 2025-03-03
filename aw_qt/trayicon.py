@@ -169,6 +169,9 @@ class TrayIcon(QSystemTrayIcon):
             # TODO: Do it in a better way, singleShot isn't pretty...
             QtCore.QTimer.singleShot(2000, rebuild_modules_menu)
 
+            # TODO: Do it in a better way, singleShot isn't pretty...
+            QtCore.QTimer.singleShot(1000*60*5, check_module_status)
+
         QtCore.QTimer.singleShot(2000, check_module_status)
 
     def _build_modulemenu(self, moduleMenu: QMenu) -> None:
