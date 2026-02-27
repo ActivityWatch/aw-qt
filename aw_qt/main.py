@@ -36,7 +36,7 @@ def _acquire_single_instance_lock(testing: bool) -> QLockFile:
 
     if not lock.tryLock(100):
         if lock.error() == QLockFile.LockError.LockFailedError:
-            pid, _hostname, _appname = lock.getLockInfo()
+            _ok, pid, _hostname, _appname = lock.getLockInfo()
             msg = f"Another instance of aw-qt is already running (PID {pid}). Exiting."
         else:
             msg = f"Failed to acquire instance lock ({lock.error()}). Exiting."
