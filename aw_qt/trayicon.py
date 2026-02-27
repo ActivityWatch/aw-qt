@@ -242,20 +242,20 @@ def run(manager: Manager, testing: bool = False) -> Any:
     # root widget
     widget = QWidget()
 
-    # Wait for system tray to become available (up to 30 s).
+    # Wait for system tray to become available (up to 10 s).
     # On some desktop environments (e.g. KDE Plasma), autostart programs
     # launch before the panel/system tray is loaded.  Qt docs note that
     # "if the system tray is currently unavailable but becomes available
     # later, QSystemTrayIcon will automatically add an entry."
     # See: https://github.com/ActivityWatch/aw-qt/issues/97
     if not QSystemTrayIcon.isSystemTrayAvailable():
-        logger.info("System tray not yet available, waiting up to 30 s...")
-        for i in range(30):
+        logger.info("System tray not yet available, waiting up to 10 s...")
+        for i in range(10):
             time.sleep(1)
             # Process events so Qt can detect tray availability changes
             app.processEvents()
             if QSystemTrayIcon.isSystemTrayAvailable():
-                logger.info(f"System tray became available after {i + 1} s")
+                logger.info(f"System tray became available after {i + 1}s")
                 break
         else:
             QMessageBox.critical(
