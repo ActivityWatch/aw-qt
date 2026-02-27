@@ -13,22 +13,26 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-20.04, windows-latest, macos-14]
-        python_version: [3.9]
+        os: [ubuntu-22.04, windows-latest, macos-14]
+        python_version: ['3.9']
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
       with:
         submodules: 'recursive'
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python_version }}
     - name: Install APT dependencies
       if: runner.os == 'Linux'
       run: |
-        # libxcb-cursor0 needed since Qt 6.5
-        # https://stackoverflow.com/a/75941575/965332
-        sudo apt-get install -y qt5-default libfontconfig1 libxcb-cursor0
+        # xcb libraries needed for PyQt6 on headless Linux
+        sudo apt-get update
+        sudo apt-get install -y \
+          libxcb-cursor0 libxcb-xinerama0 libxcb-icccm4 libxcb-image0 \
+          libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 \
+          libxcb-xfixes0 libxcb-xkb1 libxkbcommon-x11-0 \
+          libfontconfig1 libegl1
     - name: Install dependencies
       shell: bash
       run: |
