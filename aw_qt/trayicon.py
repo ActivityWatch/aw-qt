@@ -259,6 +259,12 @@ def run(manager: Manager, testing: bool = False) -> Any:
     trayIcon = TrayIcon(manager, icon, widget, testing=testing)
     trayIcon.show()
 
+    # Re-apply tooltip after show() to ensure it registers with the
+    # platform's system tray backend.  On Windows 11 the tooltip can
+    # appear empty when it is only set before the icon is visible.
+    # See: https://github.com/ActivityWatch/aw-qt/issues/112
+    trayIcon.setToolTip(trayIcon.toolTip())
+
     QApplication.setQuitOnLastWindowClosed(False)
 
     logger.info("Initialized aw-qt and trayicon successfully")
