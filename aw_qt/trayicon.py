@@ -3,6 +3,7 @@ import os
 import signal
 import subprocess
 import sys
+import time
 import webbrowser
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -241,13 +242,28 @@ def run(manager: Manager, testing: bool = False) -> Any:
     # root widget
     widget = QWidget()
 
+    # Wait for system tray to become available (up to 30 s).
+    # On some desktop environments (e.g. KDE Plasma), autostart programs
+    # launch before the panel/system tray is loaded.  Qt docs note that
+    # "if the system tray is currently unavailable but becomes available
+    # later, QSystemTrayIcon will automatically add an entry."
+    # See: https://github.com/ActivityWatch/aw-qt/issues/97
     if not QSystemTrayIcon.isSystemTrayAvailable():
-        QMessageBox.critical(
-            widget,
-            "Systray",
-            "I couldn't detect any system tray on this system. Either get one or run the ActivityWatch modules from the console.",
-        )
-        sys.exit(1)
+        logger.info("System tray not yet available, waiting up to 30 s...")
+        for i in range(30):
+            time.sleep(1)
+            # Process events so Qt can detect tray availability changes
+            app.processEvents()
+            if QSystemTrayIcon.isSystemTrayAvailable():
+                logger.info(f"System tray became available after {i + 1} s")
+                break
+        else:
+            QMessageBox.critical(
+                widget,
+                "Systray",
+                "I couldn't detect any system tray on this system. Either get one or run the ActivityWatch modules from the console.",
+            )
+            sys.exit(1)
 
     if sys.platform == "darwin":
         icon = QIcon("icons:black-monochrome-logo.png")
