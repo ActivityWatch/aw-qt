@@ -155,11 +155,6 @@ class TrayIcon(QSystemTrayIcon):
                     action.setChecked(alive)
                     # print(module.text(), alive)
 
-            # TODO: Do it in a better way, singleShot isn't pretty...
-            QtCore.QTimer.singleShot(2000, rebuild_modules_menu)
-
-        QtCore.QTimer.singleShot(2000, rebuild_modules_menu)
-
         def check_module_status() -> None:
             unexpected_exits = self.manager.get_unexpected_stops()
             if unexpected_exits:
@@ -167,10 +162,21 @@ class TrayIcon(QSystemTrayIcon):
                     show_module_failed_dialog(module)
                     module.stop()
 
-            # TODO: Do it in a better way, singleShot isn't pretty...
-            QtCore.QTimer.singleShot(2000, rebuild_modules_menu)
+        # Initial check since interval check will be much later
+        INITIAL_MODULE_CHECK_INTERVAL = 2000  # 2 seconds
+        QtCore.QTimer.singleShot(INITIAL_MODULE_CHECK_INTERVAL, check_module_status)
 
-        QtCore.QTimer.singleShot(2000, check_module_status)
+        REBUILD_INTERVAL = 2000  # 2 seconds
+        self.rebuild_timer = QtCore.QTimer(self)
+        self.rebuild_timer.setInterval(REBUILD_INTERVAL)
+        self.rebuild_timer.timeout.connect(rebuild_modules_menu)
+        self.rebuild_timer.start()
+
+        DEAD_MODULE_CHECK_INTERVAL = 1000 * 60 * 5  # 5 minutes
+        self.status_timer = QtCore.QTimer(self)
+        self.status_timer.setInterval(DEAD_MODULE_CHECK_INTERVAL) 
+        self.status_timer.timeout.connect(check_module_status)
+        self.status_timer.start()
 
     def _build_modulemenu(self, moduleMenu: QMenu) -> None:
         moduleMenu.clear()
