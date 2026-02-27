@@ -9,12 +9,42 @@ from typing import Optional
 from time import sleep
 
 import click
+from PyQt6.QtCore import QLockFile
 from aw_core.log import setup_logging
 
 from .manager import Manager
 from .config import AwQtSettings
 
 logger = logging.getLogger(__name__)
+
+
+def _acquire_single_instance_lock(testing: bool) -> QLockFile:
+    """Ensure only one instance of aw-qt runs at a time.
+
+    Uses QLockFile for cross-platform single-instance enforcement.
+    The returned lock must be kept alive for the duration of the process.
+    Exits with code 1 if another instance is already running.
+    """
+    import aw_core.dirs
+
+    data_dir = aw_core.dirs.get_data_dir("aw-qt")
+    suffix = "-testing" if testing else ""
+    lock_path = os.path.join(data_dir, f"aw-qt{suffix}.lock")
+
+    lock = QLockFile(lock_path)
+    lock.setStaleLockTime(0)  # Only release when the process explicitly unlocks
+
+    if not lock.tryLock(100):
+        if lock.error() == QLockFile.LockError.LockFailedError:
+            _ok, pid, _hostname, _appname = lock.getLockInfo()
+            msg = f"Another instance of aw-qt is already running (PID {pid}). Exiting."
+        else:
+            msg = f"Failed to acquire instance lock ({lock.error()}). Exiting."
+        logger.warning(msg)
+        print(msg)
+        sys.exit(1)
+
+    return lock
 
 
 @click.command("aw-qt", help="A trayicon and service manager for ActivityWatch")
@@ -55,6 +85,9 @@ def main(
     # Since the .app can crash when started from Finder for unknown reasons, we send a syslog message here to make debugging easier.
     if platform.system() == "Darwin":
         subprocess.call("syslog -s 'aw-qt successfully started logging'", shell=True)
+
+    # Prevent multiple instances from running simultaneously
+    _lock = _acquire_single_instance_lock(testing)  # noqa: F841 (must stay alive)
 
     # Create a process group, become its leader
     # TODO: This shouldn't go here
