@@ -73,6 +73,8 @@ def open_dir(d: str) -> None:
 
 
 class TrayIcon(QSystemTrayIcon):
+    MAX_AUTO_RESTARTS = 3
+
     def __init__(
         self,
         manager: Manager,
@@ -86,6 +88,7 @@ class TrayIcon(QSystemTrayIcon):
 
         self.manager = manager
         self.testing = testing
+        self._restart_counts: Dict[str, int] = {}
 
         self.root_url = f"http://localhost:{5666 if self.testing else 5600}"
         self.activated.connect(self.on_activated)
@@ -137,11 +140,24 @@ class TrayIcon(QSystemTrayIcon):
         def show_module_failed_dialog(module: Module) -> None:
             box = QMessageBox(self._parent)
             box.setIcon(QMessageBox.Icon.Warning)
-            box.setText(f"Module {module.name} quit unexpectedly")
+            box.setText(
+                f"Module {module.name} quit unexpectedly"
+                + (
+                    f" after {self.MAX_AUTO_RESTARTS} auto-restart attempts"
+                    if self._restart_counts.get(module.name, 0)
+                    >= self.MAX_AUTO_RESTARTS
+                    else ""
+                )
+            )
             box.setDetailedText(module.read_log(self.testing))
 
             restart_button = QPushButton("Restart", box)
-            restart_button.clicked.connect(module.start)
+
+            def on_manual_restart() -> None:
+                self._restart_counts.pop(module.name, None)
+                module.start(self.testing)
+
+            restart_button.clicked.connect(on_manual_restart)
             box.addButton(restart_button, QMessageBox.ButtonRole.AcceptRole)
             box.setStandardButtons(QMessageBox.StandardButton.Cancel)
 
@@ -153,31 +169,53 @@ class TrayIcon(QSystemTrayIcon):
                     module: Module = action.data()
                     alive = module.is_alive()
                     action.setChecked(alive)
-                    # print(module.text(), alive)
 
-            # TODO: Do it in a better way, singleShot isn't pretty...
             QtCore.QTimer.singleShot(2000, rebuild_modules_menu)
 
         QtCore.QTimer.singleShot(2000, rebuild_modules_menu)
 
         def check_module_status() -> None:
             unexpected_exits = self.manager.get_unexpected_stops()
-            if unexpected_exits:
-                for module in unexpected_exits:
+            for module in unexpected_exits:
+                count = self._restart_counts.get(module.name, 0)
+                if count < self.MAX_AUTO_RESTARTS:
+                    logger.info(
+                        f"Auto-restarting crashed module {module.name} "
+                        f"(attempt {count + 1}/{self.MAX_AUTO_RESTARTS})"
+                    )
+                    module.stop()  # Clean up state
+                    module.start(self.testing)
+                    self._restart_counts[module.name] = count + 1
+                    self.showMessage(
+                        "ActivityWatch",
+                        f"Module {module.name} crashed and was auto-restarted",
+                        QSystemTrayIcon.MessageIcon.Warning,
+                        5000,
+                    )
+                else:
+                    logger.warning(
+                        f"Module {module.name} exceeded max auto-restarts "
+                        f"({self.MAX_AUTO_RESTARTS})"
+                    )
                     show_module_failed_dialog(module)
                     module.stop()
 
-            # TODO: Do it in a better way, singleShot isn't pretty...
-            QtCore.QTimer.singleShot(2000, rebuild_modules_menu)
+            QtCore.QTimer.singleShot(5000, check_module_status)
 
-        QtCore.QTimer.singleShot(2000, check_module_status)
+        QtCore.QTimer.singleShot(5000, check_module_status)
 
     def _build_modulemenu(self, moduleMenu: QMenu) -> None:
         moduleMenu.clear()
 
         def add_module_menuitem(module: Module) -> None:
             title = module.name
-            ac = moduleMenu.addAction(title, lambda: module.toggle(self.testing))
+
+            def on_toggle(m: Module = module) -> None:
+                m.toggle(self.testing)
+                # Reset auto-restart count on manual toggle
+                self._restart_counts.pop(m.name, None)
+
+            ac = moduleMenu.addAction(title, on_toggle)
 
             ac.setData(module)
             ac.setCheckable(True)

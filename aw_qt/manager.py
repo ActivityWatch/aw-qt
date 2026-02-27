@@ -200,9 +200,12 @@ class Module:
         self.started = False
 
     def toggle(self, testing: bool) -> None:
-        if self.started:
+        if self.is_alive():
             self.stop()
         else:
+            if self.started:
+                # Process died unexpectedly, clean up state
+                self.stop()
             self.start(testing)
 
     def is_alive(self) -> bool:
