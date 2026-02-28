@@ -114,7 +114,7 @@ def main(
         from . import trayicon  # pylint: disable=import-outside-toplevel
 
         # run the trayicon, wait for signal to quit
-        error_code = trayicon.run(manager, testing=testing)
+        error_code = trayicon.run(manager, testing=testing, port=config.port)
     elif interactive_cli:
         # just an experiment, don't really see the use right now
         _interactive_cli(manager)

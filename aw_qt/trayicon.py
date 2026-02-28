@@ -82,6 +82,7 @@ class TrayIcon(QSystemTrayIcon):
         icon: QIcon,
         parent: Optional[QWidget] = None,
         testing: bool = False,
+        port: Optional[int] = None,
     ) -> None:
         QSystemTrayIcon.__init__(self, icon, parent)
         self._parent = parent  # QSystemTrayIcon also tries to save parent info but it screws up the type info
@@ -91,7 +92,9 @@ class TrayIcon(QSystemTrayIcon):
         self.testing = testing
         self._restart_timestamps: Dict[str, List[float]] = {}
 
-        self.root_url = f"http://localhost:{5666 if self.testing else 5600}"
+        if port is None:
+            port = 5666 if testing else 5600
+        self.root_url = f"http://localhost:{port}"
         self.activated.connect(self.on_activated)
 
         self._build_rootmenu()
@@ -263,7 +266,7 @@ def exit(manager: Manager) -> None:
     QApplication.quit()
 
 
-def run(manager: Manager, testing: bool = False) -> Any:
+def run(manager: Manager, testing: bool = False, port: Optional[int] = None) -> Any:
     logger.info("Creating trayicon...")
     # print(QIcon.themeSearchPaths())
 
@@ -330,7 +333,7 @@ def run(manager: Manager, testing: bool = False) -> Any:
     else:
         icon = QIcon("icons:logo.png")
 
-    trayIcon = TrayIcon(manager, icon, widget, testing=testing)
+    trayIcon = TrayIcon(manager, icon, widget, testing=testing, port=port)
     trayIcon.show()
 
     # Re-apply tooltip after show() to ensure it registers with the
