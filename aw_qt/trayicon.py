@@ -6,7 +6,7 @@ import sys
 import time
 import webbrowser
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import aw_core
 from PyQt6 import QtCore
@@ -74,6 +74,7 @@ def open_dir(d: str) -> None:
 
 class TrayIcon(QSystemTrayIcon):
     MAX_AUTO_RESTARTS = 3
+    RESTART_WINDOW_SECONDS = 600  # 10 minutes
 
     def __init__(
         self,
@@ -88,12 +89,29 @@ class TrayIcon(QSystemTrayIcon):
 
         self.manager = manager
         self.testing = testing
-        self._restart_counts: Dict[str, int] = {}
+        self._restart_timestamps: Dict[str, List[float]] = {}
 
         self.root_url = f"http://localhost:{5666 if self.testing else 5600}"
         self.activated.connect(self.on_activated)
 
         self._build_rootmenu()
+
+    def _recent_restart_count(self, module_name: str) -> int:
+        """Count restarts within the sliding time window."""
+        now = time.monotonic()
+        timestamps = self._restart_timestamps.get(module_name, [])
+        cutoff = now - self.RESTART_WINDOW_SECONDS
+        return sum(1 for t in timestamps if t > cutoff)
+
+    def _record_restart(self, module_name: str) -> None:
+        """Record a restart timestamp and prune old entries."""
+        now = time.monotonic()
+        cutoff = now - self.RESTART_WINDOW_SECONDS
+        timestamps = self._restart_timestamps.get(module_name, [])
+        # Prune old timestamps and add current
+        self._restart_timestamps[module_name] = [
+            t for t in timestamps if t > cutoff
+        ] + [now]
 
     def on_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
         if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
@@ -140,12 +158,13 @@ class TrayIcon(QSystemTrayIcon):
         def show_module_failed_dialog(module: Module) -> None:
             box = QMessageBox(self._parent)
             box.setIcon(QMessageBox.Icon.Warning)
+            recent = self._recent_restart_count(module.name)
             box.setText(
                 f"Module {module.name} quit unexpectedly"
                 + (
-                    f" after {self.MAX_AUTO_RESTARTS} auto-restart attempts"
-                    if self._restart_counts.get(module.name, 0)
-                    >= self.MAX_AUTO_RESTARTS
+                    f" after {recent} auto-restart attempts"
+                    f" in {self.RESTART_WINDOW_SECONDS // 60} minutes"
+                    if recent >= self.MAX_AUTO_RESTARTS
                     else ""
                 )
             )
@@ -154,7 +173,7 @@ class TrayIcon(QSystemTrayIcon):
             restart_button = QPushButton("Restart", box)
 
             def on_manual_restart() -> None:
-                self._restart_counts.pop(module.name, None)
+                self._restart_timestamps.pop(module.name, None)
                 module.start(self.testing)
 
             restart_button.clicked.connect(on_manual_restart)
@@ -177,15 +196,16 @@ class TrayIcon(QSystemTrayIcon):
         def check_module_status() -> None:
             unexpected_exits = self.manager.get_unexpected_stops()
             for module in unexpected_exits:
-                count = self._restart_counts.get(module.name, 0)
-                if count < self.MAX_AUTO_RESTARTS:
+                recent = self._recent_restart_count(module.name)
+                if recent < self.MAX_AUTO_RESTARTS:
                     logger.info(
                         f"Auto-restarting crashed module {module.name} "
-                        f"(attempt {count + 1}/{self.MAX_AUTO_RESTARTS})"
+                        f"(attempt {recent + 1}/{self.MAX_AUTO_RESTARTS}"
+                        f" in {self.RESTART_WINDOW_SECONDS // 60}min window)"
                     )
                     module.stop()  # Clean up state
                     module.start(self.testing)
-                    self._restart_counts[module.name] = count + 1
+                    self._record_restart(module.name)
                     self.showMessage(
                         "ActivityWatch",
                         f"Module {module.name} crashed and was auto-restarted",
@@ -212,8 +232,8 @@ class TrayIcon(QSystemTrayIcon):
 
             def on_toggle(m: Module = module) -> None:
                 m.toggle(self.testing)
-                # Reset auto-restart count on manual toggle
-                self._restart_counts.pop(m.name, None)
+                # Reset auto-restart timestamps on manual toggle
+                self._restart_timestamps.pop(m.name, None)
 
             ac = moduleMenu.addAction(title, on_toggle)
 
