@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Any, List
+from typing import Any, List, Optional
 
 import tomlkit
 from aw_core import dirs
@@ -17,7 +17,7 @@ autostart_modules = ["aw-server", "aw-watcher-afk", "aw-watcher-window"]
 """.strip()
 
 
-def _read_server_rust_port(testing: bool) -> int | None:
+def _read_server_rust_port(testing: bool) -> Optional[int]:
     """Read port from aw-server-rust config, returns None if not found/set."""
     config_dir = dirs.get_config_dir("aw-server-rust")
     config_file = "config-testing.toml" if testing else "config.toml"
@@ -36,7 +36,7 @@ def _read_server_rust_port(testing: bool) -> int | None:
     return None
 
 
-def _read_aw_server_port(testing: bool) -> int | None:
+def _read_aw_server_port(testing: bool) -> Optional[int]:
     """Read port from aw-server (Python) config, returns None if not found/set."""
     config_dir = dirs.get_config_dir("aw-server")
     config_path = os.path.join(config_dir, "aw-server.toml")
