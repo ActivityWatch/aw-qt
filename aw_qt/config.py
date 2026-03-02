@@ -30,7 +30,7 @@ def _read_server_rust_port(testing: bool) -> Optional[int]:
         with open(config_path) as f:
             config = tomlkit.parse(f.read())
         if "port" in config:
-            return int(config["port"])
+            return int(str(config["port"]))
     except Exception as e:
         logger.warning("Failed to read aw-server-rust config: %s", e)
     return None
@@ -50,7 +50,7 @@ def _read_aw_server_port(testing: bool) -> Optional[int]:
             config = tomlkit.parse(f.read())
         section_data = config.get(section, {})
         if "port" in section_data:
-            return int(section_data["port"])
+            return int(str(section_data["port"]))
     except Exception as e:
         logger.warning("Failed to read aw-server config: %s", e)
     return None
