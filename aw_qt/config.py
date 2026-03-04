@@ -10,10 +10,10 @@ logger = logging.getLogger(__name__)
 
 default_config = """
 [aw-qt]
-autostart_modules = ["aw-server", "aw-watcher-afk", "aw-watcher-window"]
+autostart_modules = ["aw-server-rust", "aw-watcher-afk", "aw-watcher-window"]
 
 [aw-qt-testing]
-autostart_modules = ["aw-server", "aw-watcher-afk", "aw-watcher-window"]
+autostart_modules = ["aw-server-rust", "aw-watcher-afk", "aw-watcher-window"]
 """.strip()
 
 
