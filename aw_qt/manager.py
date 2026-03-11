@@ -3,6 +3,8 @@ import sys
 import logging
 import subprocess
 import platform
+import urllib.error
+import urllib.request
 from pathlib import Path
 from glob import glob
 from time import sleep
@@ -134,6 +136,7 @@ class Module:
         # self.location = "system" if _is_system_module(name) else "bundled"
         self._process: Optional[subprocess.Popen[str]] = None
         self._last_process: Optional[subprocess.Popen[str]] = None
+        self._external_server: bool = False  # True if we detected an already-running server
 
     def __hash__(self) -> int:
         return hash((self.name, self.path))
@@ -146,6 +149,27 @@ class Module:
 
     def start(self, testing: bool) -> None:
         logger.info(f"Starting module {self.name}")
+
+        # For server modules, check if a server is already running before attempting
+        # to start one. This avoids port conflicts and the confusing "Restart" requirement
+        # when aw-server is managed externally (e.g. via systemd or Docker).
+        if self.name in ("aw-server", "aw-server-rust"):
+            from .config import _read_server_port
+
+            port = _read_server_port(testing)
+            try:
+                urllib.request.urlopen(
+                    f"http://localhost:{port}/api/0/info", timeout=1
+                )
+                logger.info(
+                    f"{self.name}: server already running on port {port}, "
+                    "using existing instance instead of starting a new one"
+                )
+                self._external_server = True
+                self.started = True
+                return
+            except (urllib.error.URLError, OSError):
+                pass  # No existing server, proceed with normal startup
 
         exec_cmd = [str(self.path)]
         if testing:
@@ -181,6 +205,14 @@ class Module:
                 f"Tried to stop module {self.name}, but it hasn't been started"
             )
             return
+        elif self._external_server:
+            # We didn't start this server, so don't stop it — it's managed externally
+            logger.info(
+                f"Module {self.name} is using an external server instance, not stopping it"
+            )
+            self._external_server = False
+            self.started = False
+            return
         elif not self.is_alive():
             logger.warning(f"Tried to stop module {self.name}, but it wasn't running")
         else:
@@ -209,6 +241,9 @@ class Module:
             self.start(testing)
 
     def is_alive(self) -> bool:
+        if self._external_server:
+            # We don't own this process; assume it's alive (managed externally)
+            return True
         if self._process is None:
             return False
 
