@@ -95,6 +95,20 @@ def _discover_modules_system() -> List["Module"]:
     if _parent_dir in search_paths:
         search_paths.remove(_parent_dir)
 
+    # On macOS, when launched from Finder the PATH is minimal (/usr/bin:/bin:/usr/sbin:/sbin)
+    # and doesn't include directories where AW modules are typically installed.
+    # Add common macOS binary paths explicitly so system modules can be found regardless
+    # of how aw-qt was launched.  Fixes: https://github.com/ActivityWatch/aw-qt/issues/96
+    if platform.system() == "Darwin":
+        macos_extra_paths = [
+            "/opt/homebrew/bin",  # Homebrew on Apple Silicon
+            "/usr/local/bin",  # Homebrew on Intel / pip global installs
+            os.path.expanduser("~/.local/bin"),  # pip --user installs
+        ]
+        for extra_path in macos_extra_paths:
+            if extra_path not in search_paths and os.path.isdir(extra_path):
+                search_paths.append(extra_path)
+
     # logger.debug(f"Searching for system modules in PATH: {search_paths}")
     modules: List["Module"] = []
     paths = [p for p in search_paths if os.path.isdir(p)]
