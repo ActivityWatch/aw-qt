@@ -159,7 +159,7 @@ class TestMacOSSystemPathDiscovery:
             "Homebrew (Intel) / pip global path should be searched on macOS"
         )
         # ~/.local/bin (expanduser result) should also be searched
-        assert any("local/bin" in p for p in searched_paths), (
+        assert os.path.expanduser("~/.local/bin") in searched_paths, (
             "~/.local/bin (pip --user) should be searched on macOS"
         )
 
