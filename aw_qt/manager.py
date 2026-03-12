@@ -55,8 +55,10 @@ def _discover_modules_in_directory(path: str) -> List["Module"]:
     matches = glob(os.path.join(path, "aw-*"))
     for path in matches:
         basename = os.path.basename(path)
+        name = _filename_to_name(basename)
+        if name in ignored_filenames:
+            continue
         if is_executable(path, basename) and basename.startswith("aw-"):
-            name = _filename_to_name(basename)
             modules.append(Module(name, Path(path), "bundled"))
         elif os.path.isdir(path) and os.access(path, os.X_OK):
             modules.extend(_discover_modules_in_directory(path))
