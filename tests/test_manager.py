@@ -1,5 +1,6 @@
 """Unit tests for the Module manager."""
 
+import os
 import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -117,7 +118,10 @@ class TestModuleServerProbe:
     def test_probe_external_server_cached_reuses_recent_result(self):
         mod = Module("aw-server", Path("/usr/bin/aw-server"), "system")
 
-        with patch.object(mod, "_probe_external_server", return_value=True) as probe:
+        with (
+            patch("aw_qt.manager.monotonic", side_effect=[10.0, 10.4]),
+            patch.object(mod, "_probe_external_server", return_value=True) as probe,
+        ):
             assert mod._probe_external_server_cached(testing=True, max_age=1.0) is True
             assert mod._probe_external_server_cached(testing=True, max_age=1.0) is True
 
@@ -174,6 +178,7 @@ class TestModuleIsAlive:
         mod = Module("aw-server", Path("/usr/bin/aw-server"), "system")
         mod._external_server = True
         mod._external_server_testing = True
+        mod.started = True
 
         with (
             patch("aw_qt.manager.monotonic", side_effect=[10.0, 11.5]),
@@ -181,11 +186,35 @@ class TestModuleIsAlive:
         ):
             assert mod.is_alive()
             assert mod.is_alive() is False
+            assert mod.started is True
             assert mod._external_server is False
             assert mod._external_server_testing is False
 
         assert probe.call_args_list[0].args == (True,)
         assert probe.call_args_list[1].args == (True,)
+
+    def test_stop_external_server_resets_state_without_terminating_process(self):
+        mod = Module("aw-server", Path("/usr/bin/aw-server"), "system")
+        mod.started = True
+        mod._external_server = True
+        mod._external_server_testing = True
+        mock_proc = MagicMock(spec=subprocess.Popen)
+        mod._process = mock_proc
+        mod._last_process = None
+        mod._external_server_probe_cache = True
+        mod._external_server_probe_cache_at = 10.0
+
+        mod.stop()
+
+        mock_proc.terminate.assert_not_called()
+        mock_proc.wait.assert_not_called()
+        assert mod.started is False
+        assert mod._external_server is False
+        assert mod._external_server_testing is False
+        assert mod._external_server_probe_cache is None
+        assert mod._external_server_probe_cache_at == 0.0
+        assert mod._last_process is None
+        assert mod._process is mock_proc
 
 
 class TestGetUnexpectedStops:
