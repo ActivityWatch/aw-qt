@@ -151,6 +151,7 @@ class Module:
         self._process: Optional[subprocess.Popen[str]] = None
         self._last_process: Optional[subprocess.Popen[str]] = None
         self._external_server: bool = False  # True if we detected an already-running server
+        self._external_server_testing: bool = False
 
     def __hash__(self) -> int:
         return hash((self.name, self.path))
@@ -161,29 +162,43 @@ class Module:
     def __repr__(self) -> str:
         return f"<Module {self.name} at {self.path}>"
 
+    def _get_server_port(self, testing: bool) -> Optional[int]:
+        if self.name not in ("aw-server", "aw-server-rust"):
+            return None
+
+        from .config import _read_aw_server_port, _read_server_rust_port
+
+        if self.name == "aw-server":
+            return _read_aw_server_port(testing) or (5666 if testing else 5600)
+        return _read_server_rust_port(testing) or (5666 if testing else 5600)
+
+    def _probe_external_server(self, testing: bool) -> bool:
+        port = self._get_server_port(testing)
+        if port is None:
+            return False
+
+        try:
+            urllib.request.urlopen(f"http://localhost:{port}/api/0/info", timeout=0.2)
+        except (urllib.error.URLError, OSError):
+            return False
+        return True
+
     def start(self, testing: bool) -> None:
         logger.info(f"Starting module {self.name}")
 
         # For server modules, check if a server is already running before attempting
         # to start one. This avoids port conflicts and the confusing "Restart" requirement
         # when aw-server is managed externally (e.g. via systemd or Docker).
-        if self.name in ("aw-server", "aw-server-rust"):
-            from .config import _read_server_port
-
-            port = _read_server_port(testing)
-            try:
-                urllib.request.urlopen(
-                    f"http://localhost:{port}/api/0/info", timeout=1
-                )
-                logger.info(
-                    f"{self.name}: server already running on port {port}, "
-                    "using existing instance instead of starting a new one"
-                )
-                self._external_server = True
-                self.started = True
-                return
-            except (urllib.error.URLError, OSError):
-                pass  # No existing server, proceed with normal startup
+        if self._probe_external_server(testing):
+            port = self._get_server_port(testing)
+            logger.info(
+                f"{self.name}: server already running on port {port}, "
+                "using existing instance instead of starting a new one"
+            )
+            self._external_server = True
+            self._external_server_testing = testing
+            self.started = True
+            return
 
         exec_cmd = [str(self.path)]
         if testing:
@@ -225,6 +240,7 @@ class Module:
                 f"Module {self.name} is using an external server instance, not stopping it"
             )
             self._external_server = False
+            self._external_server_testing = False
             self.started = False
             return
         elif not self.is_alive():
@@ -256,8 +272,12 @@ class Module:
 
     def is_alive(self) -> bool:
         if self._external_server:
-            # We don't own this process; assume it's alive (managed externally)
-            return True
+            # We don't own this process, so re-probe the server instead.
+            alive = self._probe_external_server(self._external_server_testing)
+            if not alive:
+                self._external_server = False
+                self._external_server_testing = False
+            return alive
         if self._process is None:
             return False
 

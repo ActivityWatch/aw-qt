@@ -69,6 +69,26 @@ class TestModuleToggle:
             assert not module.started  # stop() was called to clean up
 
 
+class TestModuleServerProbe:
+    def test_aw_server_uses_python_server_port(self):
+        mod = Module("aw-server", Path("/usr/bin/aw-server"), "system")
+
+        with (
+            patch("aw_qt.config._read_aw_server_port", return_value=5601),
+            patch("aw_qt.config._read_server_rust_port", return_value=6601),
+        ):
+            assert mod._get_server_port(testing=False) == 5601
+
+    def test_aw_server_rust_uses_rust_server_port(self):
+        mod = Module("aw-server-rust", Path("/usr/bin/aw-server-rust"), "system")
+
+        with (
+            patch("aw_qt.config._read_aw_server_port", return_value=5601),
+            patch("aw_qt.config._read_server_rust_port", return_value=6601),
+        ):
+            assert mod._get_server_port(testing=False) == 6601
+
+
 class TestModuleIsAlive:
     """Tests for Module.is_alive() behavior."""
 
@@ -86,6 +106,20 @@ class TestModuleIsAlive:
         mock_proc.returncode = 0
         module._process = mock_proc
         assert not module.is_alive()
+
+    def test_is_alive_reprobes_external_server(self):
+        mod = Module("aw-server", Path("/usr/bin/aw-server"), "system")
+        mod._external_server = True
+        mod._external_server_testing = True
+
+        with patch.object(mod, "_probe_external_server", side_effect=[True, False]) as probe:
+            assert mod.is_alive()
+            assert mod.is_alive() is False
+            assert mod._external_server is False
+            assert mod._external_server_testing is False
+
+        assert probe.call_args_list[0].args == (True,)
+        assert probe.call_args_list[1].args == (True,)
 
 
 class TestGetUnexpectedStops:
