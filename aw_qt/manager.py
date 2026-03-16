@@ -36,9 +36,13 @@ def filter_modules(modules: Iterable["Module"]) -> Set["Module"]:
 def is_executable(path: str, filename: str) -> bool:
     if not os.path.isfile(path):
         return False
-    # On windows all files ending with .exe are executables
+    # On Windows, .exe/.bat/.cmd files are executables
     if platform.system() == "Windows":
-        return filename.endswith(".exe")
+        return (
+            filename.endswith(".exe")
+            or filename.endswith(".bat")
+            or filename.endswith(".cmd")
+        )
     # On Unix platforms all files having executable permissions are executables
     # We do not however want to include .desktop files
     else:  # Assumes Unix
@@ -66,7 +70,11 @@ def _discover_modules_in_directory(path: str) -> List["Module"]:
 
 
 def _filename_to_name(filename: str) -> str:
-    return filename.replace(".exe", "")
+    if platform.system() == "Windows":
+        for ext in (".exe", ".bat", ".cmd"):
+            if filename.endswith(ext):
+                return filename[: -len(ext)]
+    return filename
 
 
 def _discover_modules_bundled() -> List["Module"]:
