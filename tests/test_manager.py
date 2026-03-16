@@ -102,6 +102,18 @@ class TestModuleServerProbe:
         response.__enter__.assert_called_once_with()
         response.__exit__.assert_called_once()
 
+    def test_probe_external_server_allows_custom_timeout(self):
+        mod = Module("aw-server", Path("/usr/bin/aw-server"), "system")
+        response = MagicMock()
+
+        with (
+            patch.object(mod, "_get_server_port", return_value=5600),
+            patch("urllib.request.urlopen", return_value=response) as urlopen,
+        ):
+            assert mod._probe_external_server(testing=False, timeout=1.0) is True
+
+        urlopen.assert_called_once_with("http://localhost:5600/api/0/info", timeout=1.0)
+
     def test_probe_external_server_cached_reuses_recent_result(self):
         mod = Module("aw-server", Path("/usr/bin/aw-server"), "system")
 
@@ -123,6 +135,21 @@ class TestModuleServerProbe:
             assert mod._probe_external_server_cached(testing=True, max_age=1.0) is False
 
         assert probe.call_count == 2
+
+
+class TestModuleStart:
+    def test_start_uses_longer_timeout_for_external_server_probe(self):
+        mod = Module("aw-server", Path("/usr/bin/aw-server"), "system")
+
+        with (
+            patch.object(mod, "_probe_external_server", return_value=True) as probe,
+            patch.object(mod, "_get_server_port", return_value=5600),
+        ):
+            mod.start(testing=False)
+
+        probe.assert_called_once_with(False, timeout=1.0)
+        assert mod.started is True
+        assert mod._external_server is True
 
 
 class TestModuleIsAlive:

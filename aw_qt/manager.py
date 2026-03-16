@@ -174,14 +174,14 @@ class Module:
             return _read_aw_server_port(testing) or (5666 if testing else 5600)
         return _read_server_rust_port(testing) or (5666 if testing else 5600)
 
-    def _probe_external_server(self, testing: bool) -> bool:
+    def _probe_external_server(self, testing: bool, timeout: float = 0.2) -> bool:
         port = self._get_server_port(testing)
         if port is None:
             return False
 
         try:
             with urllib.request.urlopen(
-                f"http://localhost:{port}/api/0/info", timeout=0.2
+                f"http://localhost:{port}/api/0/info", timeout=timeout
             ):
                 return True
         except (urllib.error.URLError, OSError):
@@ -206,7 +206,7 @@ class Module:
         # For server modules, check if a server is already running before attempting
         # to start one. This avoids port conflicts and the confusing "Restart" requirement
         # when aw-server is managed externally (e.g. via systemd or Docker).
-        if self._probe_external_server(testing):
+        if self._probe_external_server(testing, timeout=1.0):
             port = self._get_server_port(testing)
             logger.info(
                 f"{self.name}: server already running on port {port}, "
