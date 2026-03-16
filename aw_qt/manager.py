@@ -7,7 +7,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 from glob import glob
-from time import sleep
+from time import monotonic, sleep
 from typing import Optional, List, Hashable, Set, Iterable
 
 import aw_core
@@ -152,6 +152,8 @@ class Module:
         self._last_process: Optional[subprocess.Popen[str]] = None
         self._external_server: bool = False  # True if we detected an already-running server
         self._external_server_testing: bool = False
+        self._external_server_probe_cache: Optional[bool] = None
+        self._external_server_probe_cache_at: float = 0.0
 
     def __hash__(self) -> int:
         return hash((self.name, self.path))
@@ -178,10 +180,25 @@ class Module:
             return False
 
         try:
-            urllib.request.urlopen(f"http://localhost:{port}/api/0/info", timeout=0.2)
+            with urllib.request.urlopen(
+                f"http://localhost:{port}/api/0/info", timeout=0.2
+            ):
+                return True
         except (urllib.error.URLError, OSError):
             return False
-        return True
+
+    def _probe_external_server_cached(self, testing: bool, max_age: float = 1.0) -> bool:
+        now = monotonic()
+        if (
+            self._external_server_probe_cache is not None
+            and now - self._external_server_probe_cache_at < max_age
+        ):
+            return self._external_server_probe_cache
+
+        alive = self._probe_external_server(testing)
+        self._external_server_probe_cache = alive
+        self._external_server_probe_cache_at = now
+        return alive
 
     def start(self, testing: bool) -> None:
         logger.info(f"Starting module {self.name}")
@@ -197,6 +214,8 @@ class Module:
             )
             self._external_server = True
             self._external_server_testing = testing
+            self._external_server_probe_cache = True
+            self._external_server_probe_cache_at = monotonic()
             self.started = True
             return
 
@@ -241,6 +260,8 @@ class Module:
             )
             self._external_server = False
             self._external_server_testing = False
+            self._external_server_probe_cache = None
+            self._external_server_probe_cache_at = 0.0
             self.started = False
             return
         elif not self.is_alive():
@@ -273,10 +294,14 @@ class Module:
     def is_alive(self) -> bool:
         if self._external_server:
             # We don't own this process, so re-probe the server instead.
-            alive = self._probe_external_server(self._external_server_testing)
+            # Cache short-lived probe results to avoid blocking repeated UI poll
+            # cycles on the main thread when multiple checks happen close together.
+            alive = self._probe_external_server_cached(self._external_server_testing)
             if not alive:
                 self._external_server = False
                 self._external_server_testing = False
+                self._external_server_probe_cache = None
+                self._external_server_probe_cache_at = 0.0
             return alive
         if self._process is None:
             return False
