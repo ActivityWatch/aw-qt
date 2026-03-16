@@ -63,7 +63,11 @@ def _discover_modules_in_directory(path: str) -> List["Module"]:
 
 
 def _filename_to_name(filename: str) -> str:
-    return filename.replace(".exe", "")
+    if platform.system() == "Windows":
+        for ext in (".exe", ".bat", ".cmd"):
+            if filename.endswith(ext):
+                return filename[: -len(ext)]
+    return filename
 
 
 def _discover_modules_bundled() -> List["Module"]:
