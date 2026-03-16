@@ -27,7 +27,7 @@ def _log_modules(modules: List["Module"]) -> None:
 def is_executable(path: str, filename: str) -> bool:
     if not os.path.isfile(path):
         return False
-    # On windows all files ending with .exe are executables
+    # On Windows, .exe/.bat/.cmd files are executables
     if platform.system() == "Windows":
         return (
             filename.endswith(".exe")
