@@ -3,9 +3,11 @@ import sys
 import logging
 import subprocess
 import platform
+import urllib.error
+import urllib.request
 from pathlib import Path
 from glob import glob
-from time import sleep
+from time import monotonic, sleep
 from typing import Optional, List, Hashable, Set, Iterable
 
 import aw_core
@@ -158,6 +160,10 @@ class Module:
         # self.location = "system" if _is_system_module(name) else "bundled"
         self._process: Optional[subprocess.Popen[str]] = None
         self._last_process: Optional[subprocess.Popen[str]] = None
+        self._external_server: bool = False  # True if we detected an already-running server
+        self._external_server_testing: bool = False
+        self._external_server_probe_cache: Optional[bool] = None
+        self._external_server_probe_cache_at: float = 0.0
 
     def __hash__(self) -> int:
         return hash((self.name, self.path))
@@ -168,8 +174,60 @@ class Module:
     def __repr__(self) -> str:
         return f"<Module {self.name} at {self.path}>"
 
+    def _get_server_port(self, testing: bool) -> Optional[int]:
+        if self.name not in ("aw-server", "aw-server-rust"):
+            return None
+
+        from .config import _read_aw_server_port, _read_server_rust_port
+
+        if self.name == "aw-server":
+            return _read_aw_server_port(testing) or (5666 if testing else 5600)
+        return _read_server_rust_port(testing) or (5666 if testing else 5600)
+
+    def _probe_external_server(self, testing: bool, timeout: float = 0.2) -> bool:
+        port = self._get_server_port(testing)
+        if port is None:
+            return False
+
+        try:
+            with urllib.request.urlopen(
+                f"http://localhost:{port}/api/0/info", timeout=timeout
+            ):
+                return True
+        except (urllib.error.URLError, OSError):
+            return False
+
+    def _probe_external_server_cached(self, testing: bool, max_age: float = 1.0) -> bool:
+        now = monotonic()
+        if (
+            self._external_server_probe_cache is not None
+            and now - self._external_server_probe_cache_at < max_age
+        ):
+            return self._external_server_probe_cache
+
+        alive = self._probe_external_server(testing)
+        self._external_server_probe_cache = alive
+        self._external_server_probe_cache_at = now
+        return alive
+
     def start(self, testing: bool) -> None:
         logger.info(f"Starting module {self.name}")
+
+        # For server modules, check if a server is already running before attempting
+        # to start one. This avoids port conflicts and the confusing "Restart" requirement
+        # when aw-server is managed externally (e.g. via systemd or Docker).
+        if self._probe_external_server(testing, timeout=1.0):
+            port = self._get_server_port(testing)
+            logger.info(
+                f"{self.name}: server already running on port {port}, "
+                "using existing instance instead of starting a new one"
+            )
+            self._external_server = True
+            self._external_server_testing = testing
+            self._external_server_probe_cache = True
+            self._external_server_probe_cache_at = monotonic()
+            self.started = True
+            return
 
         exec_cmd = [str(self.path)]
         if testing:
@@ -205,6 +263,17 @@ class Module:
                 f"Tried to stop module {self.name}, but it hasn't been started"
             )
             return
+        elif self._external_server:
+            # We didn't start this server, so don't stop it — it's managed externally
+            logger.info(
+                f"Module {self.name} is using an external server instance, not stopping it"
+            )
+            self._external_server = False
+            self._external_server_testing = False
+            self._external_server_probe_cache = None
+            self._external_server_probe_cache_at = 0.0
+            self.started = False
+            return
         elif not self.is_alive():
             logger.warning(f"Tried to stop module {self.name}, but it wasn't running")
         else:
@@ -233,6 +302,17 @@ class Module:
             self.start(testing)
 
     def is_alive(self) -> bool:
+        if self._external_server:
+            # We don't own this process, so re-probe the server instead.
+            # Cache short-lived probe results to avoid blocking repeated UI poll
+            # cycles on the main thread when multiple checks happen close together.
+            alive = self._probe_external_server_cached(self._external_server_testing)
+            if not alive:
+                self._external_server = False
+                self._external_server_testing = False
+                self._external_server_probe_cache = None
+                self._external_server_probe_cache_at = 0.0
+            return alive
         if self._process is None:
             return False
 

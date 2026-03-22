@@ -1,5 +1,6 @@
 """Unit tests for the Module manager."""
 
+import os
 import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -69,6 +70,92 @@ class TestModuleToggle:
             assert not module.started  # stop() was called to clean up
 
 
+class TestModuleServerProbe:
+    def test_aw_server_uses_python_server_port(self):
+        mod = Module("aw-server", Path("/usr/bin/aw-server"), "system")
+
+        with (
+            patch("aw_qt.config._read_aw_server_port", return_value=5601),
+            patch("aw_qt.config._read_server_rust_port", return_value=6601),
+        ):
+            assert mod._get_server_port(testing=False) == 5601
+
+    def test_aw_server_rust_uses_rust_server_port(self):
+        mod = Module("aw-server-rust", Path("/usr/bin/aw-server-rust"), "system")
+
+        with (
+            patch("aw_qt.config._read_aw_server_port", return_value=5601),
+            patch("aw_qt.config._read_server_rust_port", return_value=6601),
+        ):
+            assert mod._get_server_port(testing=False) == 6601
+
+    def test_probe_external_server_closes_response(self):
+        mod = Module("aw-server", Path("/usr/bin/aw-server"), "system")
+        response = MagicMock()
+
+        with (
+            patch.object(mod, "_get_server_port", return_value=5600),
+            patch("urllib.request.urlopen", return_value=response) as urlopen,
+        ):
+            assert mod._probe_external_server(testing=False) is True
+
+        urlopen.assert_called_once_with("http://localhost:5600/api/0/info", timeout=0.2)
+        response.__enter__.assert_called_once_with()
+        response.__exit__.assert_called_once()
+
+    def test_probe_external_server_allows_custom_timeout(self):
+        mod = Module("aw-server", Path("/usr/bin/aw-server"), "system")
+        response = MagicMock()
+
+        with (
+            patch.object(mod, "_get_server_port", return_value=5600),
+            patch("urllib.request.urlopen", return_value=response) as urlopen,
+        ):
+            assert mod._probe_external_server(testing=False, timeout=1.0) is True
+
+        urlopen.assert_called_once_with("http://localhost:5600/api/0/info", timeout=1.0)
+
+    def test_probe_external_server_cached_reuses_recent_result(self):
+        mod = Module("aw-server", Path("/usr/bin/aw-server"), "system")
+
+        with (
+            patch("aw_qt.manager.monotonic", side_effect=[10.0, 10.4]),
+            patch.object(mod, "_probe_external_server", return_value=True) as probe,
+        ):
+            assert mod._probe_external_server_cached(testing=True, max_age=1.0) is True
+            assert mod._probe_external_server_cached(testing=True, max_age=1.0) is True
+
+        assert probe.call_count == 1
+
+    def test_probe_external_server_cached_refreshes_after_ttl(self):
+        mod = Module("aw-server", Path("/usr/bin/aw-server"), "system")
+
+        with (
+            patch("aw_qt.manager.monotonic", side_effect=[10.0, 10.4, 11.5]),
+            patch.object(mod, "_probe_external_server", side_effect=[True, False]) as probe,
+        ):
+            assert mod._probe_external_server_cached(testing=True, max_age=1.0) is True
+            assert mod._probe_external_server_cached(testing=True, max_age=1.0) is True
+            assert mod._probe_external_server_cached(testing=True, max_age=1.0) is False
+
+        assert probe.call_count == 2
+
+
+class TestModuleStart:
+    def test_start_uses_longer_timeout_for_external_server_probe(self):
+        mod = Module("aw-server", Path("/usr/bin/aw-server"), "system")
+
+        with (
+            patch.object(mod, "_probe_external_server", return_value=True) as probe,
+            patch.object(mod, "_get_server_port", return_value=5600),
+        ):
+            mod.start(testing=False)
+
+        probe.assert_called_once_with(False, timeout=1.0)
+        assert mod.started is True
+        assert mod._external_server is True
+
+
 class TestModuleIsAlive:
     """Tests for Module.is_alive() behavior."""
 
@@ -86,6 +173,48 @@ class TestModuleIsAlive:
         mock_proc.returncode = 0
         module._process = mock_proc
         assert not module.is_alive()
+
+    def test_is_alive_reprobes_external_server(self):
+        mod = Module("aw-server", Path("/usr/bin/aw-server"), "system")
+        mod._external_server = True
+        mod._external_server_testing = True
+        mod.started = True
+
+        with (
+            patch("aw_qt.manager.monotonic", side_effect=[10.0, 11.5]),
+            patch.object(mod, "_probe_external_server", side_effect=[True, False]) as probe,
+        ):
+            assert mod.is_alive()
+            assert mod.is_alive() is False
+            assert mod.started is True
+            assert mod._external_server is False
+            assert mod._external_server_testing is False
+
+        assert probe.call_args_list[0].args == (True,)
+        assert probe.call_args_list[1].args == (True,)
+
+    def test_stop_external_server_resets_state_without_terminating_process(self):
+        mod = Module("aw-server", Path("/usr/bin/aw-server"), "system")
+        mod.started = True
+        mod._external_server = True
+        mod._external_server_testing = True
+        mock_proc = MagicMock(spec=subprocess.Popen)
+        mod._process = mock_proc
+        mod._last_process = None
+        mod._external_server_probe_cache = True
+        mod._external_server_probe_cache_at = 10.0
+
+        mod.stop()
+
+        mock_proc.terminate.assert_not_called()
+        mock_proc.wait.assert_not_called()
+        assert mod.started is False
+        assert mod._external_server is False
+        assert mod._external_server_testing is False
+        assert mod._external_server_probe_cache is None
+        assert mod._external_server_probe_cache_at == 0.0
+        assert mod._last_process is None
+        assert mod._process is mock_proc
 
 
 class TestGetUnexpectedStops:
