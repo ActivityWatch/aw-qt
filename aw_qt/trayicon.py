@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 
 import aw_core
 from PyQt6 import QtCore
-from PyQt6.QtGui import QIcon
+from PyQt6.QtGui import QAction, QIcon
 from PyQt6.QtWidgets import (
     QApplication,
     QMenu,
@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from . import autostart
 from .manager import Manager, Module
 
 logger = logging.getLogger(__name__)
@@ -91,6 +92,7 @@ class TrayIcon(QSystemTrayIcon):
         self.manager = manager
         self.testing = testing
         self._restart_timestamps: Dict[str, List[float]] = {}
+        self._autostart_action: Optional[QAction] = None
 
         if port is None:
             port = 5666 if testing else 5600
@@ -115,6 +117,33 @@ class TrayIcon(QSystemTrayIcon):
         self._restart_timestamps[module_name] = [
             t for t in timestamps if t > cutoff
         ] + [now]
+
+    def _refresh_autostart_action(self) -> None:
+        """Sync the menu item with the actual OS-level autostart state."""
+        if self._autostart_action is not None:
+            self._autostart_action.setChecked(autostart.is_enabled())
+
+    def _on_autostart_toggled(self) -> None:
+        """Enable/disable starting ActivityWatch at login."""
+        if self._autostart_action is None:
+            return
+        # The action is checkable, so it already holds the state the user asked for
+        checked = self._autostart_action.isChecked()
+        try:
+            if checked:
+                autostart.enable()
+            else:
+                autostart.disable()
+        except autostart.AutostartError as e:
+            logger.error(f"Failed to change autostart setting: {e}")
+            box = QMessageBox(self._parent)
+            box.setIcon(QMessageBox.Icon.Warning)
+            action = "enable" if checked else "disable"
+            box.setText(f"Could not {action} starting ActivityWatch at login.")
+            box.setDetailedText(str(e))
+            box.show()
+        # Always reflect the real state, the toggle may have failed
+        self._refresh_autostart_action()
 
     def on_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
         if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
@@ -143,6 +172,17 @@ class TrayIcon(QSystemTrayIcon):
         menu.addAction(
             "Open config folder", lambda: open_dir(aw_core.dirs.get_config_dir(None))
         )
+
+        if autostart.is_supported():
+            self._autostart_action = menu.addAction(
+                "Start at login", self._on_autostart_toggled
+            )
+            self._autostart_action.setCheckable(True)
+            self._autostart_action.setChecked(autostart.is_enabled())
+            # Autostart can also be changed outside of aw-qt, so re-read the
+            # actual state every time the menu is opened
+            menu.aboutToShow.connect(self._refresh_autostart_action)
+
         menu.addSeparator()
 
         exitIcon = QIcon.fromTheme(
