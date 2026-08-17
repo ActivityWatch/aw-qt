@@ -169,11 +169,88 @@ class TestLinuxBackend:
         assert "Icon=activitywatch" in contents
         assert "Exec=/opt/aw/aw-qt --flag" in contents
 
-    def test_exec_value_is_quoted(self):
+    def test_simple_arguments_are_not_quoted(self):
+        with patch.object(autostart, "_command", return_value=["/opt/aw/aw-qt", "-v"]):
+            assert autostart._desktop_exec_value() == "/opt/aw/aw-qt -v"
+
+    def test_exec_value_uses_desktop_entry_quoting(self):
+        """Desktop Entry Exec quoting is not POSIX shell quoting."""
         with patch.object(
             autostart, "_command", return_value=["/path with space/aw-qt"]
         ):
-            assert autostart._desktop_exec_value() == "'/path with space/aw-qt'"
+            # Double quotes, not the single quotes shlex.quote() would produce
+            assert autostart._desktop_exec_value() == '"/path with space/aw-qt"'
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            ["/opt/aw/aw-qt"],
+            ["/opt/aw/aw-qt", "--testing"],
+            ["/home/me/My Apps/aw-qt"],
+            ["/opt/a$b/aw-qt", "--flag=a b"],
+            ["/opt/back\\slash/aw-qt"],
+            ["/opt/aw/aw-qt", 'quote"d'],
+            ["/opt/100%/aw-qt"],
+            ["/usr/bin/python3", "-m", "aw_qt"],
+        ],
+    )
+    def test_exec_value_round_trips_through_a_parser(self, command):
+        """The written Exec value must parse back to the exact command."""
+        with patch.object(autostart, "_command", return_value=command):
+            value = autostart._desktop_exec_value()
+        assert parse_desktop_exec(value) == command
+
+
+def parse_desktop_exec(value):
+    """Reference implementation of Desktop Entry Exec parsing.
+
+    Applies the string-value unescaping and then the Exec quoting rules from
+    https://specifications.freedesktop.org/desktop-entry-spec/latest/exec-variables.html
+    """
+    # Desktop entry string values: "\\" denotes a literal backslash
+    unescaped = ""
+    i = 0
+    while i < len(value):
+        if value[i] == "\\" and i + 1 < len(value) and value[i + 1] == "\\":
+            unescaped += "\\"
+            i += 2
+        else:
+            unescaped += value[i]
+            i += 1
+
+    args = []
+    current = ""
+    in_quotes = False
+    started = False
+    i = 0
+    while i < len(unescaped):
+        char = unescaped[i]
+        if in_quotes:
+            if char == "\\" and i + 1 < len(unescaped) and unescaped[i + 1] in '"`$\\':
+                current += unescaped[i + 1]
+                i += 2
+                continue
+            if char == '"':
+                in_quotes = False
+            else:
+                current += char
+        elif char == '"':
+            in_quotes = True
+            started = True
+        elif char == " ":
+            if started:
+                args.append(current)
+            current = ""
+            started = False
+        else:
+            current += char
+            started = True
+        i += 1
+    if started:
+        args.append(current)
+
+    # A literal percent sign is written as "%%"
+    return [arg.replace("%%", "%") for arg in args]
 
 
 class TestMacosBackend:

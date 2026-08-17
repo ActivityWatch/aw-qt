@@ -46,6 +46,8 @@ APP_NAME = "ActivityWatch"
 
 # Linux
 DESKTOP_FILENAME = "aw-qt.desktop"
+# Characters that force an Exec argument to be quoted (Desktop Entry Spec)
+_DESKTOP_RESERVED_CHARS = " \t\n\"'\\><~|&;$*?#()`"
 
 # macOS
 LAUNCH_AGENT_LABEL = "net.activitywatch.aw-qt"
@@ -163,10 +165,31 @@ def _bundled_desktop_file() -> Optional[Path]:
     return None
 
 
-def _desktop_exec_value() -> str:
-    import shlex
+def _desktop_quote_arg(arg: str) -> str:
+    """Quote a single Exec argument per the Desktop Entry Specification.
 
-    return " ".join(shlex.quote(arg) for arg in _command())
+    Desktop entries do *not* use POSIX shell quoting (so `shlex.quote` and its
+    single quotes are wrong here): arguments containing reserved characters
+    must be enclosed in double quotes, within which `"`, `` ` ``, `$` and `\\`
+    are escaped with a backslash.  Those backslashes are then doubled, because
+    the value is additionally subject to the desktop entry string escape rules.
+    A literal percent sign is written as `%%`, since `%` introduces a field code.
+
+    See: https://specifications.freedesktop.org/desktop-entry-spec/latest/exec-variables.html
+    """
+    arg = arg.replace("%", "%%")
+    if not arg:
+        return '""'
+    if not any(c in _DESKTOP_RESERVED_CHARS for c in arg):
+        return arg
+    quoted = "".join("\\" + c if c in '"`$\\' else c for c in arg)
+    # String-value escaping: a backslash in a desktop entry value is written as `\\`
+    quoted = quoted.replace("\\", "\\\\")
+    return f'"{quoted}"'
+
+
+def _desktop_exec_value() -> str:
+    return " ".join(_desktop_quote_arg(arg) for arg in _command())
 
 
 def _desktop_entry_contents() -> str:
