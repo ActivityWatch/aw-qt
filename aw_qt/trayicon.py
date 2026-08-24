@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
 
 from . import autostart
 from .manager import Manager, Module
+from .profile import DEFAULT_PROFILE, TESTING_PROFILE
 
 logger = logging.getLogger(__name__)
 
@@ -84,13 +85,17 @@ class TrayIcon(QSystemTrayIcon):
         parent: Optional[QWidget] = None,
         testing: bool = False,
         port: Optional[int] = None,
+        profile: str = DEFAULT_PROFILE,
     ) -> None:
         QSystemTrayIcon.__init__(self, icon, parent)
         self._parent = parent  # QSystemTrayIcon also tries to save parent info but it screws up the type info
-        self.setToolTip("ActivityWatch" + (" (testing)" if testing else ""))
+        self.setToolTip(
+            "ActivityWatch" + (f" ({profile})" if profile != DEFAULT_PROFILE else "")
+        )
 
         self.manager = manager
         self.testing = testing
+        self.profile = profile
         self._restart_timestamps: Dict[str, List[float]] = {}
         self._autostart_action: Optional[QAction] = None
 
@@ -152,8 +157,13 @@ class TrayIcon(QSystemTrayIcon):
     def _build_rootmenu(self) -> None:
         menu = QMenu(self._parent)
 
-        if self.testing:
-            menu.addAction("Running in testing mode")  # .setEnabled(False)
+        if self.profile != DEFAULT_PROFILE:
+            label = (
+                "Running in testing mode"
+                if self.profile == TESTING_PROFILE
+                else f"Running in profile: {self.profile}"
+            )
+            menu.addAction(label)  # .setEnabled(False)
             menu.addSeparator()
 
         # openWebUIIcon = QIcon.fromTheme("open")
@@ -306,7 +316,12 @@ def exit(manager: Manager) -> None:
     QApplication.quit()
 
 
-def run(manager: Manager, testing: bool = False, port: Optional[int] = None) -> Any:
+def run(
+    manager: Manager,
+    testing: bool = False,
+    port: Optional[int] = None,
+    profile: str = DEFAULT_PROFILE,
+) -> Any:
     logger.info("Creating trayicon...")
     # print(QIcon.themeSearchPaths())
 
@@ -373,7 +388,7 @@ def run(manager: Manager, testing: bool = False, port: Optional[int] = None) -> 
     else:
         icon = QIcon("icons:logo.png")
 
-    trayIcon = TrayIcon(manager, icon, widget, testing=testing, port=port)
+    trayIcon = TrayIcon(manager, icon, widget, testing=testing, port=port, profile=profile)
     trayIcon.show()
 
     # Re-apply tooltip after show() to ensure it registers with the

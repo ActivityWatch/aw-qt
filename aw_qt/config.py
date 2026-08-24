@@ -6,6 +6,8 @@ import tomlkit
 from aw_core import dirs
 from aw_core.config import load_config_toml
 
+from .profile import DEFAULT_PROFILE, TESTING_PROFILE, is_testing
+
 logger = logging.getLogger(__name__)
 
 default_config = """
@@ -17,10 +19,14 @@ autostart_modules = ["aw-server", "aw-watcher-afk", "aw-watcher-window"]
 """.strip()
 
 
-def _read_server_rust_port(testing: bool) -> Optional[int]:
+def _read_server_rust_port(profile: str) -> Optional[int]:
     """Read port from aw-server-rust config, returns None if not found/set."""
     config_dir = dirs.get_config_dir("aw-server-rust")
-    config_file = "config-testing.toml" if testing else "config.toml"
+    # Mirrors aw-server-rust's own config path: bare for the default profile,
+    # `config-<profile>.toml` otherwise.
+    config_file = (
+        "config.toml" if profile == DEFAULT_PROFILE else f"config-{profile}.toml"
+    )
     config_path = os.path.join(config_dir, config_file)
 
     if not os.path.isfile(config_path):
@@ -36,11 +42,11 @@ def _read_server_rust_port(testing: bool) -> Optional[int]:
     return None
 
 
-def _read_aw_server_port(testing: bool) -> Optional[int]:
+def _read_aw_server_port(profile: str) -> Optional[int]:
     """Read port from aw-server (Python) config, returns None if not found/set."""
     config_dir = dirs.get_config_dir("aw-server")
     config_path = os.path.join(config_dir, "aw-server.toml")
-    section = "server-testing" if testing else "server"
+    section = "server" if profile == DEFAULT_PROFILE else f"server-{profile}"
 
     if not os.path.isfile(config_path):
         return None
@@ -56,29 +62,45 @@ def _read_aw_server_port(testing: bool) -> Optional[int]:
     return None
 
 
-def _read_server_port(testing: bool) -> int:
-    """Read port from server config (aw-server-rust or aw-server), falling back to defaults."""
-    default_port = 5666 if testing else 5600
+def _read_server_port(profile: str) -> int:
+    """Read port from server config (aw-server-rust or aw-server), falling back to defaults.
 
-    port = _read_server_rust_port(testing)
+    Only `default` and `testing` have a built-in port; any other profile must
+    set `port` in its own config, since two instances cannot share 5600.
+    """
+    default_port = 5666 if is_testing(profile) else 5600
+
+    port = _read_server_rust_port(profile)
     if port is not None:
         return port
 
-    port = _read_aw_server_port(testing)
+    port = _read_aw_server_port(profile)
     if port is not None:
         return port
+
+    if profile not in (DEFAULT_PROFILE, TESTING_PROFILE):
+        logger.warning(
+            "Profile %s has no port configured, falling back to %s "
+            "(which collides with the default instance)",
+            profile,
+            default_port,
+        )
 
     return default_port
 
 
 class AwQtSettings:
-    def __init__(self, testing: bool):
+    def __init__(self, profile: str = DEFAULT_PROFILE):
         """
         An instance of loaded settings, containing a list of modules to autostart.
-        Constructor takes a `testing` boolean as an argument
+        Constructor takes the profile name as an argument.
         """
         config = load_config_toml("aw-qt", default_config)
-        config_section: Any = config["aw-qt" if not testing else "aw-qt-testing"]
+        section_name = "aw-qt" if profile == DEFAULT_PROFILE else f"aw-qt-{profile}"
+        if section_name not in config:
+            # A profile without its own section inherits the default one.
+            section_name = "aw-qt"
+        config_section: Any = config[section_name]
 
         self.autostart_modules: List[str] = config_section["autostart_modules"]
-        self.port: int = _read_server_port(testing)
+        self.port: int = _read_server_port(profile)
