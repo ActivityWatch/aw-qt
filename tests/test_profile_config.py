@@ -37,6 +37,31 @@ class TestServerPort:
         )
         assert _read_server_port("research") == 5668
 
+    def test_autostart_modules_prevents_rust_port_when_only_python_configured(
+        self, isolated_config
+    ):
+        """Tray and manager must target the same endpoint.
+
+        If aw-server-rust config exists with a custom port but only aw-server
+        is in autostart_modules, _read_server_port must not return the Rust
+        port — that would make the tray open a URL for a server that isn't
+        running.
+        """
+        (isolated_config / "aw-server-rust" / "config-research.toml").write_text(
+            "port = 5667\n"
+        )
+        (isolated_config / "aw-server" / "aw-server.toml").write_text(
+            "[server-research]\nport = 5668\n"
+        )
+        # Without filtering: Rust port wins (old behaviour, causes divergence)
+        assert _read_server_port("research") == 5667
+        # With only aw-server in autostart_modules: Python port wins
+        assert _read_server_port("research", ["aw-server", "aw-watcher-afk"]) == 5668
+        # With aw-server-rust in autostart_modules: Rust port takes priority
+        assert (
+            _read_server_port("research", ["aw-server-rust", "aw-watcher-afk"]) == 5667
+        )
+
 
 class TestAwQtSettings:
     def test_profile_without_section_inherits_default(self, isolated_config):

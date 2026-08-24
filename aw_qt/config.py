@@ -62,21 +62,35 @@ def _read_aw_server_port(profile: str) -> Optional[int]:
     return None
 
 
-def _read_server_port(profile: str) -> int:
+def _read_server_port(
+    profile: str, autostart_modules: Optional[List[str]] = None
+) -> int:
     """Read port from server config (aw-server-rust or aw-server), falling back to defaults.
 
     Only `default` and `testing` have a built-in port; any other profile must
     set `port` in its own config, since two instances cannot share 5600.
+
+    When `autostart_modules` is provided, port lookup is restricted to the
+    server type(s) actually configured to run, so the tray and the manager
+    always target the same endpoint.
     """
     default_port = 5666 if is_testing(profile) else 5600
 
-    port = _read_server_rust_port(profile)
-    if port is not None:
-        return port
+    # Determine which server types are in play.  When autostart_modules is
+    # None (legacy / test call-site), fall back to the original Rust-first
+    # behaviour so existing callers are unaffected.
+    check_rust = autostart_modules is None or "aw-server-rust" in autostart_modules
+    check_python = autostart_modules is None or "aw-server" in autostart_modules
 
-    port = _read_aw_server_port(profile)
-    if port is not None:
-        return port
+    if check_rust:
+        port = _read_server_rust_port(profile)
+        if port is not None:
+            return port
+
+    if check_python:
+        port = _read_aw_server_port(profile)
+        if port is not None:
+            return port
 
     if profile not in (DEFAULT_PROFILE, TESTING_PROFILE):
         logger.warning(
@@ -103,4 +117,6 @@ class AwQtSettings:
         config_section: Any = config[section_name]
 
         self.autostart_modules: List[str] = config_section["autostart_modules"]
-        self.port: int = _read_server_port(profile)
+        # Pass autostart_modules so port lookup targets the actual server type,
+        # keeping the tray URL and the manager's probe endpoint consistent.
+        self.port: int = _read_server_port(profile, self.autostart_modules)
