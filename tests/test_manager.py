@@ -342,3 +342,54 @@ class TestMacOSSystemPathDiscovery:
         assert "/opt/homebrew/bin" not in searched_paths, (
             "Homebrew path should NOT be added on Linux"
         )
+
+
+class TestDbLockedDetection:
+    """Tests for database-locked error detection in module logs."""
+
+    def test_has_db_locked_error_returns_false_when_no_log(self, module):
+        """Returns False when no log file exists."""
+        with patch("aw_core.log.get_latest_log_file", return_value=None):
+            assert not module.has_db_locked_error(testing=True)
+
+    def test_has_db_locked_error_detects_locked_phrase(self, module, tmp_path):
+        """Returns True when log contains 'database is locked'."""
+        log_file = tmp_path / "aw-test.log"
+        log_file.write_text(
+            "2026-01-01 INFO starting\n"
+            "2026-01-01 ERROR database is locked\n"
+        )
+        with patch("aw_core.log.get_latest_log_file", return_value=str(log_file)):
+            assert module.has_db_locked_error(testing=True)
+
+    def test_has_db_locked_error_returns_false_for_clean_log(self, module, tmp_path):
+        """Returns False when log has no lock errors."""
+        log_file = tmp_path / "aw-test.log"
+        log_file.write_text("2026-01-01 INFO everything is fine\n")
+        with patch("aw_core.log.get_latest_log_file", return_value=str(log_file)):
+            assert not module.has_db_locked_error(testing=True)
+
+    def test_get_db_locked_modules_filters_non_server(self):
+        """Only aw-server and aw-server-rust modules are checked."""
+        from aw_qt.manager import Manager
+
+        mgr = Manager.__new__(Manager)
+        mgr.testing = False
+
+        watcher = Module("aw-watcher-window", Path("/usr/bin/true"), "system")
+        watcher.started = True
+        server = Module("aw-server", Path("/usr/bin/true"), "system")
+        server.started = True
+
+        mgr.modules = [watcher, server]
+
+        with (
+            patch.object(watcher, "is_alive", return_value=True),
+            patch.object(watcher, "has_db_locked_error", return_value=True),
+            patch.object(server, "is_alive", return_value=True),
+            patch.object(server, "has_db_locked_error", return_value=True),
+        ):
+            locked = mgr.get_db_locked_modules()
+
+        assert server in locked
+        assert watcher not in locked

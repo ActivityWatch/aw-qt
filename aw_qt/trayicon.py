@@ -93,6 +93,7 @@ class TrayIcon(QSystemTrayIcon):
         self.testing = testing
         self._restart_timestamps: Dict[str, List[float]] = {}
         self._autostart_action: Optional[QAction] = None
+        self._db_locked_notified: set = set()  # modules already shown db-locked notification
 
         if port is None:
             port = 5666 if testing else 5600
@@ -171,6 +172,9 @@ class TrayIcon(QSystemTrayIcon):
         )
         menu.addAction(
             "Open config folder", lambda: open_dir(aw_core.dirs.get_config_dir(None))
+        )
+        menu.addAction(
+            "Open data folder", lambda: open_dir(aw_core.dirs.get_data_dir(None))
         )
 
         if autostart.is_supported():
@@ -266,6 +270,33 @@ class TrayIcon(QSystemTrayIcon):
             QtCore.QTimer.singleShot(5000, check_module_status)
 
         QtCore.QTimer.singleShot(5000, check_module_status)
+
+        def check_db_locked() -> None:
+            locked = self.manager.get_db_locked_modules()
+            locked_names = {m.name for m in locked}
+
+            # Show notification for newly-detected locked modules
+            for module in locked:
+                if module.name not in self._db_locked_notified:
+                    data_dir = aw_core.dirs.get_data_dir(module.name)
+                    self.showMessage(
+                        "ActivityWatch — Database Locked",
+                        f"The {module.name} database is locked — the web UI may show errors.\n\n"
+                        f"To export your data without the UI, copy the .db files from:\n"
+                        f"{data_dir}\n\n"
+                        f"Or run:  sqlite3 \"{data_dir}/peewee-sqlite.v2.db\" "
+                        f'.backup "{data_dir}/backup.db"',
+                        QSystemTrayIcon.MessageIcon.Warning,
+                        15000,
+                    )
+                    self._db_locked_notified.add(module.name)
+
+            # Clear notifications for modules that are no longer locked
+            self._db_locked_notified -= self._db_locked_notified - locked_names
+
+            QtCore.QTimer.singleShot(30000, check_db_locked)
+
+        QtCore.QTimer.singleShot(30000, check_db_locked)
 
     def _build_modulemenu(self, moduleMenu: QMenu) -> None:
         moduleMenu.clear()
