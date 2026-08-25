@@ -73,6 +73,11 @@ class TestExportProfile:
         export_profile("research")
         assert os.environ["AW_PROFILE"] == "research"
 
+    def test_default_profile_is_not_exported(self, monkeypatch):
+        monkeypatch.setenv("AW_PROFILE", "research")
+        export_profile(DEFAULT_PROFILE)
+        assert "AW_PROFILE" not in os.environ
+
 
 class TestProfileFromEnv:
     def test_defaults_when_unset(self, monkeypatch):

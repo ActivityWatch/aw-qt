@@ -80,6 +80,10 @@ def export_profile(profile: str) -> None:
     """Publish the profile to child processes.
 
     Modules are spawned as subprocesses, so they inherit the profile without
-    aw-qt threading a flag through every module's CLI.
+    aw-qt threading a flag through every module's CLI. The default profile is
+    represented by an unset variable so aw-core keeps its legacy bare root.
     """
-    os.environ[ENV_VAR] = profile
+    if profile == DEFAULT_PROFILE:
+        os.environ.pop(ENV_VAR, None)
+    else:
+        os.environ[ENV_VAR] = profile
