@@ -14,11 +14,18 @@ from aw_core.log import setup_logging
 
 from .manager import Manager
 from .config import AwQtSettings
+from .profile import (
+    DEFAULT_PROFILE,
+    export_profile,
+    is_testing,
+    profile_suffix,
+    resolve_profile,
+)
 
 logger = logging.getLogger(__name__)
 
 
-def _acquire_single_instance_lock(testing: bool) -> QLockFile:
+def _acquire_single_instance_lock(profile: str) -> QLockFile:
     """Ensure only one instance of aw-qt runs at a time.
 
     Uses QLockFile for cross-platform single-instance enforcement.
@@ -28,8 +35,7 @@ def _acquire_single_instance_lock(testing: bool) -> QLockFile:
     import aw_core.dirs
 
     data_dir = aw_core.dirs.get_data_dir("aw-qt")
-    suffix = "-testing" if testing else ""
-    lock_path = os.path.join(data_dir, f"aw-qt{suffix}.lock")
+    lock_path = os.path.join(data_dir, f"aw-qt{profile_suffix(profile)}.lock")
 
     lock = QLockFile(lock_path)
     lock.setStaleLockTime(0)  # Only release when the process explicitly unlocks
@@ -51,6 +57,15 @@ def _acquire_single_instance_lock(testing: bool) -> QLockFile:
 @click.option(
     "--testing", is_flag=True, help="Run the trayicon and services in testing mode"
 )
+@click.option(
+    "--profile",
+    "profile_name",
+    default=None,
+    help=(
+        "Run an isolated instance under this profile name (data, config, port "
+        "and lockfile are separate). --testing is an alias for --profile testing."
+    ),
+)
 @click.option("-v", "--verbose", is_flag=True, help="Run with debug logging")
 @click.option(
     "--autostart-modules",
@@ -70,6 +85,7 @@ def _acquire_single_instance_lock(testing: bool) -> QLockFile:
 )
 def main(
     testing: bool,
+    profile_name: Optional[str],
     verbose: bool,
     autostart_modules: Optional[str],
     no_gui: bool,
@@ -79,15 +95,25 @@ def main(
     if platform.system() == "Darwin":
         subprocess.call("syslog -s 'aw-qt started'", shell=True)
 
+    try:
+        profile = resolve_profile(profile_name, testing)
+    except ValueError as e:
+        raise click.UsageError(str(e)) from e
+    testing = is_testing(profile)
+    # Modules are spawned as subprocesses and inherit the profile from here.
+    export_profile(profile)
+
     setup_logging("aw-qt", testing=testing, verbose=verbose, log_file=True)
     logger.info("Started aw-qt...")
+    if profile != DEFAULT_PROFILE:
+        logger.info(f"Running with profile: {profile}")
 
     # Since the .app can crash when started from Finder for unknown reasons, we send a syslog message here to make debugging easier.
     if platform.system() == "Darwin":
         subprocess.call("syslog -s 'aw-qt successfully started logging'", shell=True)
 
     # Prevent multiple instances from running simultaneously
-    _lock = _acquire_single_instance_lock(testing)  # noqa: F841 (must stay alive)
+    _lock = _acquire_single_instance_lock(profile)  # noqa: F841 (must stay alive)
 
     # Create a process group, become its leader
     # TODO: This shouldn't go here
@@ -100,7 +126,7 @@ def main(
         except PermissionError:
             pass
 
-    config = AwQtSettings(testing=testing)
+    config = AwQtSettings(profile=profile)
     _autostart_modules = (
         [m.strip() for m in autostart_modules.split(",") if m and m.lower() != "none"]
         if autostart_modules
@@ -114,7 +140,9 @@ def main(
         from . import trayicon  # pylint: disable=import-outside-toplevel
 
         # run the trayicon, wait for signal to quit
-        error_code = trayicon.run(manager, testing=testing, port=config.port)
+        error_code = trayicon.run(
+            manager, testing=testing, port=config.port, profile=profile
+        )
     elif interactive_cli:
         # just an experiment, don't really see the use right now
         _interactive_cli(manager)

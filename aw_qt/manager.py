@@ -179,10 +179,13 @@ class Module:
             return None
 
         from .config import _read_aw_server_port, _read_server_rust_port
+        from .profile import profile_from_env
 
+        profile = profile_from_env(testing)
+        default_port = 5666 if testing else 5600
         if self.name == "aw-server":
-            return _read_aw_server_port(testing) or (5666 if testing else 5600)
-        return _read_server_rust_port(testing) or (5666 if testing else 5600)
+            return _read_aw_server_port(profile) or default_port
+        return _read_server_rust_port(profile) or default_port
 
     def _probe_external_server(self, testing: bool, timeout: float = 0.2) -> bool:
         port = self._get_server_port(testing)
