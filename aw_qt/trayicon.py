@@ -291,12 +291,12 @@ class TrayIcon(QSystemTrayIcon):
                     )
                     self._db_locked_notified.add(module.name)
 
-            # Clear notifications using a shorter window so that historical lock
-            # messages (from a now-recovered server) don't keep the module marked
-            # as locked and suppress notification of a subsequent new lock event.
-            recently_locked = self.manager.get_db_locked_modules(recent_lines=20)
-            recently_locked_names = {m.name for m in recently_locked}
-            self._db_locked_notified -= self._db_locked_notified - recently_locked_names
+            # Clear notification state for modules no longer seen in the detection
+            # window.  Using the same 200-line window for both detection and clearing
+            # prevents a "dead zone" (lines 20-199) where the short window clears the
+            # notified set while the long window still reports the module as locked,
+            # which would cause a new notification to fire every 30-second poll.
+            self._db_locked_notified &= locked_names
 
             QtCore.QTimer.singleShot(30000, check_db_locked)
 
