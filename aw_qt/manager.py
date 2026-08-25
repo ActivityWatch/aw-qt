@@ -5,6 +5,7 @@ import subprocess
 import platform
 import urllib.error
 import urllib.request
+from collections import deque
 from pathlib import Path
 from glob import glob
 from time import monotonic, sleep
@@ -336,8 +337,7 @@ class Module:
             return False
         try:
             with open(log_path) as f:
-                lines = f.readlines()
-            tail = lines[-recent_lines:] if len(lines) > recent_lines else lines
+                tail = list(deque(f, maxlen=recent_lines))
             return any(
                 "database is locked" in line.lower() or "database locked" in line.lower()
                 for line in tail
