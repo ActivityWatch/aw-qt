@@ -393,3 +393,37 @@ class TestDbLockedDetection:
 
         assert server in locked
         assert watcher not in locked
+
+    def test_get_db_locked_modules_passes_recent_lines(self):
+        """get_db_locked_modules forwards recent_lines to has_db_locked_error."""
+        from aw_qt.manager import Manager
+
+        mgr = Manager.__new__(Manager)
+        mgr.testing = False
+
+        server = Module("aw-server", Path("/usr/bin/true"), "system")
+        server.started = True
+        mgr.modules = [server]
+
+        with (
+            patch.object(server, "is_alive", return_value=True),
+            patch.object(server, "has_db_locked_error", return_value=True) as mock_check,
+        ):
+            mgr.get_db_locked_modules(recent_lines=20)
+
+        mock_check.assert_called_once_with(False, recent_lines=20)
+
+    def test_has_db_locked_error_only_checks_tail(self, module, tmp_path):
+        """Only the last recent_lines lines are checked — old messages outside the
+        window do not trigger detection, simulating a recovered server."""
+        log_file = tmp_path / "aw-test.log"
+        # 206 lines total: lock error at index 5 (old), 200 clean lines after
+        lines = ["2026-01-01 INFO line\n"] * 205
+        lines.insert(5, "2026-01-01 ERROR database is locked\n")
+        log_file.write_text("".join(lines))
+
+        with patch("aw_core.log.get_latest_log_file", return_value=str(log_file)):
+            # 200-line window: lock message at line 5 of 211 total is outside tail
+            assert not module.has_db_locked_error(testing=True, recent_lines=200)
+            # 211-line window (whole file): message is included
+            assert module.has_db_locked_error(testing=True, recent_lines=211)

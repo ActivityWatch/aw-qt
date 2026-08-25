@@ -291,8 +291,12 @@ class TrayIcon(QSystemTrayIcon):
                     )
                     self._db_locked_notified.add(module.name)
 
-            # Clear notifications for modules that are no longer locked
-            self._db_locked_notified -= self._db_locked_notified - locked_names
+            # Clear notifications using a shorter window so that historical lock
+            # messages (from a now-recovered server) don't keep the module marked
+            # as locked and suppress notification of a subsequent new lock event.
+            recently_locked = self.manager.get_db_locked_modules(recent_lines=20)
+            recently_locked_names = {m.name for m in recently_locked}
+            self._db_locked_notified -= self._db_locked_notified - recently_locked_names
 
             QtCore.QTimer.singleShot(30000, check_db_locked)
 

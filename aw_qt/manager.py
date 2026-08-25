@@ -416,7 +416,7 @@ class Manager:
         else:
             logger.error(f"Manager tried to stop nonexistent module {module_name}")
 
-    def get_db_locked_modules(self) -> List[Module]:
+    def get_db_locked_modules(self, recent_lines: int = 200) -> List[Module]:
         """Return server modules whose recent logs indicate a database-locked error."""
         server_names = {"aw-server", "aw-server-rust"}
         return [
@@ -424,7 +424,7 @@ class Manager:
             for m in self.modules
             if m.name in server_names
             and m.is_alive()
-            and m.has_db_locked_error(self.testing)
+            and m.has_db_locked_error(self.testing, recent_lines=recent_lines)
         ]
 
     def stop_all(self) -> None:
