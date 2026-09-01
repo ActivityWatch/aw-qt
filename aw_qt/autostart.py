@@ -533,3 +533,34 @@ def disable() -> None:
     except Exception as e:
         raise AutostartError(f"Could not disable autostart: {e}") from e
     logger.info("Disabled autostart")
+
+
+FIRST_RUN_MARKER = "autostart-first-run"
+
+
+def ensure_enabled_on_first_run() -> None:
+    """Enable start-at-login once, on the first launch that sees the setting.
+
+    Used by builds where autostart should be on by default (e.g. the Research
+    Edition, where participants' machines must survive reboots without setup
+    steps). A marker file in the aw-qt data dir records that enabling
+    succeeded, so a user who later unchecks "Start at login" is never
+    overridden. On failure no marker is written, and the next launch retries.
+    """
+    if not is_supported():
+        logger.debug("Autostart not supported on this platform; skipping first-run enable")
+        return
+    from aw_core import dirs  # deferred: keep this module importable without aw_core
+
+    marker = Path(dirs.get_data_dir("aw-qt")) / FIRST_RUN_MARKER
+    if marker.exists():
+        return
+    try:
+        enable()
+    except AutostartError as e:
+        logger.warning(
+            f"Could not enable autostart on first run (will retry next launch): {e}"
+        )
+        return
+    _write_text_atomic(marker, "start-at-login was enabled on first run\n")
+    logger.info("Enabled start-at-login on first run")
