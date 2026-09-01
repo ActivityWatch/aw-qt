@@ -5,6 +5,7 @@ import subprocess
 import platform
 import urllib.error
 import urllib.request
+from collections import deque
 from pathlib import Path
 from glob import glob
 from time import monotonic, sleep
@@ -332,6 +333,21 @@ class Module:
         else:
             return "No log file found"
 
+    def has_db_locked_error(self, testing: bool, recent_lines: int = 200) -> bool:
+        """Check if recent logs contain SQLite 'database is locked' errors."""
+        log_path = aw_core.log.get_latest_log_file(self.name, testing)
+        if not log_path:
+            return False
+        try:
+            with open(log_path) as f:
+                tail = list(deque(f, maxlen=recent_lines))
+            return any(
+                "database is locked" in line.lower() or "database locked" in line.lower()
+                for line in tail
+            )
+        except OSError:
+            return False
+
 
 class Manager:
     def __init__(self, testing: bool = False) -> None:
@@ -402,6 +418,17 @@ class Manager:
                 break
         else:
             logger.error(f"Manager tried to stop nonexistent module {module_name}")
+
+    def get_db_locked_modules(self, recent_lines: int = 200) -> List[Module]:
+        """Return server modules whose recent logs indicate a database-locked error."""
+        server_names = {"aw-server", "aw-server-rust"}
+        return [
+            m
+            for m in self.modules
+            if m.name in server_names
+            and m.is_alive()
+            and m.has_db_locked_error(self.testing, recent_lines=recent_lines)
+        ]
 
     def stop_all(self) -> None:
         for module in filter(lambda m: m.is_alive(), self.modules):
