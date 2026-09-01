@@ -13,9 +13,13 @@ logger = logging.getLogger(__name__)
 default_config = """
 [aw-qt]
 autostart_modules = ["aw-server", "aw-watcher-afk", "aw-watcher-window"]
+# Enable OS-level start-at-login on first launch (Research Edition builds
+# flip this to true; the user can still disable it from the tray afterwards).
+autostart_on_first_run = false
 
 [aw-qt-testing]
 autostart_modules = ["aw-server", "aw-watcher-afk", "aw-watcher-window"]
+autostart_on_first_run = false
 """.strip()
 
 
@@ -117,6 +121,9 @@ class AwQtSettings:
         config_section: Any = config[section_name]
 
         self.autostart_modules: List[str] = config_section["autostart_modules"]
+        self.autostart_on_first_run: bool = bool(
+            config_section.get("autostart_on_first_run", False)
+        )
         # Pass autostart_modules so port lookup targets the actual server type,
         # keeping the tray URL and the manager's probe endpoint consistent.
         self.port: int = _read_server_port(profile, self.autostart_modules)

@@ -12,6 +12,7 @@ import click
 from PyQt6.QtCore import QLockFile
 from aw_core.log import setup_logging
 
+from . import autostart
 from .manager import Manager
 from .config import AwQtSettings
 from .profile import (
@@ -132,6 +133,9 @@ def main(
         if autostart_modules
         else config.autostart_modules
     )
+
+    if config.autostart_on_first_run and not testing:
+        autostart.ensure_enabled_on_first_run()
 
     manager = Manager(testing=testing)
     manager.autostart(_autostart_modules)

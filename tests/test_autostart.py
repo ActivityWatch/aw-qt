@@ -384,3 +384,49 @@ class TestCommand:
     def test_falls_back_to_module_invocation(self):
         with patch("shutil.which", return_value=None):
             assert autostart._command() == [autostart.sys.executable, "-m", "aw_qt"]
+
+
+class TestFirstRunEnable:
+    """Tests for ensure_enabled_on_first_run (Research Edition default-on)."""
+
+    @pytest.fixture
+    def data_dir(self, tmp_path):
+        with patch("aw_core.dirs.get_data_dir", return_value=str(tmp_path)):
+            yield tmp_path
+
+    def test_enables_and_writes_marker(self, data_dir):
+        with (
+            patch.object(autostart, "is_supported", return_value=True),
+            patch.object(autostart, "enable") as mock_enable,
+        ):
+            autostart.ensure_enabled_on_first_run()
+        mock_enable.assert_called_once()
+        assert (data_dir / autostart.FIRST_RUN_MARKER).exists()
+
+    def test_marker_prevents_reenable(self, data_dir):
+        (data_dir / autostart.FIRST_RUN_MARKER).write_text("done\n")
+        with (
+            patch.object(autostart, "is_supported", return_value=True),
+            patch.object(autostart, "enable") as mock_enable,
+        ):
+            autostart.ensure_enabled_on_first_run()
+        mock_enable.assert_not_called()
+
+    def test_failure_writes_no_marker_and_does_not_raise(self, data_dir):
+        with (
+            patch.object(autostart, "is_supported", return_value=True),
+            patch.object(
+                autostart, "enable", side_effect=autostart.AutostartError("boom")
+            ),
+        ):
+            autostart.ensure_enabled_on_first_run()
+        assert not (data_dir / autostart.FIRST_RUN_MARKER).exists()
+
+    def test_unsupported_platform_is_noop(self, data_dir):
+        with (
+            patch.object(autostart, "is_supported", return_value=False),
+            patch.object(autostart, "enable") as mock_enable,
+        ):
+            autostart.ensure_enabled_on_first_run()
+        mock_enable.assert_not_called()
+        assert not (data_dir / autostart.FIRST_RUN_MARKER).exists()
