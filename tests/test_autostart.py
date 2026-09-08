@@ -19,6 +19,7 @@ def fake_home(tmp_path, monkeypatch):
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.delenv("AW_PROFILE", raising=False)
     with patch.object(autostart, "_home", return_value=home):
         yield home
 
@@ -295,9 +296,11 @@ class TestMacosBackend:
 
     def test_no_launchctl_invocation(self, fake_home):
         """Loading/unloading would duplicate or kill the running instance."""
-        with patch("subprocess.run") as run, patch("subprocess.call") as call, patch(
-            "subprocess.Popen"
-        ) as popen:
+        with (
+            patch("subprocess.run") as run,
+            patch("subprocess.call") as call,
+            patch("subprocess.Popen") as popen,
+        ):
             autostart._macos_enable()
             autostart._macos_disable()
         run.assert_not_called()
@@ -371,6 +374,53 @@ class TestWindowsBackend:
                 assert not autostart._windows_is_enabled()
 
 
+class TestProfileAwareEntries:
+    def test_named_profile_uses_separate_linux_entry(self, fake_home, monkeypatch):
+        monkeypatch.setenv("AW_PROFILE", "research")
+        assert autostart._linux_desktop_path().name == "aw-qt-research.desktop"
+        with patch.object(
+            autostart, "_command", return_value=["aw-qt", "--profile", "research"]
+        ):
+            autostart._linux_enable()
+        assert (
+            "Exec=aw-qt --profile research"
+            in autostart._linux_desktop_path().read_text()
+        )
+
+    def test_named_profile_uses_separate_macos_entry(self, fake_home, monkeypatch):
+        monkeypatch.setenv("AW_PROFILE", "research")
+        assert autostart._macos_plist_path().name == (
+            "net.activitywatch.aw-qt-research.plist"
+        )
+        assert plistlib.loads(autostart._macos_plist_contents())["Label"] == (
+            "net.activitywatch.aw-qt-research"
+        )
+
+    def test_named_profile_uses_separate_windows_entry(self, monkeypatch):
+        monkeypatch.setenv("AW_PROFILE", "research")
+        assert autostart._windows_run_value_name() == "ActivityWatch (research)"
+
+    def test_named_profile_does_not_claim_installer_shortcut(self, monkeypatch):
+        monkeypatch.setenv("AW_PROFILE", "research")
+        shortcut = Path("C:/Startup/ActivityWatch.lnk")
+        with patch.object(
+            autostart, "_windows_startup_shortcut", return_value=shortcut
+        ):
+            with patch.object(autostart, "_windows_run_value", return_value=None):
+                assert not autostart._windows_is_enabled()
+            with patch.object(autostart, "_windows_set_run_value") as set_value:
+                autostart._windows_enable()
+            set_value.assert_called_once()
+            with (
+                patch.object(autostart, "_windows_delete_run_value"),
+                patch.object(
+                    autostart, "_windows_delete_startup_shortcut"
+                ) as delete_shortcut,
+            ):
+                autostart._windows_disable()
+            delete_shortcut.assert_not_called()
+
+
 class TestCommand:
     def test_frozen_bundle_uses_executable(self):
         with patch.object(autostart.sys, "frozen", True, create=True):
@@ -384,6 +434,15 @@ class TestCommand:
     def test_falls_back_to_module_invocation(self):
         with patch("shutil.which", return_value=None):
             assert autostart._command() == [autostart.sys.executable, "-m", "aw_qt"]
+
+    def test_named_profile_is_included(self, monkeypatch):
+        monkeypatch.setenv("AW_PROFILE", "research")
+        with patch("shutil.which", return_value="/usr/local/bin/aw-qt"):
+            assert autostart._command() == [
+                "/usr/local/bin/aw-qt",
+                "--profile",
+                "research",
+            ]
 
 
 class TestFirstRunEnable:
@@ -411,6 +470,29 @@ class TestFirstRunEnable:
         ):
             autostart.ensure_enabled_on_first_run()
         mock_enable.assert_not_called()
+
+    def test_named_profiles_have_independent_markers(self, data_dir, monkeypatch):
+        (data_dir / autostart.FIRST_RUN_MARKER).write_text("done\n")
+        monkeypatch.setenv("AW_PROFILE", "research")
+        with (
+            patch.object(autostart, "is_supported", return_value=True),
+            patch.object(autostart, "enable") as mock_enable,
+        ):
+            autostart.ensure_enabled_on_first_run()
+        mock_enable.assert_called_once()
+        assert (data_dir / f"{autostart.FIRST_RUN_MARKER}-research").exists()
+        assert (data_dir / autostart.FIRST_RUN_MARKER).exists()
+
+    def test_named_profile_marker_does_not_skip_default(self, data_dir, monkeypatch):
+        (data_dir / f"{autostart.FIRST_RUN_MARKER}-research").write_text("done\n")
+        monkeypatch.delenv("AW_PROFILE", raising=False)
+        with (
+            patch.object(autostart, "is_supported", return_value=True),
+            patch.object(autostart, "enable") as mock_enable,
+        ):
+            autostart.ensure_enabled_on_first_run()
+        mock_enable.assert_called_once()
+        assert (data_dir / autostart.FIRST_RUN_MARKER).exists()
 
     def test_failure_writes_no_marker_and_does_not_raise(self, data_dir):
         with (

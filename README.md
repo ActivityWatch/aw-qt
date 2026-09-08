@@ -6,4 +6,7 @@
 
 A service manager and tray icon managing aw-server and watchers, built with Qt.
 
+Use `--profile NAME` to run an isolated named instance. Enabling **Start at login**
+from that instance's tray registers the same profile-specific launch command.
+
 For instructions how to build, see `Makefile`.

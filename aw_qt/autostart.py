@@ -91,20 +91,45 @@ def _home() -> Path:
     return Path(os.path.expanduser("~"))
 
 
+def _profile() -> str:
+    """Return the active named profile, or ``default`` when none is exported."""
+    from .profile import profile_from_env
+
+    return profile_from_env()
+
+
+def _profile_suffix() -> str:
+    """Suffix used to give each profile its own OS autostart entry."""
+    from .profile import profile_suffix
+
+    return profile_suffix(_profile())
+
+
+def _is_default_profile() -> bool:
+    from .profile import DEFAULT_PROFILE
+
+    return _profile() == DEFAULT_PROFILE
+
+
 def _command() -> List[str]:
-    """The command the OS should run at login."""
+    """The command the OS should run at login, including the active profile."""
     if getattr(sys, "frozen", False):
         # PyInstaller bundle: sys.executable is the aw-qt binary itself
-        return [sys.executable]
+        command = [sys.executable]
+    else:
+        import shutil
 
-    import shutil
+        exe = shutil.which("aw-qt")
+        if exe:
+            command = [exe]
+        else:
+            # Running from a source checkout
+            command = [sys.executable, "-m", "aw_qt"]
 
-    exe = shutil.which("aw-qt")
-    if exe:
-        return [exe]
-
-    # Running from a source checkout
-    return [sys.executable, "-m", "aw_qt"]
+    profile = _profile()
+    if not _is_default_profile():
+        command.extend(["--profile", profile])
+    return command
 
 
 def _write_text_atomic(path: Path, contents: str) -> None:
@@ -146,7 +171,8 @@ def _linux_autostart_dir() -> Path:
 
 
 def _linux_desktop_path() -> Path:
-    return _linux_autostart_dir() / DESKTOP_FILENAME
+    stem, extension = os.path.splitext(DESKTOP_FILENAME)
+    return _linux_autostart_dir() / f"{stem}{_profile_suffix()}{extension}"
 
 
 def _bundled_desktop_file() -> Optional[Path]:
@@ -270,8 +296,12 @@ def _linux_disable() -> None:
 # ---------------------------------------------------------------------------
 
 
+def _macos_launch_agent_label() -> str:
+    return f"{LAUNCH_AGENT_LABEL}{_profile_suffix()}"
+
+
 def _macos_plist_path() -> Path:
-    return _home() / "Library" / "LaunchAgents" / LAUNCH_AGENT_FILENAME
+    return _home() / "Library" / "LaunchAgents" / f"{_macos_launch_agent_label()}.plist"
 
 
 def _macos_plist_contents() -> bytes:
@@ -279,7 +309,7 @@ def _macos_plist_contents() -> bytes:
 
     return plistlib.dumps(
         {
-            "Label": LAUNCH_AGENT_LABEL,
+            "Label": _macos_launch_agent_label(),
             "ProgramArguments": _command(),
             "RunAtLoad": True,
             # aw-qt manages its own subprocesses and should not be respawned by
@@ -365,14 +395,19 @@ def _windows_startup_shortcut() -> Optional[Path]:
     return None
 
 
+def _windows_run_value_name() -> str:
+    suffix = _profile_suffix()
+    return APP_NAME if not suffix else f"{APP_NAME} ({_profile()})"
+
+
 def _windows_run_value() -> Optional[str]:
-    """The HKCU Run value for ActivityWatch, or None if it is not set."""
+    """The HKCU Run value for the active profile, or None if it is not set."""
     if sys.platform == "win32":
         import winreg
 
         try:
             with winreg.OpenKey(winreg.HKEY_CURRENT_USER, WINDOWS_RUN_KEY) as key:
-                value, _type = winreg.QueryValueEx(key, WINDOWS_RUN_VALUE_NAME)
+                value, _type = winreg.QueryValueEx(key, _windows_run_value_name())
         except FileNotFoundError:
             return None
         except OSError as e:
@@ -390,7 +425,7 @@ def _windows_set_run_value(command: str) -> None:
                 winreg.HKEY_CURRENT_USER, WINDOWS_RUN_KEY, 0, winreg.KEY_SET_VALUE
             ) as key:
                 winreg.SetValueEx(
-                    key, WINDOWS_RUN_VALUE_NAME, 0, winreg.REG_SZ, command
+                    key, _windows_run_value_name(), 0, winreg.REG_SZ, command
                 )
         except OSError as e:
             raise AutostartError(f"Could not write to the registry: {e}") from e
@@ -404,7 +439,7 @@ def _windows_delete_run_value() -> None:
             with winreg.OpenKey(
                 winreg.HKEY_CURRENT_USER, WINDOWS_RUN_KEY, 0, winreg.KEY_SET_VALUE
             ) as key:
-                winreg.DeleteValue(key, WINDOWS_RUN_VALUE_NAME)
+                winreg.DeleteValue(key, _windows_run_value_name())
         except FileNotFoundError:
             # Key or value is already gone
             pass
@@ -425,15 +460,15 @@ def _windows_delete_startup_shortcut() -> None:
 
 
 def _windows_is_enabled() -> bool:
-    if _windows_startup_shortcut() is not None:
+    if _is_default_profile() and _windows_startup_shortcut() is not None:
         return True
     return _windows_run_value() is not None
 
 
 def _windows_enable() -> None:
-    if _windows_startup_shortcut() is not None:
-        # Already started by the installer's Startup shortcut, adding the Run
-        # key as well would launch aw-qt twice
+    if _is_default_profile() and _windows_startup_shortcut() is not None:
+        # The installer's shortcut belongs to the default profile. Adding its
+        # Run key too would launch that profile twice.
         logger.info("Autostart already enabled via the Startup folder shortcut")
         return
     _windows_set_run_value(subprocess.list2cmdline(_command()))
@@ -441,7 +476,10 @@ def _windows_enable() -> None:
 
 def _windows_disable() -> None:
     _windows_delete_run_value()
-    _windows_delete_startup_shortcut()
+    # The installer-created shortcut is the legacy default-profile entry. A
+    # named profile must never disable it while removing its own Run value.
+    if _is_default_profile():
+        _windows_delete_startup_shortcut()
 
 
 # ---------------------------------------------------------------------------
@@ -538,21 +576,30 @@ def disable() -> None:
 FIRST_RUN_MARKER = "autostart-first-run"
 
 
+def _first_run_marker_name() -> str:
+    """Marker filename for the active profile's autostart registration."""
+    return f"{FIRST_RUN_MARKER}{_profile_suffix()}"
+
+
 def ensure_enabled_on_first_run() -> None:
     """Enable start-at-login once, on the first launch that sees the setting.
 
     Used by builds where autostart should be on by default (e.g. the Research
     Edition, where participants' machines must survive reboots without setup
-    steps). A marker file in the aw-qt data dir records that enabling
-    succeeded, so a user who later unchecks "Start at login" is never
-    overridden. On failure no marker is written, and the next launch retries.
+    steps). A per-profile marker file in the aw-qt data dir records that
+    enabling succeeded for this profile, so a user who later unchecks "Start
+    at login" is never overridden, and a later profile still gets its own
+    first-run registration. On failure no marker is written, and the next
+    launch retries.
     """
     if not is_supported():
-        logger.debug("Autostart not supported on this platform; skipping first-run enable")
+        logger.debug(
+            "Autostart not supported on this platform; skipping first-run enable"
+        )
         return
     from aw_core import dirs  # deferred: keep this module importable without aw_core
 
-    marker = Path(dirs.get_data_dir("aw-qt")) / FIRST_RUN_MARKER
+    marker = Path(dirs.get_data_dir("aw-qt")) / _first_run_marker_name()
     if marker.exists():
         return
     try:
