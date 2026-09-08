@@ -6,8 +6,12 @@ has always meant, and any other name (for example `research`) is a sibling
 instance that can run at the same time as the others.
 
 aw-qt only launches things, so its job is small: resolve the profile, export
-it as ``AW_PROFILE`` for the modules it spawns, and use the profile suffix for
-the things aw-qt itself owns (lockfile, config section, port lookup).
+it as ``AW_PROFILE`` for the modules it spawns (which isolates dirs via
+aw-core), and use the profile suffix for the lockfile. Port lookup and
+config sections follow isolated-root rules: bare ``config.toml`` / ``[server]``
+in the profile dir, suffixed names for legacy shared-root testing, and a
+shared-root ``config-<profile>.toml`` / ``[server-<profile>]`` fallback so
+pre-isolation named-profile files are not orphaned.
 """
 
 import os

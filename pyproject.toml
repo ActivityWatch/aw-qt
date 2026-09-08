@@ -14,7 +14,7 @@ aw-qt = "aw_qt:main"
 
 [tool.poetry.dependencies]
 python = "^3.8,<3.14"  # PyInstaller needs <3.14
-aw-core = "^0.5"
+aw-core = "^0.5.18"
 
 pyobjc-framework-Cocoa = { version = "*", platform = "darwin" }
 click = "*"
