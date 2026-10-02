@@ -22,7 +22,13 @@ from PyQt6.QtWidgets import (
 
 from . import autostart
 from .config import persist_module_autostart
-from .manager import Manager, Module
+from .manager import (
+    NOTIFY_MODULE,
+    Manager,
+    Module,
+    read_notify_enabled,
+    write_notify_enabled,
+)
 from .profile import DEFAULT_PROFILE, TESTING_PROFILE
 
 logger = logging.getLogger(__name__)
@@ -103,9 +109,11 @@ class TrayIcon(QSystemTrayIcon):
         self.persist_toggles = persist_toggles
         self._restart_timestamps: Dict[str, List[float]] = {}
         self._autostart_action: Optional[QAction] = None
+        self._notify_action: Optional[QAction] = None
 
         if port is None:
             port = 5666 if testing else 5600
+        self.port = port
         self.root_url = f"http://localhost:{port}"
         self.activated.connect(self.on_activated)
 
@@ -132,6 +140,30 @@ class TrayIcon(QSystemTrayIcon):
         """Sync the menu item with the actual OS-level autostart state."""
         if self._autostart_action is not None:
             self._autostart_action.setChecked(autostart.is_enabled())
+
+    def _refresh_notify_action(self) -> None:
+        """Sync the menu item with the shared `aw-notify.enabled` setting."""
+        if self._notify_action is not None:
+            self._notify_action.setChecked(read_notify_enabled(self.port, timeout=0.5))
+
+    def _on_notify_toggled(self) -> None:
+        """Persist the opt-in flag, then start/stop aw-notify right away."""
+        if self._notify_action is None:
+            return
+        checked = self._notify_action.isChecked()
+        if write_notify_enabled(self.port, checked):
+            if checked:
+                self.manager.start(NOTIFY_MODULE)
+            else:
+                self.manager.stop(NOTIFY_MODULE)
+        else:
+            logger.error("Failed to save the aw-notify setting, is the server running?")
+            box = QMessageBox(self._parent)
+            box.setIcon(QMessageBox.Icon.Warning)
+            box.setText("Could not save the notifications setting. Is aw-server running?")
+            box.show()
+        # Always reflect the real state, the toggle may have failed
+        self._refresh_notify_action()
 
     def _on_autostart_toggled(self) -> None:
         """Enable/disable starting ActivityWatch at login."""
@@ -187,6 +219,15 @@ class TrayIcon(QSystemTrayIcon):
         menu.addAction(
             "Open config folder", lambda: open_dir(aw_core.dirs.get_config_dir(None))
         )
+
+        if NOTIFY_MODULE in [m.name for m in self.manager.modules]:
+            self._notify_action = menu.addAction(
+                "Enable notifications", self._on_notify_toggled
+            )
+            self._notify_action.setCheckable(True)
+            self._notify_action.setChecked(read_notify_enabled(self.port, timeout=0.5))
+            # The flag can also be changed from the web UI, re-read it on open
+            menu.aboutToShow.connect(self._refresh_notify_action)
 
         if autostart.is_supported():
             self._autostart_action = menu.addAction(

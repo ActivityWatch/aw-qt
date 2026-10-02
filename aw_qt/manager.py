@@ -34,19 +34,48 @@ NOTIFY_MODULE = "aw-notify"
 NOTIFY_SETTINGS_KEY = "aw-notify"
 
 
+def _notify_settings_url(port: int) -> str:
+    return f"http://localhost:{port}/api/0/settings/{NOTIFY_SETTINGS_KEY}"
+
+
+def read_notify_settings(port: int, timeout: float = 2.0) -> dict:
+    """Return the server's `aw-notify` settings object, or {} if missing/unreachable."""
+    try:
+        with urllib.request.urlopen(_notify_settings_url(port), timeout=timeout) as resp:
+            data = json.load(resp)
+    except (urllib.error.URLError, OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 def read_notify_enabled(port: int, timeout: float = 2.0) -> bool:
     """Return True iff the server's `aw-notify` setting has `enabled: true`.
 
     A missing key (404), an unreachable server, or any non-boolean-true value
     means disabled: notifications are opt-in.
     """
-    url = f"http://localhost:{port}/api/0/settings/{NOTIFY_SETTINGS_KEY}"
+    return read_notify_settings(port, timeout).get("enabled") is True
+
+
+def write_notify_enabled(port: int, enabled: bool, timeout: float = 2.0) -> bool:
+    """Persist `enabled` in the shared `aw-notify` setting, keeping all other keys.
+
+    Returns True on success. The settings endpoint replaces the whole value, so
+    the current object is read first and only `enabled` is changed.
+    """
+    settings = read_notify_settings(port, timeout)
+    settings["enabled"] = enabled
+    req = urllib.request.Request(
+        _notify_settings_url(port),
+        data=json.dumps(settings).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
     try:
-        with urllib.request.urlopen(url, timeout=timeout) as resp:
-            data = json.load(resp)
-    except (urllib.error.URLError, OSError, ValueError):
+        with urllib.request.urlopen(req, timeout=timeout):
+            return True
+    except (urllib.error.URLError, OSError):
         return False
-    return isinstance(data, dict) and data.get("enabled") is True
 
 
 def wait_for_server(port: int, timeout: float = 60.0, interval: float = 0.5) -> bool:

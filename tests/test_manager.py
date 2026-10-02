@@ -366,6 +366,17 @@ class _SettingsHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def do_POST(self):
+        if self.path != "/api/0/settings/aw-notify":
+            self.send_response(404)
+            self.end_headers()
+            return
+        length = int(self.headers.get("Content-Length", 0))
+        type(self).notify_settings = json.loads(self.rfile.read(length))
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"{}")
+
     def log_message(self, *args):
         pass
 
@@ -438,3 +449,27 @@ class TestNotifyOptIn:
         with patch.object(mgr, "start") as mock_start:
             self._run_autostart(mgr, server.server_port)
         mock_start.assert_not_called()
+
+
+class TestWriteNotifyEnabled:
+    def test_sets_flag_and_preserves_other_keys(self, settings_server):
+        server, handler = settings_server
+        handler.notify_settings = {"alerts": [1, 2], "http_port": 5601}
+        assert manager_module.write_notify_enabled(server.server_port, True) is True
+        assert handler.notify_settings == {
+            "alerts": [1, 2],
+            "http_port": 5601,
+            "enabled": True,
+        }
+        assert manager_module.write_notify_enabled(server.server_port, False) is True
+        assert handler.notify_settings["enabled"] is False
+        assert handler.notify_settings["alerts"] == [1, 2]
+
+    def test_creates_settings_when_key_missing(self, settings_server):
+        server, handler = settings_server
+        handler.notify_settings = None
+        assert manager_module.write_notify_enabled(server.server_port, True) is True
+        assert handler.notify_settings == {"enabled": True}
+
+    def test_returns_false_when_server_down(self):
+        assert manager_module.write_notify_enabled(1, True, timeout=0.2) is False
