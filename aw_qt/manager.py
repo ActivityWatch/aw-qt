@@ -48,6 +48,24 @@ def read_notify_settings(port: int, timeout: float = 2.0) -> dict:
     return data if isinstance(data, dict) else {}
 
 
+def _read_notify_settings_or_raise(port: int, timeout: float) -> dict:
+    """Like read_notify_settings, but raises on network errors.
+
+    A 404 (key not yet created) returns {} so write_notify_enabled can create
+    the key.  All other HTTP errors and network failures raise so the caller can
+    abort instead of POSTing an incomplete settings object and destroying keys
+    that simply weren't readable at that moment.
+    """
+    try:
+        with urllib.request.urlopen(_notify_settings_url(port), timeout=timeout) as resp:
+            data = json.load(resp)
+            return data if isinstance(data, dict) else {}
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return {}
+        raise
+
+
 def read_notify_enabled(port: int, timeout: float = 2.0) -> bool:
     """Return True iff the server's `aw-notify` setting has `enabled: true`.
 
@@ -62,8 +80,14 @@ def write_notify_enabled(port: int, enabled: bool, timeout: float = 2.0) -> bool
 
     Returns True on success. The settings endpoint replaces the whole value, so
     the current object is read first and only `enabled` is changed.
+
+    If the read fails due to a network error (not a missing key), the write is
+    aborted and False is returned so no keys are silently overwritten.
     """
-    settings = read_notify_settings(port, timeout)
+    try:
+        settings = _read_notify_settings_or_raise(port, timeout)
+    except (urllib.error.URLError, OSError, ValueError):
+        return False
     settings["enabled"] = enabled
     req = urllib.request.Request(
         _notify_settings_url(port),
@@ -410,6 +434,9 @@ class Manager:
     def __init__(self, testing: bool = False) -> None:
         self.modules: List[Module] = []
         self.testing = testing
+        # Serialises the autostart background thread against the tray toggle so
+        # that only one path can check-and-start/stop aw-notify at a time.
+        self._notify_lock = threading.Lock()
 
         self.discover_modules()
 
@@ -477,15 +504,19 @@ class Manager:
         for name in autostart_modules:
             self.start(name)
 
-    def autostart_notify_if_enabled(self, port: int) -> None:
+    def autostart_notify_if_enabled(self, port: int) -> threading.Thread:
         """Start aw-notify once the server is up, iff the shared `enabled` flag is true.
 
         Runs in a background thread so a slow server start does not block the
         tray. Does nothing when no aw-notify module is installed, or when it was
         already started explicitly through `autostart_modules`.
+
+        Returns the background thread so callers (e.g. tests) can join it.
         """
         if NOTIFY_MODULE not in [m.name for m in self.modules]:
-            return
+            t = threading.Thread(target=lambda: None, name="aw-notify-autostart", daemon=True)
+            t.start()
+            return t
 
         def _run() -> None:
             if not wait_for_server(port):
@@ -493,15 +524,18 @@ class Manager:
                     f"Server not reachable on port {port}, not starting {NOTIFY_MODULE}"
                 )
                 return
-            if any(m.name == NOTIFY_MODULE and m.started for m in self.modules):
-                return
-            if read_notify_enabled(port):
-                logger.info(f"{NOTIFY_MODULE} enabled in settings, starting")
-                self.start(NOTIFY_MODULE)
-            else:
-                logger.info(f"{NOTIFY_MODULE} not enabled in settings, not starting")
+            with self._notify_lock:
+                if any(m.name == NOTIFY_MODULE and m.started for m in self.modules):
+                    return
+                if read_notify_enabled(port):
+                    logger.info(f"{NOTIFY_MODULE} enabled in settings, starting")
+                    self.start(NOTIFY_MODULE)
+                else:
+                    logger.info(f"{NOTIFY_MODULE} not enabled in settings, not starting")
 
-        threading.Thread(target=_run, name="aw-notify-autostart", daemon=True).start()
+        t = threading.Thread(target=_run, name="aw-notify-autostart", daemon=True)
+        t.start()
+        return t
 
     def stop(self, module_name: str) -> None:
         for m in self.modules:

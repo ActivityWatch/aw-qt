@@ -142,7 +142,7 @@ def main(
 
     manager = Manager(testing=testing)
     manager.autostart(_autostart_modules)
-    if not autostart_modules:
+    if autostart_modules is None:
         # An explicit --autostart-modules list overrides the opt-in notify path too
         manager.autostart_notify_if_enabled(config.port)
 

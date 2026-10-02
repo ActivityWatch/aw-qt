@@ -6,6 +6,7 @@ import subprocess
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from typing import Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -351,11 +352,20 @@ class _SettingsHandler(BaseHTTPRequestHandler):
     """Minimal aw-server stand-in serving /api/0/info and /api/0/settings/aw-notify."""
 
     notify_settings = None  # None => 404 (key missing)
+    settings_get_error: Optional[int] = None  # set to an HTTP status code to force an error
 
     def do_GET(self):
         if self.path == "/api/0/info":
             body = b"{}"
-        elif self.path == "/api/0/settings/aw-notify" and self.notify_settings is not None:
+        elif self.path == "/api/0/settings/aw-notify":
+            if self.settings_get_error is not None:
+                self.send_response(self.settings_get_error)
+                self.end_headers()
+                return
+            if self.notify_settings is None:
+                self.send_response(404)
+                self.end_headers()
+                return
             body = json.dumps(self.notify_settings).encode()
         else:
             self.send_response(404)
@@ -389,6 +399,7 @@ def settings_server():
     yield server, _SettingsHandler
     server.shutdown()
     _SettingsHandler.notify_settings = None
+    _SettingsHandler.settings_get_error = None
 
 
 class TestNotifyOptIn:
@@ -419,10 +430,8 @@ class TestNotifyOptIn:
         return mgr, notify
 
     def _run_autostart(self, mgr, port):
-        mgr.autostart_notify_if_enabled(port)
-        for t in threading.enumerate():
-            if t.name == "aw-notify-autostart":
-                t.join(timeout=5)
+        t = mgr.autostart_notify_if_enabled(port)
+        t.join(timeout=5)
 
     def test_starts_when_enabled(self, settings_server):
         server, handler = settings_server
@@ -473,3 +482,18 @@ class TestWriteNotifyEnabled:
 
     def test_returns_false_when_server_down(self):
         assert manager_module.write_notify_enabled(1, True, timeout=0.2) is False
+
+    def test_returns_false_and_does_not_post_when_read_fails(self, settings_server):
+        """A transient non-404 error during the read must abort the write.
+
+        If we allowed the write to proceed with an empty settings dict, we would
+        POST {"enabled": <value>} and destroy any other keys (alerts, http_port,
+        etc.) the user had configured.
+        """
+        server, handler = settings_server
+        handler.notify_settings = {"alerts": [1], "http_port": 5601}
+        handler.settings_get_error = 500  # simulate transient server error on read
+        result = manager_module.write_notify_enabled(server.server_port, True)
+        assert result is False
+        # settings must be unchanged — write must not have been attempted
+        assert handler.notify_settings == {"alerts": [1], "http_port": 5601}
