@@ -1,6 +1,8 @@
 import os
 import sys
+import json
 import logging
+import threading
 import subprocess
 import platform
 import urllib.error
@@ -24,6 +26,43 @@ _parent_dir = os.path.abspath(os.path.join(_module_dir, os.pardir))
 def _log_modules(modules: List["Module"]) -> None:
     for m in modules:
         logger.debug(f" - {m.name} at {m.path}")
+
+
+# aw-notify is opt-in: it is started only when the shared server-side setting
+# `aw-notify` has `enabled: true` (ActivityWatch/activitywatch#1435).
+NOTIFY_MODULE = "aw-notify"
+NOTIFY_SETTINGS_KEY = "aw-notify"
+
+
+def read_notify_enabled(port: int, timeout: float = 2.0) -> bool:
+    """Return True iff the server's `aw-notify` setting has `enabled: true`.
+
+    A missing key (404), an unreachable server, or any non-boolean-true value
+    means disabled: notifications are opt-in.
+    """
+    url = f"http://localhost:{port}/api/0/settings/{NOTIFY_SETTINGS_KEY}"
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as resp:
+            data = json.load(resp)
+    except (urllib.error.URLError, OSError, ValueError):
+        return False
+    return isinstance(data, dict) and data.get("enabled") is True
+
+
+def wait_for_server(port: int, timeout: float = 60.0, interval: float = 0.5) -> bool:
+    """Block until the server answers on /api/0/info, or `timeout` seconds pass."""
+    deadline = monotonic() + timeout
+    while True:
+        try:
+            with urllib.request.urlopen(
+                f"http://localhost:{port}/api/0/info", timeout=1.0
+            ):
+                return True
+        except (urllib.error.URLError, OSError):
+            pass
+        if monotonic() >= deadline:
+            return False
+        sleep(interval)
 
 
 ignored_filenames = ["aw-cli", "aw-client", "aw-qt", "aw-qt.desktop", "aw-qt.spec"]
@@ -408,6 +447,32 @@ class Manager:
         )
         for name in autostart_modules:
             self.start(name)
+
+    def autostart_notify_if_enabled(self, port: int) -> None:
+        """Start aw-notify once the server is up, iff the shared `enabled` flag is true.
+
+        Runs in a background thread so a slow server start does not block the
+        tray. Does nothing when no aw-notify module is installed, or when it was
+        already started explicitly through `autostart_modules`.
+        """
+        if NOTIFY_MODULE not in [m.name for m in self.modules]:
+            return
+
+        def _run() -> None:
+            if not wait_for_server(port):
+                logger.warning(
+                    f"Server not reachable on port {port}, not starting {NOTIFY_MODULE}"
+                )
+                return
+            if any(m.name == NOTIFY_MODULE and m.started for m in self.modules):
+                return
+            if read_notify_enabled(port):
+                logger.info(f"{NOTIFY_MODULE} enabled in settings, starting")
+                self.start(NOTIFY_MODULE)
+            else:
+                logger.info(f"{NOTIFY_MODULE} not enabled in settings, not starting")
+
+        threading.Thread(target=_run, name="aw-notify-autostart", daemon=True).start()
 
     def stop(self, module_name: str) -> None:
         for m in self.modules:

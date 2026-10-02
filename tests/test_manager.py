@@ -1,7 +1,10 @@
 """Unit tests for the Module manager."""
 
+import json
 import os
 import subprocess
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -342,3 +345,96 @@ class TestMacOSSystemPathDiscovery:
         assert "/opt/homebrew/bin" not in searched_paths, (
             "Homebrew path should NOT be added on Linux"
         )
+
+
+class _SettingsHandler(BaseHTTPRequestHandler):
+    """Minimal aw-server stand-in serving /api/0/info and /api/0/settings/aw-notify."""
+
+    notify_settings = None  # None => 404 (key missing)
+
+    def do_GET(self):
+        if self.path == "/api/0/info":
+            body = b"{}"
+        elif self.path == "/api/0/settings/aw-notify" and self.notify_settings is not None:
+            body = json.dumps(self.notify_settings).encode()
+        else:
+            self.send_response(404)
+            self.end_headers()
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *args):
+        pass
+
+
+@pytest.fixture
+def settings_server():
+    server = HTTPServer(("127.0.0.1", 0), _SettingsHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield server, _SettingsHandler
+    server.shutdown()
+    _SettingsHandler.notify_settings = None
+
+
+class TestNotifyOptIn:
+    """aw-notify starts only when the shared `aw-notify.enabled` setting is true."""
+
+    @pytest.mark.parametrize(
+        "settings,expected",
+        [
+            ({"enabled": True}, True),
+            ({"enabled": False}, False),
+            ({"alerts": []}, False),  # missing flag => opt-in default false
+            ({"enabled": "true"}, False),  # only a real boolean true counts
+            (None, False),  # key missing (404)
+        ],
+    )
+    def test_read_notify_enabled(self, settings_server, settings, expected):
+        server, handler = settings_server
+        handler.notify_settings = settings
+        assert manager_module.read_notify_enabled(server.server_port) is expected
+
+    def test_read_notify_enabled_server_down(self):
+        assert manager_module.read_notify_enabled(1, timeout=0.2) is False
+
+    def _manager_with_notify(self):
+        mgr = manager_module.Manager(testing=True)
+        notify = Module(manager_module.NOTIFY_MODULE, Path("/usr/bin/true"), "system")
+        mgr.modules = [notify]
+        return mgr, notify
+
+    def _run_autostart(self, mgr, port):
+        mgr.autostart_notify_if_enabled(port)
+        for t in threading.enumerate():
+            if t.name == "aw-notify-autostart":
+                t.join(timeout=5)
+
+    def test_starts_when_enabled(self, settings_server):
+        server, handler = settings_server
+        handler.notify_settings = {"enabled": True}
+        mgr, notify = self._manager_with_notify()
+        with patch.object(notify, "start") as mock_start:
+            self._run_autostart(mgr, server.server_port)
+        mock_start.assert_called_once_with(True)
+
+    @pytest.mark.parametrize("settings", [{"enabled": False}, {"alerts": []}, None])
+    def test_does_not_start_when_disabled_or_missing(self, settings_server, settings):
+        server, handler = settings_server
+        handler.notify_settings = settings
+        mgr, notify = self._manager_with_notify()
+        with patch.object(notify, "start") as mock_start:
+            self._run_autostart(mgr, server.server_port)
+        mock_start.assert_not_called()
+
+    def test_noop_without_installed_module(self, settings_server):
+        server, handler = settings_server
+        handler.notify_settings = {"enabled": True}
+        mgr = manager_module.Manager(testing=True)
+        mgr.modules = []
+        with patch.object(mgr, "start") as mock_start:
+            self._run_autostart(mgr, server.server_port)
+        mock_start.assert_not_called()
