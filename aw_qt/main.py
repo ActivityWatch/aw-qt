@@ -26,6 +26,23 @@ from .profile import (
 logger = logging.getLogger(__name__)
 
 
+def _ensure_output_streams() -> None:
+    # Desktop launchers can leave a disconnected terminal as stdout/stderr.
+    # Repair unusable descriptors before either aw-qt or its modules write.
+    for fd in (1, 2):
+        try:
+            os.write(fd, b"")
+        except OSError:
+            devnull = os.open(os.devnull, os.O_WRONLY)
+            if devnull == fd:
+                os.set_inheritable(fd, True)
+            else:
+                try:
+                    os.dup2(devnull, fd)
+                finally:
+                    os.close(devnull)
+
+
 def _acquire_single_instance_lock(profile: str) -> QLockFile:
     """Ensure only one instance of aw-qt runs at a time.
 
@@ -92,6 +109,8 @@ def main(
     no_gui: bool,
     interactive_cli: bool,
 ) -> None:
+    _ensure_output_streams()
+
     # Since the .app can crash when started from Finder for unknown reasons, we send a syslog message here to make debugging easier.
     if platform.system() == "Darwin":
         subprocess.call("syslog -s 'aw-qt started'", shell=True)
