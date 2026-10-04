@@ -7,9 +7,13 @@ import sys
 import pytest
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="requires a POSIX terminal")
-@pytest.mark.parametrize("broken_fd", [0, 1, 2], ids=["healthy", "stdout", "stderr"])
-def test_startup_preserves_modules_and_gui_actions(tmp_path, broken_fd):
+@pytest.mark.skipif(sys.platform == "win32", reason="requires POSIX file descriptors")
+@pytest.mark.parametrize(
+    "broken_output, broken_fd",
+    [("healthy", 0), ("terminal", 1), ("terminal", 2), ("pipe", 1), ("pipe", 2)],
+    ids=["healthy", "terminal-stdout", "terminal-stderr", "pipe-stdout", "pipe-stderr"],
+)
+def test_startup_preserves_modules_and_gui_actions(tmp_path, broken_output, broken_fd):
     executable = tmp_path / "aw-test-output"
     ready = tmp_path / "ready"
     executable.write_text(
@@ -35,11 +39,17 @@ from aw_qt import main, trayicon
 
 root = Path(sys.argv[1])
 broken_fd = int(sys.argv[2])
-if broken_fd:
+broken_output = sys.argv[3]
+if broken_output == "terminal":
     master, slave = pty.openpty()
     os.close(master)
     os.dup2(slave, broken_fd)
     os.close(slave)
+elif broken_output == "pipe":
+    reader, writer = os.pipe()
+    os.close(reader)
+    os.dup2(writer, broken_fd)
+    os.close(writer)
 # A real terminal makes parent stdout line-buffered, so GUI action prints
 # must complete before their browser and shutdown effects can happen.
 sys.stdout.reconfigure(line_buffering=True)
@@ -75,7 +85,7 @@ main(["--profile", "output-test", "--autostart-modules=aw-test-output"])
 """
     env = dict(os.environ, PATH=str(tmp_path) + os.pathsep + os.environ["PATH"])
     result = subprocess.run(
-        [sys.executable, "-c", launcher, str(tmp_path), str(broken_fd)],
+        [sys.executable, "-c", launcher, str(tmp_path), str(broken_fd), broken_output],
         env=env,
         capture_output=True,
         text=True,

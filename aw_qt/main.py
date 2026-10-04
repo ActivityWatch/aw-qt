@@ -4,6 +4,7 @@ import logging
 import subprocess
 import platform
 import signal
+import select
 import threading
 from typing import Optional
 from time import sleep
@@ -27,20 +28,29 @@ logger = logging.getLogger(__name__)
 
 
 def _ensure_output_streams() -> None:
-    # Desktop launchers can leave a disconnected terminal as stdout/stderr.
+    # Desktop launchers can leave stdout/stderr on a disconnected terminal or pipe.
     # Repair unusable descriptors before either aw-qt or its modules write.
     for fd in (1, 2):
+        unusable = False
         try:
             os.write(fd, b"")
+            if sys.platform != "win32":
+                poller = select.poll()
+                # A zero event mask still reports errors and hangups.
+                poller.register(fd, 0)
+                unusable = bool(poller.poll(0))
         except OSError:
-            devnull = os.open(os.devnull, os.O_WRONLY)
-            if devnull == fd:
-                os.set_inheritable(fd, True)
-            else:
-                try:
-                    os.dup2(devnull, fd)
-                finally:
-                    os.close(devnull)
+            unusable = True
+        if not unusable:
+            continue
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        if devnull == fd:
+            os.set_inheritable(fd, True)
+        else:
+            try:
+                os.dup2(devnull, fd)
+            finally:
+                os.close(devnull)
 
 
 def _acquire_single_instance_lock(profile: str) -> QLockFile:
