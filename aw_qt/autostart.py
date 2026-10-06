@@ -114,8 +114,11 @@ def _is_default_profile() -> bool:
 def _command() -> List[str]:
     """The command the OS should run at login, including the active profile."""
     if getattr(sys, "frozen", False):
-        # PyInstaller bundle: sys.executable is the aw-qt binary itself
-        command = [sys.executable]
+        # PyInstaller / AppImage bundle.  Prefer $APPIMAGE when set — it points
+        # to the stable .AppImage file; the fuse mount in sys.executable is an
+        # ephemeral directory that disappears after the AppImage closes.
+        appimage_env = os.environ.get("APPIMAGE")
+        command = [appimage_env if appimage_env else sys.executable]
     else:
         import shutil
 
@@ -173,6 +176,33 @@ def _linux_autostart_dir() -> Path:
 def _linux_desktop_path() -> Path:
     stem, extension = os.path.splitext(DESKTOP_FILENAME)
     return _linux_autostart_dir() / f"{stem}{_profile_suffix()}{extension}"
+
+
+def _linux_system_desktop_paths() -> List[Path]:
+    """Paths in $XDG_CONFIG_DIRS/autostart for our desktop entry (system-wide)."""
+    xdg_config_dirs = os.environ.get("XDG_CONFIG_DIRS", "/etc/xdg")
+    stem, extension = os.path.splitext(DESKTOP_FILENAME)
+    filename = f"{stem}{_profile_suffix()}{extension}"
+    return [Path(d) / "autostart" / filename for d in xdg_config_dirs.split(":") if d]
+
+
+def _desktop_entry_is_enabled(text: str) -> bool:
+    """Return False when the desktop entry has Hidden=true or equivalent."""
+    for line in text.splitlines():
+        parts = line.split("=", 1)
+        if len(parts) != 2:
+            continue
+        key, value = parts[0].strip().lower(), parts[1].strip().lower()
+        if key == "hidden" and value == "true":
+            return False
+        if key == "x-gnome-autostart-enabled" and value == "false":
+            return False
+    return True
+
+
+def _linux_system_entry_exists() -> bool:
+    """Return True if a system-wide XDG desktop entry exists for our app."""
+    return any(p.is_file() for p in _linux_system_desktop_paths())
 
 
 def _bundled_desktop_file() -> Optional[Path]:
@@ -252,34 +282,45 @@ def _with_exec(desktop_entry: str, exec_value: str) -> str:
 
 
 def _linux_is_enabled() -> bool:
+    # User-level file takes precedence over system-wide entries (XDG spec).
     path = _linux_desktop_path()
-    if not path.is_file():
-        return False
-    try:
-        text = path.read_text(encoding="utf-8", errors="replace")
-    except OSError as e:
-        logger.warning(f"Could not read {path}: {e}")
-        # The file exists, so autostart is (most likely) enabled
-        return True
-    for line in text.splitlines():
-        parts = line.split("=", 1)
-        if len(parts) != 2:
-            continue
-        key, value = parts[0].strip().lower(), parts[1].strip().lower()
-        # Both are used by desktop environments to disable an autostart entry
-        if key == "hidden" and value == "true":
-            return False
-        if key == "x-gnome-autostart-enabled" and value == "false":
-            return False
-    return True
+    if path.is_file():
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError as e:
+            logger.warning(f"Could not read {path}: {e}")
+            return True
+        return _desktop_entry_is_enabled(text)
+
+    # Fall through to system-wide XDG dirs (installed by .deb, AUR, etc.).
+    for system_path in _linux_system_desktop_paths():
+        if system_path.is_file():
+            try:
+                text = system_path.read_text(encoding="utf-8", errors="replace")
+            except OSError as e:
+                logger.warning(f"Could not read {system_path}: {e}")
+                return True
+            return _desktop_entry_is_enabled(text)
+
+    return False
 
 
 def _linux_enable() -> None:
-    _write_text_atomic(_linux_desktop_path(), _desktop_entry_contents())
+    if _linux_system_entry_exists():
+        # A system-wide entry already enables us.  If we previously wrote a
+        # Hidden=true override, remove it so the system entry takes effect again.
+        _remove_file(_linux_desktop_path())
+    else:
+        _write_text_atomic(_linux_desktop_path(), _desktop_entry_contents())
 
 
 def _linux_disable() -> None:
-    _remove_file(_linux_desktop_path())
+    if _linux_system_entry_exists():
+        # We cannot delete a system-wide entry; write a user-level Hidden=true
+        # override so desktop environments skip the system entry (XDG spec).
+        _write_text_atomic(_linux_desktop_path(), "[Desktop Entry]\nHidden=true\n")
+    else:
+        _remove_file(_linux_desktop_path())
 
 
 # ---------------------------------------------------------------------------

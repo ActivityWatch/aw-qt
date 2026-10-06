@@ -5,6 +5,7 @@ directory or registry and run on any platform.
 """
 
 import plistlib
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -200,6 +201,110 @@ class TestLinuxBackend:
         with patch.object(autostart, "_command", return_value=command):
             value = autostart._desktop_exec_value()
         assert parse_desktop_exec(value) == command
+
+    # ------------------------------------------------------------------
+    # System-wide XDG entry detection (item 1 of aw-qt#136)
+    # ------------------------------------------------------------------
+
+    def test_system_wide_entry_is_detected_when_no_user_entry(
+        self, fake_home, tmp_path, monkeypatch
+    ):
+        """_linux_is_enabled() returns True when a system-wide .desktop exists."""
+        sys_dir = tmp_path / "xdg_system" / "autostart"
+        sys_dir.mkdir(parents=True)
+        (sys_dir / "aw-qt.desktop").write_text(
+            "[Desktop Entry]\nType=Application\nExec=aw-qt\nHidden=false\n"
+        )
+        monkeypatch.setenv("XDG_CONFIG_DIRS", str(tmp_path / "xdg_system"))
+        assert autostart._linux_is_enabled()
+
+    def test_system_wide_disabled_entry_is_not_enabled(
+        self, fake_home, tmp_path, monkeypatch
+    ):
+        """A system-wide Hidden=true entry reads as disabled."""
+        sys_dir = tmp_path / "xdg_system" / "autostart"
+        sys_dir.mkdir(parents=True)
+        (sys_dir / "aw-qt.desktop").write_text(
+            "[Desktop Entry]\nType=Application\nExec=aw-qt\nHidden=true\n"
+        )
+        monkeypatch.setenv("XDG_CONFIG_DIRS", str(tmp_path / "xdg_system"))
+        assert not autostart._linux_is_enabled()
+
+    def test_user_hidden_overrides_system_wide_entry(
+        self, fake_home, tmp_path, monkeypatch
+    ):
+        """A user-level Hidden=true suppresses an enabled system-wide entry."""
+        sys_dir = tmp_path / "xdg_system" / "autostart"
+        sys_dir.mkdir(parents=True)
+        (sys_dir / "aw-qt.desktop").write_text(
+            "[Desktop Entry]\nType=Application\nExec=aw-qt\nHidden=false\n"
+        )
+        monkeypatch.setenv("XDG_CONFIG_DIRS", str(tmp_path / "xdg_system"))
+        # Write a user-level override
+        user_path = autostart._linux_desktop_path()
+        user_path.parent.mkdir(parents=True, exist_ok=True)
+        user_path.write_text("[Desktop Entry]\nHidden=true\n")
+        assert not autostart._linux_is_enabled()
+
+    def test_disable_writes_hidden_override_when_system_entry_exists(
+        self, fake_home, tmp_path, monkeypatch
+    ):
+        """disable() writes Hidden=true when a system-wide entry owns autostart."""
+        sys_dir = tmp_path / "xdg_system" / "autostart"
+        sys_dir.mkdir(parents=True)
+        (sys_dir / "aw-qt.desktop").write_text(
+            "[Desktop Entry]\nType=Application\nExec=aw-qt\nHidden=false\n"
+        )
+        monkeypatch.setenv("XDG_CONFIG_DIRS", str(tmp_path / "xdg_system"))
+        assert autostart._linux_is_enabled()
+
+        autostart._linux_disable()
+
+        user_path = autostart._linux_desktop_path()
+        assert user_path.is_file(), "user override must be written"
+        assert "Hidden=true" in user_path.read_text()
+        assert not autostart._linux_is_enabled()
+
+    def test_enable_removes_hidden_override_when_system_entry_exists(
+        self, fake_home, tmp_path, monkeypatch
+    ):
+        """enable() removes a Hidden=true override when a system entry is present."""
+        sys_dir = tmp_path / "xdg_system" / "autostart"
+        sys_dir.mkdir(parents=True)
+        (sys_dir / "aw-qt.desktop").write_text(
+            "[Desktop Entry]\nType=Application\nExec=aw-qt\nHidden=false\n"
+        )
+        monkeypatch.setenv("XDG_CONFIG_DIRS", str(tmp_path / "xdg_system"))
+        # Simulate a prior disable
+        autostart._linux_disable()
+        assert not autostart._linux_is_enabled()
+
+        autostart._linux_enable()
+
+        assert not autostart._linux_desktop_path().exists(), "override must be removed"
+        assert autostart._linux_is_enabled()
+
+    # ------------------------------------------------------------------
+    # AppImage Exec fix (item 2 of aw-qt#136)
+    # ------------------------------------------------------------------
+
+    def test_command_uses_appimage_env_when_set(self, monkeypatch):
+        """When $APPIMAGE is set and sys.frozen is True, use $APPIMAGE as the exe."""
+        monkeypatch.setenv("APPIMAGE", "/home/user/ActivityWatch.AppImage")
+        monkeypatch.setenv("AW_PROFILE", "default")
+        with patch.object(sys, "frozen", True, create=True):
+            cmd = autostart._command()
+        assert cmd[0] == "/home/user/ActivityWatch.AppImage"
+
+    def test_command_falls_back_to_sys_executable_when_no_appimage(self, monkeypatch):
+        """When frozen but $APPIMAGE is absent, fall back to sys.executable."""
+        import sys as _sys
+
+        monkeypatch.delenv("APPIMAGE", raising=False)
+        monkeypatch.setenv("AW_PROFILE", "default")
+        with patch.object(_sys, "frozen", True, create=True):
+            cmd = autostart._command()
+        assert cmd[0] == _sys.executable
 
 
 def parse_desktop_exec(value):
