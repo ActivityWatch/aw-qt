@@ -205,6 +205,33 @@ def _linux_system_entry_exists() -> bool:
     return any(p.is_file() for p in _linux_system_desktop_paths())
 
 
+def _linux_systemd_unit_name() -> str:
+    """Return the systemd user unit name for aw-qt (profile-aware)."""
+    stem = DESKTOP_FILENAME.removesuffix(".desktop")
+    return f"{stem}{_profile_suffix()}.service"
+
+
+def _linux_systemd_unit_is_enabled() -> bool:
+    """Return True if a systemd user unit for aw-qt is enabled.
+
+    Detects the 'managed elsewhere' case where a package manager or the user
+    configured ActivityWatch via systemd instead of an XDG .desktop file.
+    Detection only — we never write to systemd units.
+    """
+    unit = _linux_systemd_unit_name()
+    try:
+        result = subprocess.run(
+            ["systemctl", "--user", "is-enabled", unit],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return result.stdout.strip() in ("enabled", "enabled-runtime")
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as e:
+        logger.debug(f"systemctl check for {unit} skipped: {e}")
+        return False
+
+
 def _bundled_desktop_file() -> Optional[Path]:
     """Locate the shipped resources/aw-qt.desktop, if available."""
     candidates = []
@@ -301,6 +328,11 @@ def _linux_is_enabled() -> bool:
                 logger.warning(f"Could not read {system_path}: {e}")
                 return True
             return _desktop_entry_is_enabled(text)
+
+    # Fall through to systemd user units — some distros/packages configure
+    # ActivityWatch via systemd instead of (or alongside) XDG autostart.
+    if _linux_systemd_unit_is_enabled():
+        return True
 
     return False
 

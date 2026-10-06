@@ -306,6 +306,48 @@ class TestLinuxBackend:
             cmd = autostart._command()
         assert cmd[0] == _sys.executable
 
+    # ------------------------------------------------------------------
+    # systemd user unit detection (Erik's design note, aw-qt#136)
+    # ------------------------------------------------------------------
+
+    def _mock_run(self, stdout: str):
+        return type("_R", (), {"stdout": stdout})()
+
+    def test_systemd_unit_enabled_detected(self, fake_home):
+        """_linux_systemd_unit_is_enabled() returns True for 'enabled'."""
+        with patch.object(autostart.subprocess, "run", return_value=self._mock_run("enabled\n")):
+            assert autostart._linux_systemd_unit_is_enabled()
+
+    def test_systemd_unit_enabled_runtime_detected(self, fake_home):
+        """enabled-runtime is treated the same as enabled."""
+        with patch.object(autostart.subprocess, "run", return_value=self._mock_run("enabled-runtime\n")):
+            assert autostart._linux_systemd_unit_is_enabled()
+
+    def test_systemd_unit_disabled_returns_false(self, fake_home):
+        """_linux_systemd_unit_is_enabled() returns False for 'disabled'."""
+        with patch.object(autostart.subprocess, "run", return_value=self._mock_run("disabled\n")):
+            assert not autostart._linux_systemd_unit_is_enabled()
+
+    def test_systemd_not_available_returns_false(self, fake_home):
+        """When systemctl is absent, the check returns False without raising."""
+        with patch.object(autostart.subprocess, "run", side_effect=FileNotFoundError()):
+            assert not autostart._linux_systemd_unit_is_enabled()
+
+    def test_is_enabled_falls_through_to_systemd(self, fake_home, monkeypatch, tmp_path):
+        """_linux_is_enabled() returns True when only systemd has the unit enabled."""
+        # Empty XDG dirs so no desktop files are found
+        monkeypatch.setenv("XDG_CONFIG_DIRS", str(tmp_path))
+        with patch.object(autostart.subprocess, "run", return_value=self._mock_run("enabled\n")):
+            assert autostart._linux_is_enabled()
+
+    def test_systemd_not_checked_when_xdg_file_found(self, fake_home, monkeypatch, tmp_path):
+        """_linux_is_enabled() short-circuits on XDG; systemctl is never called."""
+        autostart._linux_enable()
+        assert autostart._linux_desktop_path().is_file()
+        monkeypatch.setenv("XDG_CONFIG_DIRS", str(tmp_path))
+        with patch.object(autostart.subprocess, "run", side_effect=AssertionError("systemctl should not be called")):
+            assert autostart._linux_is_enabled()
+
 
 def parse_desktop_exec(value):
     """Reference implementation of Desktop Entry Exec parsing.
