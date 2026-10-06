@@ -19,8 +19,13 @@ def fake_home(tmp_path, monkeypatch):
     """Point the autostart module at a throwaway home directory."""
     home = tmp_path / "home"
     home.mkdir()
+    # Isolate XDG dirs so no real system entries leak into tests.
+    empty_xdg = tmp_path / "empty_xdg"
+    empty_xdg.mkdir()
+    monkeypatch.setenv("XDG_CONFIG_DIRS", str(empty_xdg))
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
     monkeypatch.delenv("AW_PROFILE", raising=False)
+    monkeypatch.delenv("APPIMAGE", raising=False)
     with patch.object(autostart, "_home", return_value=home):
         yield home
 
@@ -282,6 +287,24 @@ class TestLinuxBackend:
         autostart._linux_enable()
 
         assert not autostart._linux_desktop_path().exists(), "override must be removed"
+        assert autostart._linux_is_enabled()
+
+    def test_enable_writes_user_entry_when_system_entry_is_disabled(
+        self, fake_home, tmp_path, monkeypatch
+    ):
+        """enable() writes an enabled user entry when the system entry has Hidden=true."""
+        sys_dir = tmp_path / "xdg_system" / "autostart"
+        sys_dir.mkdir(parents=True)
+        (sys_dir / "aw-qt.desktop").write_text(
+            "[Desktop Entry]\nType=Application\nExec=aw-qt\nHidden=true\n"
+        )
+        monkeypatch.setenv("XDG_CONFIG_DIRS", str(tmp_path / "xdg_system"))
+        assert not autostart._linux_is_enabled()
+
+        autostart._linux_enable()
+
+        user_path = autostart._linux_desktop_path()
+        assert user_path.is_file(), "user override must be written"
         assert autostart._linux_is_enabled()
 
     # ------------------------------------------------------------------
@@ -569,7 +592,8 @@ class TestProfileAwareEntries:
 
 
 class TestCommand:
-    def test_frozen_bundle_uses_executable(self):
+    def test_frozen_bundle_uses_executable(self, monkeypatch):
+        monkeypatch.delenv("APPIMAGE", raising=False)
         with patch.object(autostart.sys, "frozen", True, create=True):
             with patch.object(autostart.sys, "executable", "/Applications/aw-qt"):
                 assert autostart._command() == ["/Applications/aw-qt"]

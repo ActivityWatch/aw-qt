@@ -180,7 +180,7 @@ def _linux_desktop_path() -> Path:
 
 def _linux_system_desktop_paths() -> List[Path]:
     """Paths in $XDG_CONFIG_DIRS/autostart for our desktop entry (system-wide)."""
-    xdg_config_dirs = os.environ.get("XDG_CONFIG_DIRS", "/etc/xdg")
+    xdg_config_dirs = os.environ.get("XDG_CONFIG_DIRS") or "/etc/xdg"
     stem, extension = os.path.splitext(DESKTOP_FILENAME)
     filename = f"{stem}{_profile_suffix()}{extension}"
     return [Path(d) / "autostart" / filename for d in xdg_config_dirs.split(":") if d]
@@ -207,7 +207,7 @@ def _linux_system_entry_exists() -> bool:
 
 def _linux_systemd_unit_name() -> str:
     """Return the systemd user unit name for aw-qt (profile-aware)."""
-    stem = DESKTOP_FILENAME.removesuffix(".desktop")
+    stem = os.path.splitext(DESKTOP_FILENAME)[0]
     return f"{stem}{_profile_suffix()}.service"
 
 
@@ -339,9 +339,24 @@ def _linux_is_enabled() -> bool:
 
 def _linux_enable() -> None:
     if _linux_system_entry_exists():
-        # A system-wide entry already enables us.  If we previously wrote a
-        # Hidden=true override, remove it so the system entry takes effect again.
-        _remove_file(_linux_desktop_path())
+        # Check whether the system entry itself is disabled (Hidden=true).
+        # If so, just removing the user file leaves startup off — write an
+        # enabled user entry to override the system entry instead.
+        system_enabled = True
+        for system_path in _linux_system_desktop_paths():
+            if system_path.is_file():
+                try:
+                    text = system_path.read_text(encoding="utf-8", errors="replace")
+                    system_enabled = _desktop_entry_is_enabled(text)
+                except OSError:
+                    pass  # unreadable → assume enabled
+                break
+        if system_enabled:
+            # System entry is active; remove any Hidden=true user override.
+            _remove_file(_linux_desktop_path())
+        else:
+            # System entry is disabled; write an enabled user entry to override it.
+            _write_text_atomic(_linux_desktop_path(), _desktop_entry_contents())
     else:
         _write_text_atomic(_linux_desktop_path(), _desktop_entry_contents())
 
