@@ -365,11 +365,12 @@ def persist_module_autostart(
 
     path, section = _autostart_location(profile)
     try:
-        with open(path) as f:
+        # TOML is UTF-8 by spec; newline="" keeps the file's line endings.
+        with open(path, encoding="utf-8", newline="") as f:
             source = f.read()
     except FileNotFoundError:
         source = ""
-    except OSError as e:
+    except (OSError, UnicodeDecodeError) as e:
         logger.warning(
             f"Could not read {path}, not saving autostart change for {name}: {e}"
         )
@@ -408,7 +409,7 @@ def _atomic_write(path: str, content: str) -> None:
         dir=os.path.dirname(target), prefix=".aw-qt.", suffix=".toml.tmp"
     )
     try:
-        with os.fdopen(fd, "w") as f:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
             f.write(content)
             f.flush()
             os.fsync(f.fileno())

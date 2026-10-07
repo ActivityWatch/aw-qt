@@ -291,8 +291,23 @@ class TrayIcon(QSystemTrayIcon):
         enabled = module.toggle(self.testing)
         # Reset auto-restart timestamps on manual toggle
         self._restart_timestamps.pop(module.name, None)
-        if self.persist_toggles:
+        if not self.persist_toggles:
+            return
+        if self.manager.resolve(module.name) is not module:
+            # autostart_modules holds names, and a name autostarts the bundled
+            # copy. Saving a click on the system copy would start (or stop)
+            # the other one next time.
+            logger.info(
+                f"Not saving tray toggle of {module.name} ({module.type}): "
+                "autostart would run the bundled copy"
+            )
+            return
+        try:
             persist_module_autostart(module.name, enabled, self.profile)
+        except Exception:
+            # An exception escaping a Qt slot aborts the app; the module has
+            # already been started/stopped, so just log it.
+            logger.exception(f"Failed to save autostart change for {module.name}")
 
     def _build_modulemenu(self, moduleMenu: QMenu) -> None:
         moduleMenu.clear()

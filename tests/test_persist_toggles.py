@@ -17,6 +17,7 @@ from aw_qt.config import (
     persist_module_autostart,
     set_module_autostart,
 )
+from aw_qt.manager import Module
 from aw_qt.profile import DEFAULT_PROFILE, export_profile
 
 
@@ -181,10 +182,31 @@ class TestPersistModuleAutostart:
         path = _config_path(DEFAULT_PROFILE)
         real = tmp_path / "dotfiles-aw-qt.toml"
         real.write_text(USER_CONFIG)
-        path.symlink_to(real)
+        try:
+            path.symlink_to(real)
+        except (OSError, NotImplementedError) as e:
+            # Windows without Developer Mode / symlink privilege.
+            pytest.skip(f"cannot create symlinks here: {e}")
         assert persist_module_autostart("aw-watcher-afk", False)
         assert path.is_symlink()
         assert '"aw-watcher-afk"' not in real.read_text()
+
+    def test_utf8_and_line_endings_kept(self):
+        path = _config_path(DEFAULT_PROFILE)
+        source = '# Björn’s setup\r\n[aw-qt]\r\nautostart_modules = ["aw-server"]\r\n'
+        path.write_bytes(source.encode("utf-8"))
+        assert persist_module_autostart("aw-watcher-afk", True)
+        assert path.read_bytes().decode("utf-8") == source.replace(
+            '"aw-server"]', '"aw-server", "aw-watcher-afk"]'
+        )
+
+    def test_undecodable_file_left_untouched(self, caplog):
+        path = _config_path(DEFAULT_PROFILE)
+        broken = b'[aw-qt]\nautostart_modules = ["aw-server"] # \xff\xfe\n'
+        path.write_bytes(broken)
+        assert not persist_module_autostart("aw-watcher-afk", True)
+        assert path.read_bytes() == broken
+        assert "not saving autostart change" in caplog.text
 
     def test_default_profile_does_not_touch_testing_section(self):
         path = _config_path(DEFAULT_PROFILE)
@@ -272,10 +294,15 @@ class TestProfileLocation:
 
 
 class TestTrayClick:
-    def _tray(self, persist_toggles: bool):
+    def _tray(self, persist_toggles: bool, modules=()):
+        from aw_qt.manager import Manager
         from aw_qt.trayicon import TrayIcon
 
+        with patch.object(Manager, "discover_modules"):
+            manager = Manager()
+        manager.modules = list(modules)
         fake = SimpleNamespace(
+            manager=manager,
             testing=False,
             profile=DEFAULT_PROFILE,
             persist_toggles=persist_toggles,
@@ -283,35 +310,60 @@ class TestTrayClick:
         )
         return fake, lambda module: TrayIcon._on_module_clicked(fake, module)
 
+    def _module(self, type="bundled", **toggle):
+        module = Module("aw-watcher-afk", Path(f"/{type}/aw-watcher-afk"), type)
+        module.toggle = MagicMock(**toggle)
+        return module
+
     def test_click_persists_new_state(self):
-        module = MagicMock()
-        module.name = "aw-watcher-afk"
-        module.toggle.return_value = False
-        fake, click = self._tray(persist_toggles=True)
+        module = self._module(return_value=False)
+        fake, click = self._tray(True, [module])
         with patch("aw_qt.trayicon.persist_module_autostart") as persist:
             click(module)
         persist.assert_called_once_with("aw-watcher-afk", False, DEFAULT_PROFILE)
         assert "aw-watcher-afk" not in fake._restart_timestamps
 
     def test_cli_override_only_changes_running_state(self):
-        module = MagicMock()
-        module.name = "aw-watcher-afk"
-        module.toggle.return_value = True
-        _, click = self._tray(persist_toggles=False)
+        module = self._module(return_value=True)
+        _, click = self._tray(False, [module])
         with patch("aw_qt.trayicon.persist_module_autostart") as persist:
             click(module)
         module.toggle.assert_called_once_with(False)
         persist.assert_not_called()
 
     def test_failed_start_is_not_persisted(self):
-        module = MagicMock()
-        module.name = "aw-watcher-afk"
-        module.toggle.side_effect = OSError("exec failed")
-        _, click = self._tray(persist_toggles=True)
+        module = self._module(side_effect=OSError("exec failed"))
+        _, click = self._tray(True, [module])
         with patch("aw_qt.trayicon.persist_module_autostart") as persist:
             with pytest.raises(OSError):
                 click(module)
         persist.assert_not_called()
+
+    def test_system_copy_shadowed_by_bundled_is_not_persisted(self):
+        bundled = self._module("bundled", return_value=True)
+        system = self._module("system", return_value=True)
+        _, click = self._tray(True, [system, bundled])
+        with patch("aw_qt.trayicon.persist_module_autostart") as persist:
+            click(system)
+            persist.assert_not_called()
+            click(bundled)
+        persist.assert_called_once_with("aw-watcher-afk", True, DEFAULT_PROFILE)
+
+    def test_system_module_without_bundled_copy_is_persisted(self):
+        system = self._module("system", return_value=True)
+        _, click = self._tray(True, [system])
+        with patch("aw_qt.trayicon.persist_module_autostart") as persist:
+            click(system)
+        persist.assert_called_once_with("aw-watcher-afk", True, DEFAULT_PROFILE)
+
+    def test_persist_error_does_not_escape_the_slot(self, caplog):
+        module = self._module(return_value=True)
+        _, click = self._tray(True, [module])
+        with patch(
+            "aw_qt.trayicon.persist_module_autostart", side_effect=RuntimeError("boom")
+        ):
+            click(module)
+        assert "Failed to save autostart change" in caplog.text
 
 
 class TestMainWiring:
