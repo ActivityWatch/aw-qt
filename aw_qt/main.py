@@ -128,6 +128,9 @@ def main(
             pass
 
     config = AwQtSettings(profile=profile)
+    # With --autostart-modules this run isn't using the configured list, so
+    # tray toggles only change what is running and don't touch the config.
+    autostart_overridden = bool(autostart_modules)
     _autostart_modules = (
         [m.strip() for m in autostart_modules.split(",") if m and m.lower() != "none"]
         if autostart_modules
@@ -145,7 +148,11 @@ def main(
 
         # run the trayicon, wait for signal to quit
         error_code = trayicon.run(
-            manager, testing=testing, port=config.port, profile=profile
+            manager,
+            testing=testing,
+            port=config.port,
+            profile=profile,
+            persist_toggles=not autostart_overridden,
         )
     elif interactive_cli:
         # just an experiment, don't really see the use right now
