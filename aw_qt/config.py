@@ -1,7 +1,8 @@
 import logging
 import os
+import tempfile
 from contextlib import contextmanager
-from typing import Any, Iterator, List, Optional
+from typing import Any, Iterator, List, Optional, Tuple
 
 import tomlkit
 from aw_core import dirs
@@ -253,3 +254,171 @@ class AwQtSettings:
         # Pass autostart_modules so port lookup targets the actual server type,
         # keeping the tray URL and the manager's probe endpoint consistent.
         self.port: int = _read_server_port(profile, self.autostart_modules)
+
+
+#: Never written by a tray toggle: stopping the server from the tray must not
+#: leave ActivityWatch without one on the next start.
+SERVER_MODULES = ("aw-server", "aw-server-rust")
+
+
+def _autostart_location(profile: str) -> Tuple[str, str]:
+    """The file and section ``AwQtSettings`` reads ``autostart_modules`` from.
+
+    Mirrors the lookup in ``AwQtSettings.__init__``: ``[aw-qt]`` in the
+    profile's ``aw-qt.toml``, ``[aw-qt-testing]`` in the legacy shared-root
+    testing layout, and the pre-isolation ``[aw-qt-<profile>]`` section in the
+    shared root for a named profile that still uses it.
+    """
+    with _with_profile_env(profile):
+        path = os.path.join(dirs.get_config_dir("aw-qt"), "aw-qt.toml")
+        legacy_testing = _using_legacy_testing_root()
+    if legacy_testing:
+        return path, f"aw-qt-{TESTING_PROFILE}"
+    if _is_named_profile(profile) and _raw_toml_section(path, "aw-qt") is None:
+        shared_path = os.path.join(_shared_root_config_dir("aw-qt"), "aw-qt.toml")
+        shared_section = f"aw-qt-{profile}"
+        if _raw_toml_section(shared_path, shared_section) is not None:
+            return shared_path, shared_section
+    return path, "aw-qt"
+
+
+def _default_autostart_modules(section: str) -> List[str]:
+    defaults = tomlkit.parse(default_config)
+    table: Any = defaults.get(section, defaults["aw-qt"])
+    return [str(m) for m in table["autostart_modules"]]
+
+
+def set_module_autostart(
+    source: str, section: str, name: str, enabled: bool
+) -> Optional[str]:
+    """Return ``source`` with ``name`` added to or removed from ``autostart_modules``.
+
+    Returns ``None`` when the list already is in the requested state. Raises
+    ``ValueError`` when ``source`` doesn't parse or has an unexpected shape, so
+    the caller never writes a file it could not read.
+
+    The document is edited in place: comments, formatting and other keys are
+    kept. Enabling appends; disabling removes every occurrence; the order of
+    the remaining entries never changes. If the section doesn't set the list
+    (e.g. the commented-out file aw-qt writes on first run), the effective
+    default list is written out with the change applied.
+    """
+    try:
+        doc = tomlkit.parse(source)
+    except Exception as e:
+        raise ValueError(f"config file does not parse: {e}") from e
+
+    if section not in doc:
+        doc.add(section, tomlkit.table())
+    table: Any = doc[section]
+    if not isinstance(table, dict):
+        raise ValueError(f"[{section}] is not a table")
+
+    current = table.get("autostart_modules")
+    if current is None:
+        modules = _default_autostart_modules(section)
+        if enabled == (name in modules):
+            return None
+        if enabled:
+            modules.append(name)
+        else:
+            modules = [m for m in modules if m != name]
+        table["autostart_modules"] = modules
+    else:
+        if not isinstance(current, list) or not all(
+            isinstance(m, str) for m in current
+        ):
+            raise ValueError(f"[{section}] autostart_modules is not a list of strings")
+        if enabled == (name in current):
+            return None
+        if enabled:
+            current.append(name)
+        else:
+            for i in reversed(range(len(current))):
+                if current[i] == name:
+                    del current[i]
+
+    updated = doc.as_string()
+    # Belt and braces: never write something we couldn't read back.
+    reparsed: Any = tomlkit.parse(updated)
+    if (name in reparsed[section]["autostart_modules"]) != enabled:
+        raise ValueError("updated config did not round-trip")
+    return updated
+
+
+def persist_module_autostart(
+    name: str, enabled: bool, profile: str = DEFAULT_PROFILE
+) -> bool:
+    """Persist a tray start/stop of ``name`` to ``autostart_modules``.
+
+    Re-reads the config from disk right before writing, so edits made while
+    aw-qt runs are kept. Server modules are never written, and a file that
+    fails to parse is left untouched. Errors are logged, not raised: the module
+    has already been started or stopped either way. Returns whether the file
+    was changed.
+    """
+    if name in SERVER_MODULES:
+        logger.info(
+            f"Not saving tray toggle of {name}: server modules are never persisted"
+        )
+        return False
+
+    path, section = _autostart_location(profile)
+    try:
+        # TOML is UTF-8 by spec; newline="" keeps the file's line endings.
+        with open(path, encoding="utf-8", newline="") as f:
+            source = f.read()
+    except FileNotFoundError:
+        source = ""
+    except (OSError, UnicodeDecodeError) as e:
+        logger.warning(
+            f"Could not read {path}, not saving autostart change for {name}: {e}"
+        )
+        return False
+
+    try:
+        updated = set_module_autostart(source, section, name, enabled)
+    except ValueError as e:
+        logger.warning(f"Not saving autostart change for {name} to {path}: {e}")
+        return False
+    if updated is None:
+        return False
+
+    try:
+        _atomic_write(path, updated)
+    except OSError as e:
+        logger.warning(
+            f"Could not write {path}, autostart change for {name} not saved: {e}"
+        )
+        return False
+    logger.info(
+        f"{'Added' if enabled else 'Removed'} {name} "
+        f"{'to' if enabled else 'from'} [{section}] autostart_modules in {path}"
+    )
+    return True
+
+
+def _atomic_write(path: str, content: str) -> None:
+    """Write via a temp file and rename, so a crash can't leave a truncated config.
+
+    Follows a symlinked config (e.g. one managed by a dotfiles repo) and
+    replaces its target, not the link.
+    """
+    target = os.path.realpath(path)
+    fd, tmp = tempfile.mkstemp(
+        dir=os.path.dirname(target), prefix=".aw-qt.", suffix=".toml.tmp"
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
+            f.write(content)
+            f.flush()
+            os.fsync(f.fileno())
+        if os.path.exists(target):
+            os.chmod(tmp, os.stat(target).st_mode & 0o777)
+        os.replace(tmp, target)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise

@@ -295,7 +295,11 @@ class Module:
         self._process = None
         self.started = False
 
-    def toggle(self, testing: bool) -> None:
+    def toggle(self, testing: bool) -> bool:
+        """Start the module if it isn't running, else stop it.
+
+        Returns whether the module is now meant to be running.
+        """
         if self.is_alive():
             self.stop()
         else:
@@ -303,6 +307,7 @@ class Module:
                 # Process died unexpectedly, clean up state
                 self.stop()
             self.start(testing)
+        return self.started
 
     def is_alive(self) -> bool:
         if self._external_server:
@@ -362,15 +367,24 @@ class Manager:
     def get_unexpected_stops(self) -> List[Module]:
         return list(filter(lambda x: x.started and not x.is_alive(), self.modules))
 
-    def start(self, module_name: str) -> None:
-        # NOTE: Will always prefer a bundled version, if available. This will not affect the
-        #       aw-qt menu since it directly calls the module's start() method.
+    def resolve(self, module_name: str) -> Optional[Module]:
+        """The module that ``start``/``autostart`` runs for ``module_name``.
+
+        Always prefers a bundled version, if available. The aw-qt menu lists
+        both copies and calls the chosen module's start() directly.
+        """
         bundled = [m for m in self.modules_bundled if m.name == module_name]
         system = [m for m in self.modules_system if m.name == module_name]
         if bundled:
-            bundled[0].start(self.testing)
-        elif system:
-            system[0].start(self.testing)
+            return bundled[0]
+        if system:
+            return system[0]
+        return None
+
+    def start(self, module_name: str) -> None:
+        module = self.resolve(module_name)
+        if module is not None:
+            module.start(self.testing)
         else:
             logger.error(f"Manager tried to start nonexistent module {module_name}")
 
