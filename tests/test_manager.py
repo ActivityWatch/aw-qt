@@ -462,7 +462,7 @@ class TestNotifyOptIn:
 
     def test_does_not_start_twice_when_already_running(self, settings_server):
         """A manual start must not duplicate an instance autostart already ran."""
-        server, handler = settings_server
+        _server, handler = settings_server
         handler.notify_settings = {"enabled": True}
         mgr, notify = self._manager_with_notify()
         notify.started = True
@@ -474,7 +474,6 @@ class TestNotifyOptIn:
         """One transient settings-read failure must not leave notifications off."""
         server, handler = settings_server
         handler.notify_settings = {"enabled": True}
-        handler.settings_get_error = 500
         mgr, notify = self._manager_with_notify()
         real_read = manager_module._read_notify_enabled_or_raise
         calls = {"n": 0}
@@ -485,7 +484,6 @@ class TestNotifyOptIn:
                 raise OSError("transient")
             return real_read(port, timeout)
 
-        handler.settings_get_error = None
         with patch.object(manager_module, "_read_notify_enabled_or_raise", flaky), patch.object(
             manager_module, "sleep", lambda _s: None
         ), patch.object(notify, "start") as mock_start:
