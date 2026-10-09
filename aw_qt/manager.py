@@ -445,7 +445,10 @@ class Manager:
         self.testing = testing
         # Serialises the autostart background thread against the tray toggle so
         # that only one path can check-and-start/stop aw-notify at a time.
-        self._notify_lock = threading.Lock()
+        # Reentrant: a SIGINT/SIGTERM handler runs on the main thread and calls
+        # stop_all(), which takes this lock again while a toggle callback on the
+        # same thread may still hold it. A plain Lock would deadlock shutdown.
+        self._notify_lock = threading.RLock()
         # Set once shutdown begins so a late autostart thread cannot start
         # aw-notify after stop_all() has already run.
         self._shutting_down = False
