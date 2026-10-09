@@ -156,7 +156,7 @@ class TrayIcon(QSystemTrayIcon):
         with self.manager._notify_lock:
             if write_notify_enabled(self.port, checked):
                 if checked:
-                    self.manager.start(NOTIFY_MODULE)
+                    self.manager._start_notify_locked()
                 else:
                     self.manager.stop(NOTIFY_MODULE)
             else:

@@ -102,6 +102,15 @@ def write_notify_enabled(port: int, enabled: bool, timeout: float = 2.0) -> bool
         return False
 
 
+def _read_notify_enabled_or_raise(port: int, timeout: float = 2.0) -> bool:
+    """Like read_notify_enabled, but raises on network errors instead of hiding them.
+
+    Lets the autostart path retry a transient failure rather than treating an
+    unreadable setting as "disabled".
+    """
+    return _read_notify_settings_or_raise(port, timeout).get("enabled") is True
+
+
 def wait_for_server(port: int, timeout: float = 60.0, interval: float = 0.5) -> bool:
     """Block until the server answers on /api/0/info, or `timeout` seconds pass."""
     deadline = monotonic() + timeout
@@ -437,6 +446,9 @@ class Manager:
         # Serialises the autostart background thread against the tray toggle so
         # that only one path can check-and-start/stop aw-notify at a time.
         self._notify_lock = threading.Lock()
+        # Set once shutdown begins so a late autostart thread cannot start
+        # aw-notify after stop_all() has already run.
+        self._shutting_down = False
 
         self.discover_modules()
 
@@ -525,11 +537,24 @@ class Manager:
                 )
                 return
             with self._notify_lock:
-                if any(m.name == NOTIFY_MODULE and m.started for m in self.modules):
+                if self._shutting_down:
                     return
-                if read_notify_enabled(port):
+                enabled = None
+                for _ in range(3):
+                    try:
+                        enabled = _read_notify_enabled_or_raise(port)
+                        break
+                    except (urllib.error.URLError, OSError, ValueError) as e:
+                        logger.warning(f"Could not read {NOTIFY_MODULE} setting: {e}")
+                        sleep(1.0)
+                if enabled is None:
+                    logger.warning(
+                        f"Could not read {NOTIFY_MODULE} setting, not starting"
+                    )
+                    return
+                if enabled:
                     logger.info(f"{NOTIFY_MODULE} enabled in settings, starting")
-                    self.start(NOTIFY_MODULE)
+                    self._start_notify_locked()
                 else:
                     logger.info(f"{NOTIFY_MODULE} not enabled in settings, not starting")
 
@@ -545,7 +570,26 @@ class Manager:
         else:
             logger.error(f"Manager tried to stop nonexistent module {module_name}")
 
+    def start_notify(self) -> None:
+        """Start aw-notify unless it is already running or shutdown has begun.
+
+        Shared by the autostart thread and the tray toggle; holds _notify_lock
+        so the two cannot both start a second instance.
+        """
+        with self._notify_lock:
+            self._start_notify_locked()
+
+    def _start_notify_locked(self) -> None:
+        # Caller must hold _notify_lock.
+        if self._shutting_down:
+            return
+        if any(m.name == NOTIFY_MODULE and m.started for m in self.modules):
+            return
+        self.start(NOTIFY_MODULE)
+
     def stop_all(self) -> None:
+        with self._notify_lock:
+            self._shutting_down = True
         for module in filter(lambda m: m.is_alive(), self.modules):
             module.stop()
 

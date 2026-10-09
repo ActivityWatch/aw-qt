@@ -450,6 +450,49 @@ class TestNotifyOptIn:
             self._run_autostart(mgr, server.server_port)
         mock_start.assert_not_called()
 
+    def test_does_not_start_after_shutdown_begins(self, settings_server):
+        """A late autostart thread must not start aw-notify after stop_all()."""
+        server, handler = settings_server
+        handler.notify_settings = {"enabled": True}
+        mgr, notify = self._manager_with_notify()
+        mgr._shutting_down = True
+        with patch.object(notify, "start") as mock_start:
+            self._run_autostart(mgr, server.server_port)
+        mock_start.assert_not_called()
+
+    def test_does_not_start_twice_when_already_running(self, settings_server):
+        """A manual start must not duplicate an instance autostart already ran."""
+        server, handler = settings_server
+        handler.notify_settings = {"enabled": True}
+        mgr, notify = self._manager_with_notify()
+        notify.started = True
+        with patch.object(notify, "start") as mock_start:
+            mgr.start_notify()
+        mock_start.assert_not_called()
+
+    def test_retries_transient_read_error_then_starts(self, settings_server):
+        """One transient settings-read failure must not leave notifications off."""
+        server, handler = settings_server
+        handler.notify_settings = {"enabled": True}
+        handler.settings_get_error = 500
+        mgr, notify = self._manager_with_notify()
+        real_read = manager_module._read_notify_enabled_or_raise
+        calls = {"n": 0}
+
+        def flaky(port, timeout=2.0):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise OSError("transient")
+            return real_read(port, timeout)
+
+        handler.settings_get_error = None
+        with patch.object(manager_module, "_read_notify_enabled_or_raise", flaky), patch.object(
+            manager_module, "sleep", lambda _s: None
+        ), patch.object(notify, "start") as mock_start:
+            self._run_autostart(mgr, server.server_port)
+        assert calls["n"] == 2
+        mock_start.assert_called_once_with(True)
+
     def test_noop_without_installed_module(self, settings_server):
         server, handler = settings_server
         handler.notify_settings = {"enabled": True}
