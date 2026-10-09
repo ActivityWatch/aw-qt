@@ -590,6 +590,17 @@ class Manager:
             return
         self.start(NOTIFY_MODULE)
 
+    def stop_notify(self) -> None:
+        """Stop every started aw-notify copy.
+
+        Both a bundled and a system copy can be discovered. Manager.stop() only
+        stops the first match, so a running second copy would survive a disable.
+        """
+        with self._notify_lock:
+            for m in self.modules:
+                if m.name == NOTIFY_MODULE and m.started:
+                    m.stop()
+
     def stop_all(self) -> None:
         with self._notify_lock:
             self._shutting_down = True

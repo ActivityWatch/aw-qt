@@ -158,7 +158,7 @@ class TrayIcon(QSystemTrayIcon):
                 if checked:
                     self.manager._start_notify_locked()
                 else:
-                    self.manager.stop(NOTIFY_MODULE)
+                    self.manager.stop_notify()
             else:
                 logger.error("Failed to save the aw-notify setting, is the server running?")
                 box = QMessageBox(self._parent)
