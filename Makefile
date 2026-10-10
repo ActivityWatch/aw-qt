@@ -8,6 +8,7 @@ install:
 
 test:
 	python -c 'import aw_qt'
+	python -m pytest tests/test_main.py
 
 test-integration:
 	python ./tests/integration_tests.py --no-modules
