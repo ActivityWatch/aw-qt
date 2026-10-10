@@ -142,6 +142,9 @@ def main(
 
     manager = Manager(testing=testing)
     manager.autostart(_autostart_modules)
+    if autostart_modules is None:
+        # An explicit --autostart-modules list overrides the opt-in notify path too
+        manager.autostart_notify_if_enabled(config.port)
 
     if not no_gui and not interactive_cli:
         from . import trayicon  # pylint: disable=import-outside-toplevel

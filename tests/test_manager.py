@@ -1,8 +1,12 @@
 """Unit tests for the Module manager."""
 
+import json
 import os
 import subprocess
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from typing import Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -342,3 +346,195 @@ class TestMacOSSystemPathDiscovery:
         assert "/opt/homebrew/bin" not in searched_paths, (
             "Homebrew path should NOT be added on Linux"
         )
+
+
+class _SettingsHandler(BaseHTTPRequestHandler):
+    """Minimal aw-server stand-in serving /api/0/info and /api/0/settings/aw-notify."""
+
+    notify_settings = None  # None => 404 (key missing)
+    settings_get_error: Optional[int] = None  # set to an HTTP status code to force an error
+
+    def do_GET(self):
+        if self.path == "/api/0/info":
+            body = b"{}"
+        elif self.path == "/api/0/settings/aw-notify":
+            if self.settings_get_error is not None:
+                self.send_response(self.settings_get_error)
+                self.end_headers()
+                return
+            if self.notify_settings is None:
+                self.send_response(404)
+                self.end_headers()
+                return
+            body = json.dumps(self.notify_settings).encode()
+        else:
+            self.send_response(404)
+            self.end_headers()
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_POST(self):
+        if self.path != "/api/0/settings/aw-notify":
+            self.send_response(404)
+            self.end_headers()
+            return
+        length = int(self.headers.get("Content-Length", 0))
+        type(self).notify_settings = json.loads(self.rfile.read(length))
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"{}")
+
+    def log_message(self, *args):
+        pass
+
+
+@pytest.fixture
+def settings_server():
+    server = HTTPServer(("127.0.0.1", 0), _SettingsHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield server, _SettingsHandler
+    server.shutdown()
+    _SettingsHandler.notify_settings = None
+    _SettingsHandler.settings_get_error = None
+
+
+class TestNotifyOptIn:
+    """aw-notify starts only when the shared `aw-notify.enabled` setting is true."""
+
+    @pytest.mark.parametrize(
+        "settings,expected",
+        [
+            ({"enabled": True}, True),
+            ({"enabled": False}, False),
+            ({"alerts": []}, False),  # missing flag => opt-in default false
+            ({"enabled": "true"}, False),  # only a real boolean true counts
+            (None, False),  # key missing (404)
+        ],
+    )
+    def test_read_notify_enabled(self, settings_server, settings, expected):
+        server, handler = settings_server
+        handler.notify_settings = settings
+        assert manager_module.read_notify_enabled(server.server_port) is expected
+
+    def test_read_notify_enabled_server_down(self):
+        assert manager_module.read_notify_enabled(1, timeout=0.2) is False
+
+    def _manager_with_notify(self):
+        mgr = manager_module.Manager(testing=True)
+        notify = Module(manager_module.NOTIFY_MODULE, Path("/usr/bin/true"), "system")
+        mgr.modules = [notify]
+        return mgr, notify
+
+    def _run_autostart(self, mgr, port):
+        t = mgr.autostart_notify_if_enabled(port)
+        t.join(timeout=5)
+
+    def test_starts_when_enabled(self, settings_server):
+        server, handler = settings_server
+        handler.notify_settings = {"enabled": True}
+        mgr, notify = self._manager_with_notify()
+        with patch.object(notify, "start") as mock_start:
+            self._run_autostart(mgr, server.server_port)
+        mock_start.assert_called_once_with(True)
+
+    @pytest.mark.parametrize("settings", [{"enabled": False}, {"alerts": []}, None])
+    def test_does_not_start_when_disabled_or_missing(self, settings_server, settings):
+        server, handler = settings_server
+        handler.notify_settings = settings
+        mgr, notify = self._manager_with_notify()
+        with patch.object(notify, "start") as mock_start:
+            self._run_autostart(mgr, server.server_port)
+        mock_start.assert_not_called()
+
+    def test_does_not_start_after_shutdown_begins(self, settings_server):
+        """A late autostart thread must not start aw-notify after stop_all()."""
+        server, handler = settings_server
+        handler.notify_settings = {"enabled": True}
+        mgr, notify = self._manager_with_notify()
+        mgr._shutting_down = True
+        with patch.object(notify, "start") as mock_start:
+            self._run_autostart(mgr, server.server_port)
+        mock_start.assert_not_called()
+
+    def test_does_not_start_twice_when_already_running(self, settings_server):
+        """A manual start must not duplicate an instance autostart already ran."""
+        _server, handler = settings_server
+        handler.notify_settings = {"enabled": True}
+        mgr, notify = self._manager_with_notify()
+        notify.started = True
+        with patch.object(notify, "start") as mock_start:
+            mgr.start_notify()
+        mock_start.assert_not_called()
+
+    def test_retries_transient_read_error_then_starts(self, settings_server):
+        """One transient settings-read failure must not leave notifications off."""
+        server, handler = settings_server
+        handler.notify_settings = {"enabled": True}
+        mgr, notify = self._manager_with_notify()
+        real_read = manager_module._read_notify_enabled_or_raise
+        calls = {"n": 0}
+
+        def flaky(port, timeout=2.0):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise OSError("transient")
+            return real_read(port, timeout)
+
+        with patch.object(manager_module, "_read_notify_enabled_or_raise", flaky), patch.object(
+            manager_module, "sleep", lambda _s: None
+        ), patch.object(notify, "start") as mock_start:
+            self._run_autostart(mgr, server.server_port)
+        assert calls["n"] == 2
+        mock_start.assert_called_once_with(True)
+
+    def test_noop_without_installed_module(self, settings_server):
+        server, handler = settings_server
+        handler.notify_settings = {"enabled": True}
+        mgr = manager_module.Manager(testing=True)
+        mgr.modules = []
+        with patch.object(mgr, "start") as mock_start:
+            self._run_autostart(mgr, server.server_port)
+        mock_start.assert_not_called()
+
+
+class TestWriteNotifyEnabled:
+    def test_sets_flag_and_preserves_other_keys(self, settings_server):
+        server, handler = settings_server
+        handler.notify_settings = {"alerts": [1, 2], "http_port": 5601}
+        assert manager_module.write_notify_enabled(server.server_port, True) is True
+        assert handler.notify_settings == {
+            "alerts": [1, 2],
+            "http_port": 5601,
+            "enabled": True,
+        }
+        assert manager_module.write_notify_enabled(server.server_port, False) is True
+        assert handler.notify_settings["enabled"] is False
+        assert handler.notify_settings["alerts"] == [1, 2]
+
+    def test_creates_settings_when_key_missing(self, settings_server):
+        server, handler = settings_server
+        handler.notify_settings = None
+        assert manager_module.write_notify_enabled(server.server_port, True) is True
+        assert handler.notify_settings == {"enabled": True}
+
+    def test_returns_false_when_server_down(self):
+        assert manager_module.write_notify_enabled(1, True, timeout=0.2) is False
+
+    def test_returns_false_and_does_not_post_when_read_fails(self, settings_server):
+        """A transient non-404 error during the read must abort the write.
+
+        If we allowed the write to proceed with an empty settings dict, we would
+        POST {"enabled": <value>} and destroy any other keys (alerts, http_port,
+        etc.) the user had configured.
+        """
+        server, handler = settings_server
+        handler.notify_settings = {"alerts": [1], "http_port": 5601}
+        handler.settings_get_error = 500  # simulate transient server error on read
+        result = manager_module.write_notify_enabled(server.server_port, True)
+        assert result is False
+        # settings must be unchanged — write must not have been attempted
+        assert handler.notify_settings == {"alerts": [1], "http_port": 5601}
