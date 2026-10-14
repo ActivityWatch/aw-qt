@@ -1,6 +1,8 @@
 import os
 import sys
+import json
 import logging
+import threading
 import subprocess
 import platform
 import urllib.error
@@ -24,6 +26,105 @@ _parent_dir = os.path.abspath(os.path.join(_module_dir, os.pardir))
 def _log_modules(modules: List["Module"]) -> None:
     for m in modules:
         logger.debug(f" - {m.name} at {m.path}")
+
+
+# aw-notify is opt-in: it is started only when the shared server-side setting
+# `aw-notify` has `enabled: true` (ActivityWatch/activitywatch#1435).
+NOTIFY_MODULE = "aw-notify"
+NOTIFY_SETTINGS_KEY = "aw-notify"
+
+
+def _notify_settings_url(port: int) -> str:
+    return f"http://localhost:{port}/api/0/settings/{NOTIFY_SETTINGS_KEY}"
+
+
+def read_notify_settings(port: int, timeout: float = 2.0) -> dict:
+    """Return the server's `aw-notify` settings object, or {} if missing/unreachable."""
+    try:
+        with urllib.request.urlopen(_notify_settings_url(port), timeout=timeout) as resp:
+            data = json.load(resp)
+    except (urllib.error.URLError, OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _read_notify_settings_or_raise(port: int, timeout: float) -> dict:
+    """Like read_notify_settings, but raises on network errors.
+
+    A 404 (key not yet created) returns {} so write_notify_enabled can create
+    the key.  All other HTTP errors and network failures raise so the caller can
+    abort instead of POSTing an incomplete settings object and destroying keys
+    that simply weren't readable at that moment.
+    """
+    try:
+        with urllib.request.urlopen(_notify_settings_url(port), timeout=timeout) as resp:
+            data = json.load(resp)
+            return data if isinstance(data, dict) else {}
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return {}
+        raise
+
+
+def read_notify_enabled(port: int, timeout: float = 2.0) -> bool:
+    """Return True iff the server's `aw-notify` setting has `enabled: true`.
+
+    A missing key (404), an unreachable server, or any non-boolean-true value
+    means disabled: notifications are opt-in.
+    """
+    return read_notify_settings(port, timeout).get("enabled") is True
+
+
+def write_notify_enabled(port: int, enabled: bool, timeout: float = 2.0) -> bool:
+    """Persist `enabled` in the shared `aw-notify` setting, keeping all other keys.
+
+    Returns True on success. The settings endpoint replaces the whole value, so
+    the current object is read first and only `enabled` is changed.
+
+    If the read fails due to a network error (not a missing key), the write is
+    aborted and False is returned so no keys are silently overwritten.
+    """
+    try:
+        settings = _read_notify_settings_or_raise(port, timeout)
+    except (urllib.error.URLError, OSError, ValueError):
+        return False
+    settings["enabled"] = enabled
+    req = urllib.request.Request(
+        _notify_settings_url(port),
+        data=json.dumps(settings).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout):
+            return True
+    except (urllib.error.URLError, OSError):
+        return False
+
+
+def _read_notify_enabled_or_raise(port: int, timeout: float = 2.0) -> bool:
+    """Like read_notify_enabled, but raises on network errors instead of hiding them.
+
+    Lets the autostart path retry a transient failure rather than treating an
+    unreadable setting as "disabled".
+    """
+    return _read_notify_settings_or_raise(port, timeout).get("enabled") is True
+
+
+def wait_for_server(port: int, timeout: float = 60.0, interval: float = 0.5) -> bool:
+    """Block until the server answers on /api/0/info, or `timeout` seconds pass."""
+    deadline = monotonic() + timeout
+    while True:
+        try:
+            with urllib.request.urlopen(
+                f"http://localhost:{port}/api/0/info", timeout=1.0
+            ):
+                return True
+        except (urllib.error.URLError, OSError):
+            pass
+        if monotonic() >= deadline:
+            return False
+        sleep(interval)
 
 
 ignored_filenames = ["aw-cli", "aw-client", "aw-qt", "aw-qt.desktop", "aw-qt.spec"]
@@ -342,6 +443,15 @@ class Manager:
     def __init__(self, testing: bool = False) -> None:
         self.modules: List[Module] = []
         self.testing = testing
+        # Serialises the autostart background thread against the tray toggle so
+        # that only one path can check-and-start/stop aw-notify at a time.
+        # Reentrant: a SIGINT/SIGTERM handler runs on the main thread and calls
+        # stop_all(), which takes this lock again while a toggle callback on the
+        # same thread may still hold it. A plain Lock would deadlock shutdown.
+        self._notify_lock = threading.RLock()
+        # Set once shutdown begins so a late autostart thread cannot start
+        # aw-notify after stop_all() has already run.
+        self._shutting_down = False
 
         self.discover_modules()
 
@@ -409,6 +519,52 @@ class Manager:
         for name in autostart_modules:
             self.start(name)
 
+    def autostart_notify_if_enabled(self, port: int) -> threading.Thread:
+        """Start aw-notify once the server is up, iff the shared `enabled` flag is true.
+
+        Runs in a background thread so a slow server start does not block the
+        tray. Does nothing when no aw-notify module is installed, or when it was
+        already started explicitly through `autostart_modules`.
+
+        Returns the background thread so callers (e.g. tests) can join it.
+        """
+        if NOTIFY_MODULE not in [m.name for m in self.modules]:
+            t = threading.Thread(target=lambda: None, name="aw-notify-autostart", daemon=True)
+            t.start()
+            return t
+
+        def _run() -> None:
+            if not wait_for_server(port):
+                logger.warning(
+                    f"Server not reachable on port {port}, not starting {NOTIFY_MODULE}"
+                )
+                return
+            with self._notify_lock:
+                if self._shutting_down:
+                    return
+                enabled = None
+                for _ in range(3):
+                    try:
+                        enabled = _read_notify_enabled_or_raise(port)
+                        break
+                    except (urllib.error.URLError, OSError, ValueError) as e:
+                        logger.warning(f"Could not read {NOTIFY_MODULE} setting: {e}")
+                        sleep(1.0)
+                if enabled is None:
+                    logger.warning(
+                        f"Could not read {NOTIFY_MODULE} setting, not starting"
+                    )
+                    return
+                if enabled:
+                    logger.info(f"{NOTIFY_MODULE} enabled in settings, starting")
+                    self._start_notify_locked()
+                else:
+                    logger.info(f"{NOTIFY_MODULE} not enabled in settings, not starting")
+
+        t = threading.Thread(target=_run, name="aw-notify-autostart", daemon=True)
+        t.start()
+        return t
+
     def stop(self, module_name: str) -> None:
         for m in self.modules:
             if m.name == module_name:
@@ -417,7 +573,37 @@ class Manager:
         else:
             logger.error(f"Manager tried to stop nonexistent module {module_name}")
 
+    def start_notify(self) -> None:
+        """Start aw-notify unless it is already running or shutdown has begun.
+
+        Shared by the autostart thread and the tray toggle; holds _notify_lock
+        so the two cannot both start a second instance.
+        """
+        with self._notify_lock:
+            self._start_notify_locked()
+
+    def _start_notify_locked(self) -> None:
+        # Caller must hold _notify_lock.
+        if self._shutting_down:
+            return
+        if any(m.name == NOTIFY_MODULE and m.started for m in self.modules):
+            return
+        self.start(NOTIFY_MODULE)
+
+    def stop_notify(self) -> None:
+        """Stop every started aw-notify copy.
+
+        Both a bundled and a system copy can be discovered. Manager.stop() only
+        stops the first match, so a running second copy would survive a disable.
+        """
+        with self._notify_lock:
+            for m in self.modules:
+                if m.name == NOTIFY_MODULE and m.started:
+                    m.stop()
+
     def stop_all(self) -> None:
+        with self._notify_lock:
+            self._shutting_down = True
         for module in filter(lambda m: m.is_alive(), self.modules):
             module.stop()
 
