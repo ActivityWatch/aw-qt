@@ -4,6 +4,7 @@ import logging
 import subprocess
 import platform
 import signal
+import select
 import threading
 from typing import Optional
 from time import sleep
@@ -24,6 +25,32 @@ from .profile import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _ensure_output_streams() -> None:
+    # Desktop launchers can leave stdout/stderr on a disconnected terminal or pipe.
+    # Repair unusable descriptors before either aw-qt or its modules write.
+    for fd in (1, 2):
+        unusable = False
+        try:
+            os.write(fd, b"")
+            if sys.platform != "win32":
+                poller = select.poll()
+                # A zero event mask still reports errors and hangups.
+                poller.register(fd, 0)
+                unusable = bool(poller.poll(0))
+        except OSError:
+            unusable = True
+        if not unusable:
+            continue
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        if devnull == fd:
+            os.set_inheritable(fd, True)
+        else:
+            try:
+                os.dup2(devnull, fd)
+            finally:
+                os.close(devnull)
 
 
 def _acquire_single_instance_lock(profile: str) -> QLockFile:
@@ -92,6 +119,8 @@ def main(
     no_gui: bool,
     interactive_cli: bool,
 ) -> None:
+    _ensure_output_streams()
+
     # Since the .app can crash when started from Finder for unknown reasons, we send a syslog message here to make debugging easier.
     if platform.system() == "Darwin":
         subprocess.call("syslog -s 'aw-qt started'", shell=True)
