@@ -298,6 +298,20 @@ class TrayIcon(QSystemTrayIcon):
         def check_module_status() -> None:
             unexpected_exits = self.manager.get_unexpected_stops()
             for module in unexpected_exits:
+                if module.exited_cleanly():
+                    # A clean exit (code 0) is intentional, not a crash — e.g.
+                    # aw-notify exits 0 while notifications are disabled by its
+                    # opt-in gate. Restarting it here would loop every interval.
+                    logger.info(
+                        f"Module {module.name} exited cleanly (exit 0); "
+                        "not auto-restarting"
+                    )
+                    module.clear_exited_process()
+                    # A clean exit ends the crash episode: drop the restart
+                    # history so a later single crash is not mistaken for a
+                    # repeated failure. Mirrors the manual toggle/restart paths.
+                    self._restart_timestamps.pop(module.name, None)
+                    continue
                 recent = self._recent_restart_count(module.name)
                 if recent < self.MAX_AUTO_RESTARTS:
                     logger.info(
