@@ -538,3 +538,57 @@ class TestWriteNotifyEnabled:
         assert result is False
         # settings must be unchanged — write must not have been attempted
         assert handler.notify_settings == {"alerts": [1], "http_port": 5601}
+
+
+class TestCleanExitDetection:
+    """A module that exits with code 0 did so intentionally.
+
+    ``aw-notify`` exits 0 while notifications are disabled by its opt-in gate.
+    Auto-restarting that is what made aw-qt restart it every poll interval, so
+    the tray must be able to tell a clean exit apart from a crash.
+    """
+
+    def test_exited_cleanly_true_for_zero_returncode(self):
+        mod = Module("aw-notify", Path("/usr/bin/true"), "bundled")
+        proc = MagicMock(spec=subprocess.Popen)
+        proc.returncode = 0
+        mod._process = proc
+        mod.started = True
+        assert mod.exited_cleanly() is True
+
+    def test_exited_cleanly_false_for_crash(self):
+        mod = Module("aw-test", Path("/usr/bin/true"), "system")
+        proc = MagicMock(spec=subprocess.Popen)
+        proc.returncode = 1
+        mod._process = proc
+        mod.started = True
+        assert mod.exited_cleanly() is False
+
+    def test_exited_cleanly_false_when_no_process(self):
+        mod = Module("aw-test", Path("/usr/bin/true"), "system")
+        assert mod.exited_cleanly() is False
+
+    def test_clear_exited_process_resets_state(self):
+        mod = Module("aw-notify", Path("/usr/bin/true"), "bundled")
+        proc = MagicMock(spec=subprocess.Popen)
+        proc.returncode = 0
+        mod._process = proc
+        mod.started = True
+
+        mod.clear_exited_process()
+
+        assert mod.started is False
+        assert mod._process is None
+        assert mod._last_process is proc
+
+    def test_clear_exited_process_keeps_running_module(self):
+        mod = Module("aw-test", Path("/usr/bin/true"), "system")
+        proc = MagicMock(spec=subprocess.Popen)
+        proc.returncode = None  # still running
+        mod._process = proc
+        mod.started = True
+
+        mod.clear_exited_process()
+
+        assert mod.started is True
+        assert mod._process is proc

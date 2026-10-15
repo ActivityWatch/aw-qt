@@ -429,6 +429,26 @@ class Module:
         # If returncode is none after p.poll(), module is still running
         return True if self._process.returncode is None else False
 
+    def exited_cleanly(self) -> bool:
+        """Whether the module's process exited with code 0 (an intentional exit).
+
+        A clean exit is not a crash. e.g. ``aw-notify`` exits 0 when
+        notifications are disabled by its opt-in gate; treating that as a crash
+        makes aw-qt auto-restart it on every poll interval, forever.
+        """
+        if self._process is None:
+            return False
+        self._process.poll()
+        return self._process.returncode == 0
+
+    def clear_exited_process(self) -> None:
+        """Drop state for a process that exited on its own (no-op if alive)."""
+        if self.is_alive():
+            return
+        self._last_process = self._process
+        self._process = None
+        self.started = False
+
     def read_log(self, testing: bool) -> str:
         """Useful if you want to retrieve the logs of a module"""
         log_path = aw_core.log.get_latest_log_file(self.name, testing)
