@@ -307,6 +307,10 @@ class TrayIcon(QSystemTrayIcon):
                         "not auto-restarting"
                     )
                     module.clear_exited_process()
+                    # A clean exit ends the crash episode: drop the restart
+                    # history so a later single crash is not mistaken for a
+                    # repeated failure. Mirrors the manual toggle/restart paths.
+                    self._restart_timestamps.pop(module.name, None)
                     continue
                 recent = self._recent_restart_count(module.name)
                 if recent < self.MAX_AUTO_RESTARTS:
