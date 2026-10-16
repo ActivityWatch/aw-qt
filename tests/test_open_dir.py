@@ -149,14 +149,14 @@ def test_external_opener_survives_application_exit(opener, monkeypatch):
     result = opener("/bin/sleep 0.3\nprintf survived > \"$OPENER_RESULT\"\n")
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
     repo = Path(__file__).resolve().parents[1]
+    script = """
+from PyQt6.QtWidgets import QApplication
+from aw_qt.trayicon import open_dir
+app = QApplication([])
+open_dir('/tmp/logs')
+"""
     completed = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            "from PyQt6.QtWidgets import QApplication; "
-            "from aw_qt.trayicon import open_dir; "
-            "app = QApplication([]); open_dir('/tmp/logs')",
-        ],
+        [sys.executable, "-c", script],
         cwd=repo,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
