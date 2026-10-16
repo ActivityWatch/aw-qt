@@ -42,6 +42,18 @@ def get_env() -> Dict[str, str]:
     https://github.com/ActivityWatch/activitywatch/issues/208#issuecomment-417346407
     """
     env = dict(os.environ)  # make a copy of the environment
+    if env.get("APPIMAGE"):
+        # Inside an AppImage, PyInstaller's "original" library path belongs
+        # to the AppImage, not the host. Its Qt plugins likewise cannot be
+        # used by a system browser or file manager (ActivityWatch/activitywatch#1528).
+        for key in (
+            "LD_LIBRARY_PATH",
+            "LD_LIBRARY_PATH_ORIG",
+            "QT_PLUGIN_PATH",
+            "QT_QPA_PLATFORM_PLUGIN_PATH",
+        ):
+            env.pop(key, None)
+        return env
     lp_key = "LD_LIBRARY_PATH"  # for GNU/Linux and *BSD.
     lp_orig = env.get(lp_key + "_ORIG")
     if lp_orig is not None:

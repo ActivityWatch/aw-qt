@@ -146,6 +146,33 @@ def test_child_library_path_is_restored_without_changing_parent(
     assert errors == []
 
 
+@pytest.mark.parametrize("action", ["open_dir", "open_url"])
+def test_appimage_opener_gets_clean_environment(
+    app, opener, errors, monkeypatch, action
+):
+    result = opener(
+        'printf "%s\\n" "${LD_LIBRARY_PATH-unset}" '
+        '"${LD_LIBRARY_PATH_ORIG-unset}" "${QT_PLUGIN_PATH-unset}" '
+        '"${QT_QPA_PLATFORM_PLUGIN_PATH-unset}" > "$OPENER_RESULT"\n'
+    )
+    monkeypatch.setenv("APPIMAGE", "/downloads/ActivityWatch.AppImage")
+    monkeypatch.setenv("APPDIR", "/tmp/.mount_ActivityWatch")
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/tmp/_MEI_activitywatch")
+    monkeypatch.setenv("LD_LIBRARY_PATH_ORIG", "/tmp/.mount_ActivityWatch")
+    monkeypatch.setenv("QT_PLUGIN_PATH", "/tmp/.mount_ActivityWatch/qt/plugins")
+    monkeypatch.setenv(
+        "QT_QPA_PLATFORM_PLUGIN_PATH", "/tmp/.mount_ActivityWatch/qt/platforms"
+    )
+
+    getattr(trayicon, action)("/tmp/logs" if action == "open_dir" else "http://localhost:5600")
+
+    wait_until(app, result.exists)
+    process_for(app, 0.25)
+    assert result.read_text().splitlines() == ["unset"] * 4
+    assert os.environ["LD_LIBRARY_PATH"] == "/tmp/_MEI_activitywatch"
+    assert errors == []
+
+
 def test_external_opener_survives_application_exit(opener, monkeypatch):
     result = opener("/bin/sleep 0.3\nprintf survived > \"$OPENER_RESULT\"\n")
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
