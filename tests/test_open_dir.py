@@ -1,6 +1,7 @@
 """Exercise folder-opening failures with real external processes."""
 
 import os
+import shlex
 import subprocess
 import sys
 import time
@@ -204,3 +205,79 @@ def test_error_dialog_displays_diagnostics_and_copies_literal_path(app):
     assert observed["path"] == folder
     assert observed["details"] == diagnostics
     assert observed["clipboard"] == folder
+
+
+def test_temporary_file_failure_reports_error_without_launching(
+    app, errors, monkeypatch
+):
+    def no_temporary_file():
+        raise OSError("Temporary storage is unavailable")
+
+    def unexpected_launch(*args, **kwargs):
+        pytest.fail("The opener must not launch after diagnostic setup failed")
+
+    monkeypatch.setattr(trayicon.tempfile, "TemporaryFile", no_temporary_file)
+    monkeypatch.setattr(trayicon.subprocess, "Popen", unexpected_launch)
+
+    trayicon.open_dir("/tmp/logs")
+
+    assert len(errors) == 1
+    assert errors[0][0] == "/tmp/logs"
+    assert "Temporary storage is unavailable" in errors[0][1]
+
+
+def test_noisy_failure_keeps_bounded_diagnostic_tail(app, opener, errors):
+    script = "import sys; sys.stderr.write('x' * 32768 + '\\nFINAL_DIAGNOSTIC\\n'); sys.exit(4)"
+    opener(f"{shlex.quote(sys.executable)} -c {shlex.quote(script)}\n")
+
+    trayicon.open_dir("/tmp/logs")
+
+    wait_until(app, lambda: bool(errors))
+    assert len(errors) == 1
+    details = errors[0][1]
+    assert "FINAL_DIAGNOSTIC" in details
+    assert "truncated" in details.lower()
+    # Allow the bounded captured tail plus its exit-status/truncation labels.
+    assert len(details) < 8500
+
+
+def test_success_does_not_read_captured_stderr(app, opener, errors, monkeypatch):
+    script = "import sys; sys.stderr.write('x' * 32768)"
+    result = opener(
+        f"{shlex.quote(sys.executable)} -c {shlex.quote(script)}\n"
+        'printf done > "$OPENER_RESULT"\n'
+    )
+    captured = trayicon.tempfile.TemporaryFile()
+    reads = []
+
+    def unexpected_read(*args, **kwargs):
+        reads.append(True)
+        raise OSError("Successful opener diagnostics must not be read")
+
+    monkeypatch.setattr(captured, "read", unexpected_read)
+    monkeypatch.setattr(trayicon.tempfile, "TemporaryFile", lambda: captured)
+
+    trayicon.open_dir("/tmp/logs")
+
+    wait_until(app, lambda: result.exists() and captured.closed)
+    assert reads == []
+    assert errors == []
+
+
+def test_unreadable_diagnostics_still_report_failure(app, opener, errors, monkeypatch):
+    opener("exit 4\n")
+    captured = trayicon.tempfile.TemporaryFile()
+
+    def unreadable(*args, **kwargs):
+        raise OSError("Diagnostic storage disappeared")
+
+    monkeypatch.setattr(captured, "read", unreadable)
+    monkeypatch.setattr(trayicon.tempfile, "TemporaryFile", lambda: captured)
+
+    trayicon.open_dir("/tmp/logs")
+
+    wait_until(app, lambda: bool(errors))
+    assert len(errors) == 1
+    assert "status 4" in errors[0][1]
+    assert "Diagnostic storage disappeared" in errors[0][1]
+    assert captured.closed

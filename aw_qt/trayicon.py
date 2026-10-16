@@ -81,7 +81,11 @@ def open_dir(d: Union[str, Path]) -> None:
     else:
         # xdg-open can stay alive as long as the file manager. Poll without
         # blocking Qt, and use a file so a full stderr pipe cannot stall it.
-        stderr = tempfile.TemporaryFile()
+        try:
+            stderr = tempfile.TemporaryFile()
+        except OSError as exc:
+            _show_open_dir_error(d, str(exc))
+            return
         try:
             process = subprocess.Popen(["xdg-open", d], env=get_env(), stderr=stderr)
         except OSError as exc:
@@ -97,11 +101,20 @@ def open_dir(d: Union[str, Path]) -> None:
                 return
             timer.stop()
             timer.deleteLater()
-            stderr.seek(0)
-            details = stderr.read().decode("utf-8", errors="replace").strip()
-            stderr.close()
-            if returncode != 0:
-                _show_open_dir_error(d, f"xdg-open exited with status {returncode}.\n{details}")
+            if returncode == 0:
+                stderr.close()
+                return
+            try:
+                size = stderr.seek(0, os.SEEK_END)
+                stderr.seek(max(0, size - 8192))
+                details = stderr.read(8192).decode("utf-8", errors="replace").strip()
+                if size > 8192:
+                    details = "[Earlier diagnostics truncated]\n" + details
+            except OSError as exc:
+                details = f"Could not read opener diagnostics: {exc}"
+            finally:
+                stderr.close()
+            _show_open_dir_error(d, f"xdg-open exited with status {returncode}.\n{details}")
 
         timer.timeout.connect(check_finished)
         timer.start(100)
