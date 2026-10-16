@@ -3,10 +3,11 @@ import os
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 import webbrowser
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import aw_core
 from PyQt6 import QtCore
@@ -41,6 +42,18 @@ def get_env() -> Dict[str, str]:
     https://github.com/ActivityWatch/activitywatch/issues/208#issuecomment-417346407
     """
     env = dict(os.environ)  # make a copy of the environment
+    if env.get("APPIMAGE"):
+        # Inside an AppImage, PyInstaller's "original" library path belongs
+        # to the AppImage, not the host. Its Qt plugins likewise cannot be
+        # used by a system browser or file manager (ActivityWatch/activitywatch#1528).
+        for key in (
+            "LD_LIBRARY_PATH",
+            "LD_LIBRARY_PATH_ORIG",
+            "QT_PLUGIN_PATH",
+            "QT_QPA_PLATFORM_PLUGIN_PATH",
+        ):
+            env.pop(key, None)
+        return env
     lp_key = "LD_LIBRARY_PATH"  # for GNU/Linux and *BSD.
     lp_orig = env.get(lp_key + "_ORIG")
     if lp_orig is not None:
@@ -70,15 +83,68 @@ def open_apibrowser(root_url: str) -> None:
     open_url(root_url + "/api")
 
 
-def open_dir(d: str) -> None:
+def open_dir(d: Union[str, Path]) -> None:
     """From: http://stackoverflow.com/a/1795849/965332"""
+    d = str(d)
     if sys.platform == "win32":
         os.startfile(d)
     elif sys.platform == "darwin":
         subprocess.Popen(["open", d])
     else:
-        env = get_env()
-        subprocess.Popen(["xdg-open", d], env=env)
+        # xdg-open can stay alive as long as the file manager. Poll without
+        # blocking Qt, and use a file so a full stderr pipe cannot stall it.
+        try:
+            stderr = tempfile.TemporaryFile()
+        except OSError as exc:
+            _show_open_dir_error(d, str(exc))
+            return
+        try:
+            process = subprocess.Popen(["xdg-open", d], env=get_env(), stderr=stderr)
+        except OSError as exc:
+            stderr.close()
+            _show_open_dir_error(d, str(exc))
+            return
+
+        timer = QtCore.QTimer(QApplication.instance())
+
+        def check_finished() -> None:
+            returncode = process.poll()
+            if returncode is None:
+                return
+            timer.stop()
+            timer.deleteLater()
+            if returncode == 0:
+                stderr.close()
+                return
+            try:
+                size = stderr.seek(0, os.SEEK_END)
+                stderr.seek(max(0, size - 8192))
+                details = stderr.read(8192).decode("utf-8", errors="replace").strip()
+                if size > 8192:
+                    details = "[Earlier diagnostics truncated]\n" + details
+            except OSError as exc:
+                details = f"Could not read opener diagnostics: {exc}"
+            finally:
+                stderr.close()
+            _show_open_dir_error(d, f"xdg-open exited with status {returncode}.\n{details}")
+
+        timer.timeout.connect(check_finished)
+        timer.start(100)
+
+
+def _show_open_dir_error(path: str, details: str) -> None:
+    logger.warning("Could not open folder %s: %s", path, details)
+    box = QMessageBox()
+    box.setIcon(QMessageBox.Icon.Warning)
+    box.setWindowTitle("Could not open folder")
+    box.setTextFormat(QtCore.Qt.TextFormat.PlainText)
+    box.setText("Open this folder manually in your file manager:")
+    box.setInformativeText(path)
+    box.setDetailedText(details)
+    box.setStandardButtons(QMessageBox.StandardButton.Close)
+    copy_button = box.addButton("Copy path", QMessageBox.ButtonRole.ActionRole)
+    copy_button.clicked.connect(lambda: QApplication.clipboard().setText(path))
+    box.exec()
 
 
 class TrayIcon(QSystemTrayIcon):
