@@ -3,10 +3,11 @@ import os
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 import webbrowser
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import aw_core
 from PyQt6 import QtCore
@@ -70,15 +71,55 @@ def open_apibrowser(root_url: str) -> None:
     open_url(root_url + "/api")
 
 
-def open_dir(d: str) -> None:
+def open_dir(d: Union[str, Path]) -> None:
     """From: http://stackoverflow.com/a/1795849/965332"""
+    d = str(d)
     if sys.platform == "win32":
         os.startfile(d)
     elif sys.platform == "darwin":
         subprocess.Popen(["open", d])
     else:
-        env = get_env()
-        subprocess.Popen(["xdg-open", d], env=env)
+        # xdg-open can stay alive as long as the file manager. Poll without
+        # blocking Qt, and use a file so a full stderr pipe cannot stall it.
+        stderr = tempfile.TemporaryFile()
+        try:
+            process = subprocess.Popen(["xdg-open", d], env=get_env(), stderr=stderr)
+        except OSError as exc:
+            stderr.close()
+            _show_open_dir_error(d, str(exc))
+            return
+
+        timer = QtCore.QTimer(QApplication.instance())
+
+        def check_finished() -> None:
+            returncode = process.poll()
+            if returncode is None:
+                return
+            timer.stop()
+            timer.deleteLater()
+            stderr.seek(0)
+            details = stderr.read().decode("utf-8", errors="replace").strip()
+            stderr.close()
+            if returncode != 0:
+                _show_open_dir_error(d, f"xdg-open exited with status {returncode}.\n{details}")
+
+        timer.timeout.connect(check_finished)
+        timer.start(100)
+
+
+def _show_open_dir_error(path: str, details: str) -> None:
+    logger.warning("Could not open folder %s: %s", path, details)
+    box = QMessageBox()
+    box.setIcon(QMessageBox.Icon.Warning)
+    box.setWindowTitle("Could not open folder")
+    box.setTextFormat(QtCore.Qt.TextFormat.PlainText)
+    box.setText("Open this folder manually in your file manager:")
+    box.setInformativeText(path)
+    box.setDetailedText(details)
+    box.setStandardButtons(QMessageBox.StandardButton.Close)
+    copy_button = box.addButton("Copy path", QMessageBox.ButtonRole.ActionRole)
+    copy_button.clicked.connect(lambda: QApplication.clipboard().setText(path))
+    box.exec()
 
 
 class TrayIcon(QSystemTrayIcon):
