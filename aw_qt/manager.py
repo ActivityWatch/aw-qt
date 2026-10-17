@@ -60,6 +60,10 @@ def _apply_wayland_substitutions(
     When the Wayland watcher is not installed, the original list is returned
     unchanged (the X11 modules will fail to capture anything on Wayland, but
     the rest of ActivityWatch still works).
+
+    Only modules the user actually selected are replaced. An empty or
+    server-only list is returned unchanged: explicitly disabling tracking
+    (``--autostart-modules none`` or an empty config) must not start a watcher.
     """
     if not _is_wayland():
         return modules
@@ -82,16 +86,12 @@ def _apply_wayland_substitutions(
             # Drop the X11-only module
         else:
             result.append(name)
-    if not inserted and WAYLAND_WATCHER not in result:
-        # Neither aw-watcher-window nor aw-watcher-afk was in the list but we
-        # are on Wayland and the watcher is available — add it so window/afk
-        # tracking works even with a custom module list.
-        result.append(WAYLAND_WATCHER)
-    logger.info(
-        "Wayland session detected: substituted %s with %s",
-        list(_WAYLAND_REPLACED_MODULES),
-        WAYLAND_WATCHER,
-    )
+    if inserted:
+        logger.info(
+            "Wayland session detected: substituted %s with %s",
+            list(_WAYLAND_REPLACED_MODULES),
+            WAYLAND_WATCHER,
+        )
     return result
 
 

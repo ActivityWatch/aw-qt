@@ -1,19 +1,10 @@
 """Tests for Wayland session detection and module substitution."""
 
-import sys
-from unittest.mock import MagicMock, patch
-
-# Stub out PyQt6 so we can import aw_qt.manager without a running display.
-for _mod in ("PyQt6", "PyQt6.QtCore", "PyQt6.QtGui", "PyQt6.QtWidgets"):
-    sys.modules.setdefault(_mod, MagicMock())
-
-import os  # noqa: E402
-
-import pytest  # noqa: E402
+import os
+from unittest.mock import patch
 
 from aw_qt.manager import (
     WAYLAND_WATCHER,
-    _WAYLAND_REPLACED_MODULES,
     _apply_wayland_substitutions,
     _is_wayland,
 )
@@ -21,14 +12,20 @@ from aw_qt.manager import (
 
 def _clean_env(**overrides):
     """Return a copy of os.environ with Wayland vars removed, then apply overrides."""
-    env = {k: v for k, v in os.environ.items() if k not in ("WAYLAND_DISPLAY", "XDG_SESSION_TYPE")}
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if k not in ("WAYLAND_DISPLAY", "XDG_SESSION_TYPE")
+    }
     env.update(overrides)
     return env
 
 
 class TestIsWayland:
     def test_wayland_display_set(self):
-        with patch.dict(os.environ, _clean_env(WAYLAND_DISPLAY="wayland-0"), clear=True):
+        with patch.dict(
+            os.environ, _clean_env(WAYLAND_DISPLAY="wayland-0"), clear=True
+        ):
             assert _is_wayland() is True
 
     def test_xdg_session_type_wayland(self):
@@ -86,13 +83,27 @@ class TestApplyWaylandSubstitutions:
             result = _apply_wayland_substitutions(modules, self._AVAILABLE)
         assert result.index(WAYLAND_WATCHER) == 1  # replaces aw-watcher-afk's position
 
-    def test_custom_module_list_without_x11_watchers(self):
-        """Custom lists without the X11 watchers get the Wayland watcher appended."""
+    def test_server_only_list_gets_no_watcher(self):
+        """A server-only selection must not have a watcher appended."""
         modules = ["aw-server-rust"]
         available = {"aw-server-rust", WAYLAND_WATCHER}
         with patch("aw_qt.manager._is_wayland", return_value=True):
             result = _apply_wayland_substitutions(modules, available)
-        assert WAYLAND_WATCHER in result
+        assert result == modules
+
+    def test_empty_list_stays_empty(self):
+        """`--autostart-modules none` (empty list) must start nothing on Wayland."""
+        with patch("aw_qt.manager._is_wayland", return_value=True):
+            result = _apply_wayland_substitutions([], self._AVAILABLE)
+        assert result == []
+
+    def test_custom_list_without_x11_watchers_unchanged(self):
+        """A custom list with no X11 watchers is not augmented."""
+        modules = ["aw-server", "aw-watcher-input"]
+        available = {*modules, WAYLAND_WATCHER}
+        with patch("aw_qt.manager._is_wayland", return_value=True):
+            result = _apply_wayland_substitutions(modules, available)
+        assert result == modules
 
     def test_wayland_watcher_already_in_list_not_duplicated(self):
         """Explicit inclusion of the Wayland watcher is not doubled."""
