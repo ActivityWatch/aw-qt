@@ -111,3 +111,94 @@ class TestApplyWaylandSubstitutions:
         with patch("aw_qt.manager._is_wayland", return_value=True):
             result = _apply_wayland_substitutions(modules, self._AVAILABLE)
         assert result.count(WAYLAND_WATCHER) == 1
+
+
+class TestAwatcherAsWaylandWatcher:
+    """aw-awatcher (shipped in the Linux desktop bundle) is a valid substitute."""
+
+    _DEFAULT_MODULES = ["aw-server", "aw-watcher-afk", "aw-watcher-window"]
+
+    def test_awatcher_used_when_only_it_is_available(self):
+        available = {*self._DEFAULT_MODULES, "aw-awatcher"}
+        with patch("aw_qt.manager._is_wayland", return_value=True):
+            result = _apply_wayland_substitutions(self._DEFAULT_MODULES, available)
+        assert "aw-awatcher" in result
+        assert "aw-watcher-window" not in result
+        assert "aw-watcher-afk" not in result
+        assert result.count("aw-awatcher") == 1
+
+    def test_window_wayland_preferred_when_both_available(self):
+        available = {*self._DEFAULT_MODULES, WAYLAND_WATCHER, "aw-awatcher"}
+        with patch("aw_qt.manager._is_wayland", return_value=True):
+            result = _apply_wayland_substitutions(self._DEFAULT_MODULES, available)
+        assert WAYLAND_WATCHER in result
+        assert "aw-awatcher" not in result
+
+    def test_awatcher_inserted_at_first_replaced_position(self):
+        available = {*self._DEFAULT_MODULES, "aw-awatcher"}
+        with patch("aw_qt.manager._is_wayland", return_value=True):
+            result = _apply_wayland_substitutions(self._DEFAULT_MODULES, available)
+        assert result.index("aw-awatcher") == 1
+
+    def test_explicit_awatcher_is_reused_before_or_after_x11_selection(self):
+        available = {*self._DEFAULT_MODULES, WAYLAND_WATCHER, "aw-awatcher"}
+        for modules in (
+            ["aw-server", "aw-awatcher", "aw-watcher-window"],
+            ["aw-server", "aw-watcher-afk", "aw-awatcher"],
+        ):
+            with patch("aw_qt.manager._is_wayland", return_value=True):
+                result = _apply_wayland_substitutions(modules, available)
+            assert result == ["aw-server", "aw-awatcher"]
+
+    def test_both_explicit_wayland_watchers_keep_only_first_selection(self):
+        available = {*self._DEFAULT_MODULES, WAYLAND_WATCHER, "aw-awatcher"}
+        for first, second in (
+            ("aw-awatcher", WAYLAND_WATCHER),
+            (WAYLAND_WATCHER, "aw-awatcher"),
+        ):
+            for originals in ([], ["aw-watcher-window", "aw-watcher-afk"]):
+                modules = ["aw-server", first, *originals, second, "aw-watcher-input"]
+                with patch("aw_qt.manager._is_wayland", return_value=True):
+                    result = _apply_wayland_substitutions(modules, available)
+                assert result == ["aw-server", first, "aw-watcher-input"]
+
+    def test_unavailable_explicit_watcher_does_not_select_another(self):
+        for selected, installed in (
+            (WAYLAND_WATCHER, "aw-awatcher"),
+            ("aw-awatcher", WAYLAND_WATCHER),
+        ):
+            modules = ["aw-server", selected]
+            with patch("aw_qt.manager._is_wayland", return_value=True):
+                result = _apply_wayland_substitutions(modules, {installed})
+            assert result == modules
+
+    def test_missing_explicit_watcher_does_not_block_x11_substitution(self):
+        for selected, installed in (
+            (WAYLAND_WATCHER, "aw-awatcher"),
+            ("aw-awatcher", WAYLAND_WATCHER),
+        ):
+            for originals in (
+                ["aw-watcher-window"],
+                ["aw-watcher-afk"],
+                ["aw-watcher-window", "aw-watcher-afk"],
+            ):
+                for selections in ([selected, *originals], [*originals, selected]):
+                    modules = ["aw-server", *selections, "aw-watcher-input"]
+                    available = {*modules, installed} - {selected}
+                    with patch("aw_qt.manager._is_wayland", return_value=True):
+                        result = _apply_wayland_substitutions(modules, available)
+                    assert result == ["aw-server", installed, "aw-watcher-input"]
+                    assert modules == ["aw-server", *selections, "aw-watcher-input"]
+
+    def test_missing_explicit_and_no_alternative_keeps_original(self):
+        modules = ["aw-server", "aw-awatcher", "aw-watcher-window"]
+        with patch("aw_qt.manager._is_wayland", return_value=True):
+            result = _apply_wayland_substitutions(modules, {"aw-server"})
+        assert result == modules
+
+    def test_no_wayland_watcher_keeps_original(self):
+        with patch("aw_qt.manager._is_wayland", return_value=True):
+            result = _apply_wayland_substitutions(
+                self._DEFAULT_MODULES, set(self._DEFAULT_MODULES)
+            )
+        assert result == self._DEFAULT_MODULES
