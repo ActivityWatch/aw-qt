@@ -70,8 +70,12 @@ def _apply_wayland_substitutions(
         return modules
     # The first installed explicit selection takes precedence over the automatic
     # preference. Only that implementation may run, even if both are selected.
+    explicit = [name for name in modules if name in WAYLAND_WATCHERS]
+    if explicit and not any(name in available_names for name in explicit):
+        logger.warning("Selected Wayland watcher is not installed: %s", explicit)
+        return modules
     watcher = next(
-        (name for name in modules if name in WAYLAND_WATCHERS and name in available_names),
+        (name for name in explicit if name in available_names),
         _select_wayland_watcher(available_names),
     )
     if watcher is None:

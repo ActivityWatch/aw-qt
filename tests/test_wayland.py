@@ -162,6 +162,17 @@ class TestAwatcherAsWaylandWatcher:
                     result = _apply_wayland_substitutions(modules, available)
                 assert result == ["aw-server", first, "aw-watcher-input"]
 
+    def test_unavailable_explicit_watcher_does_not_select_another(self):
+        for selected, installed in (
+            (WAYLAND_WATCHER, "aw-awatcher"),
+            ("aw-awatcher", WAYLAND_WATCHER),
+        ):
+            for originals in ([], ["aw-watcher-window"]):
+                modules = ["aw-server", selected, *originals]
+                with patch("aw_qt.manager._is_wayland", return_value=True):
+                    result = _apply_wayland_substitutions(modules, {installed})
+                assert result == modules
+
     def test_no_wayland_watcher_keeps_original(self):
         with patch("aw_qt.manager._is_wayland", return_value=True):
             result = _apply_wayland_substitutions(
