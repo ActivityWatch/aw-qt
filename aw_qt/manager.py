@@ -33,9 +33,12 @@ def _log_modules(modules: List["Module"]) -> None:
 NOTIFY_MODULE = "aw-notify"
 NOTIFY_SETTINGS_KEY = "aw-notify"
 
-# On Wayland, aw-watcher-window and aw-watcher-afk are replaced by this single
-# watcher, which reports to both buckets via Wayland protocols.
+# On Wayland, aw-watcher-window and aw-watcher-afk are replaced by a single
+# watcher that reports to both buckets via Wayland protocols. Two
+# implementations can provide it: `aw-watcher-window-wayland`, and `aw-awatcher`
+# which the Linux desktop bundle ships. The first one available wins.
 WAYLAND_WATCHER = "aw-watcher-window-wayland"
+WAYLAND_WATCHERS = (WAYLAND_WATCHER, "aw-awatcher")
 # These X11/xcb-based modules do not work on Wayland and are substituted out.
 _WAYLAND_REPLACED_MODULES = ("aw-watcher-window", "aw-watcher-afk")
 
@@ -49,17 +52,26 @@ def _is_wayland() -> bool:
     return False
 
 
+def _select_wayland_watcher(available_names: Set[str]) -> Optional[str]:
+    """Return the first available Wayland watcher implementation, if any."""
+    for name in WAYLAND_WATCHERS:
+        if name in available_names:
+            return name
+    return None
+
+
 def _apply_wayland_substitutions(
     modules: List[str], available_names: Set[str]
 ) -> List[str]:
-    """On Wayland, replace X11-only watchers with aw-watcher-window-wayland.
+    """On Wayland, replace X11-only watchers with an available Wayland watcher.
 
-    aw-watcher-window-wayland reports to both aw-watcher-window and
-    aw-watcher-afk buckets, so the two X11 modules are dropped and the
-    Wayland watcher is inserted in the position of the first replaced module.
-    When the Wayland watcher is not installed, the original list is returned
-    unchanged (the X11 modules will fail to capture anything on Wayland, but
-    the rest of ActivityWatch still works).
+    aw-watcher-window-wayland (and aw-awatcher, which the Linux desktop bundle
+    ships) report to both aw-watcher-window and aw-watcher-afk buckets, so the
+    two X11 modules are dropped and the Wayland watcher is inserted in the
+    position of the first replaced module. When no Wayland watcher is
+    installed, the original list is returned unchanged (the X11 modules will
+    fail to capture anything on Wayland, but the rest of ActivityWatch still
+    works).
 
     Only modules the user actually selected are replaced. An empty or
     server-only list is returned unchanged: explicitly disabling tracking
@@ -67,12 +79,12 @@ def _apply_wayland_substitutions(
     """
     if not _is_wayland():
         return modules
-    if WAYLAND_WATCHER not in available_names:
+    watcher = _select_wayland_watcher(available_names)
+    if watcher is None:
         logger.warning(
-            "Running on Wayland but %s is not installed; "
+            "Running on Wayland but no Wayland watcher is installed; "
             "window and AFK tracking will not work. "
-            "Install aw-watcher-window-wayland for Wayland support.",
-            WAYLAND_WATCHER,
+            "Install aw-watcher-window-wayland or aw-awatcher for Wayland support.",
         )
         return modules
 
@@ -81,7 +93,7 @@ def _apply_wayland_substitutions(
     for name in modules:
         if name in _WAYLAND_REPLACED_MODULES:
             if not inserted:
-                result.append(WAYLAND_WATCHER)
+                result.append(watcher)
                 inserted = True
             # Drop the X11-only module
         else:
@@ -90,7 +102,7 @@ def _apply_wayland_substitutions(
         logger.info(
             "Wayland session detected: substituted %s with %s",
             list(_WAYLAND_REPLACED_MODULES),
-            WAYLAND_WATCHER,
+            watcher,
         )
     return result
 
