@@ -33,6 +33,67 @@ def _log_modules(modules: List["Module"]) -> None:
 NOTIFY_MODULE = "aw-notify"
 NOTIFY_SETTINGS_KEY = "aw-notify"
 
+# On Wayland, aw-watcher-window and aw-watcher-afk are replaced by this single
+# watcher, which reports to both buckets via Wayland protocols.
+WAYLAND_WATCHER = "aw-watcher-window-wayland"
+# These X11/xcb-based modules do not work on Wayland and are substituted out.
+_WAYLAND_REPLACED_MODULES = ("aw-watcher-window", "aw-watcher-afk")
+
+
+def _is_wayland() -> bool:
+    """Return True when the current session is running under Wayland."""
+    if os.environ.get("WAYLAND_DISPLAY"):
+        return True
+    if os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland":
+        return True
+    return False
+
+
+def _apply_wayland_substitutions(
+    modules: List[str], available_names: Set[str]
+) -> List[str]:
+    """On Wayland, replace X11-only watchers with aw-watcher-window-wayland.
+
+    aw-watcher-window-wayland reports to both aw-watcher-window and
+    aw-watcher-afk buckets, so the two X11 modules are dropped and the
+    Wayland watcher is inserted in the position of the first replaced module.
+    When the Wayland watcher is not installed, the original list is returned
+    unchanged (the X11 modules will fail to capture anything on Wayland, but
+    the rest of ActivityWatch still works).
+
+    Only modules the user actually selected are replaced. An empty or
+    server-only list is returned unchanged: explicitly disabling tracking
+    (``--autostart-modules none`` or an empty config) must not start a watcher.
+    """
+    if not _is_wayland():
+        return modules
+    if WAYLAND_WATCHER not in available_names:
+        logger.warning(
+            "Running on Wayland but %s is not installed; "
+            "window and AFK tracking will not work. "
+            "Install aw-watcher-window-wayland for Wayland support.",
+            WAYLAND_WATCHER,
+        )
+        return modules
+
+    result: List[str] = []
+    inserted = False
+    for name in modules:
+        if name in _WAYLAND_REPLACED_MODULES:
+            if not inserted:
+                result.append(WAYLAND_WATCHER)
+                inserted = True
+            # Drop the X11-only module
+        else:
+            result.append(name)
+    if inserted:
+        logger.info(
+            "Wayland session detected: substituted %s with %s",
+            list(_WAYLAND_REPLACED_MODULES),
+            WAYLAND_WATCHER,
+        )
+    return result
+
 
 def _notify_settings_url(port: int) -> str:
     return f"http://localhost:{port}/api/0/settings/{NOTIFY_SETTINGS_KEY}"
@@ -520,6 +581,11 @@ class Manager:
 
     def autostart(self, autostart_modules: List[str]) -> None:
         # NOTE: Currently impossible to autostart a system module if a bundled module with the same name exists
+
+        # On Wayland, transparently swap aw-watcher-window / aw-watcher-afk for
+        # aw-watcher-window-wayland before validating the final list.
+        available_names = {m.name for m in self.modules}
+        autostart_modules = _apply_wayland_substitutions(autostart_modules, available_names)
 
         # We only want to autostart modules that are both in found modules and are asked to autostart.
         for name in autostart_modules:
