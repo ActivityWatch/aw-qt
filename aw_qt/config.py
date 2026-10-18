@@ -9,6 +9,7 @@ from aw_core import dirs
 from aw_core.config import load_config_toml
 
 from .profile import DEFAULT_PROFILE, ENV_VAR, TESTING_PROFILE, is_testing
+from .wayland import WAYLAND_WATCHERS, _WAYLAND_REPLACED_MODULES, _is_wayland
 
 logger = logging.getLogger(__name__)
 
@@ -381,10 +382,8 @@ def persist_module_autostart(
         # A stopped Wayland replacement must also disable the selections that
         # would recreate it on restart. Apply all removals before one atomic
         # write, preserving the profile, comments and unrelated modules.
-        from .manager import WAYLAND_WATCHERS, _WAYLAND_REPLACED_MODULES, _is_wayland
-
         if not enabled and name in WAYLAND_WATCHERS and _is_wayland():
-            for original in _WAYLAND_REPLACED_MODULES:
+            for original in (*_WAYLAND_REPLACED_MODULES, *WAYLAND_WATCHERS):
                 changed = set_module_autostart(
                     updated if updated is not None else source,
                     section,

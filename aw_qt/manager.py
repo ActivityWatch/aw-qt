@@ -14,6 +14,13 @@ from typing import Optional, List, Hashable, Set, Iterable
 
 import aw_core
 
+from .wayland import WAYLAND_WATCHER  # noqa: F401 - retained for existing imports
+from .wayland import (
+    WAYLAND_WATCHERS,
+    _WAYLAND_REPLACED_MODULES,
+    _is_wayland,
+)
+
 logger = logging.getLogger(__name__)
 
 # The path of aw_qt
@@ -32,24 +39,6 @@ def _log_modules(modules: List["Module"]) -> None:
 # `aw-notify` has `enabled: true` (ActivityWatch/activitywatch#1435).
 NOTIFY_MODULE = "aw-notify"
 NOTIFY_SETTINGS_KEY = "aw-notify"
-
-# On Wayland, aw-watcher-window and aw-watcher-afk are replaced by a single
-# watcher that reports to both buckets via Wayland protocols. Two
-# implementations can provide it: `aw-watcher-window-wayland`, and `aw-awatcher`
-# which the Linux desktop bundle ships. The first one available wins.
-WAYLAND_WATCHER = "aw-watcher-window-wayland"
-WAYLAND_WATCHERS = (WAYLAND_WATCHER, "aw-awatcher")
-# These X11/xcb-based modules do not work on Wayland and are substituted out.
-_WAYLAND_REPLACED_MODULES = ("aw-watcher-window", "aw-watcher-afk")
-
-
-def _is_wayland() -> bool:
-    """Return True when the current session is running under Wayland."""
-    if os.environ.get("WAYLAND_DISPLAY"):
-        return True
-    if os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland":
-        return True
-    return False
 
 
 def _select_wayland_watcher(available_names: Set[str]) -> Optional[str]:
@@ -79,8 +68,8 @@ def _apply_wayland_substitutions(
     """
     if not _is_wayland():
         return modules
-    # An explicit selection takes precedence over the automatic preference.
-    # Otherwise a selected aw-awatcher could run alongside the substitute.
+    # The first installed explicit selection takes precedence over the automatic
+    # preference. Only that implementation may run, even if both are selected.
     watcher = next(
         (name for name in modules if name in WAYLAND_WATCHERS and name in available_names),
         _select_wayland_watcher(available_names),
@@ -96,6 +85,8 @@ def _apply_wayland_substitutions(
     result: List[str] = []
     inserted = watcher in modules
     for name in modules:
+        if name in WAYLAND_WATCHERS and name != watcher:
+            continue
         if name in _WAYLAND_REPLACED_MODULES:
             if not inserted:
                 result.append(watcher)

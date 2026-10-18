@@ -150,6 +150,18 @@ class TestAwatcherAsWaylandWatcher:
                 result = _apply_wayland_substitutions(modules, available)
             assert result == ["aw-server", "aw-awatcher"]
 
+    def test_both_explicit_wayland_watchers_keep_only_first_selection(self):
+        available = {*self._DEFAULT_MODULES, WAYLAND_WATCHER, "aw-awatcher"}
+        for first, second in (
+            ("aw-awatcher", WAYLAND_WATCHER),
+            (WAYLAND_WATCHER, "aw-awatcher"),
+        ):
+            for originals in ([], ["aw-watcher-window", "aw-watcher-afk"]):
+                modules = ["aw-server", first, *originals, second, "aw-watcher-input"]
+                with patch("aw_qt.manager._is_wayland", return_value=True):
+                    result = _apply_wayland_substitutions(modules, available)
+                assert result == ["aw-server", first, "aw-watcher-input"]
+
     def test_no_wayland_watcher_keeps_original(self):
         with patch("aw_qt.manager._is_wayland", return_value=True):
             result = _apply_wayland_substitutions(
