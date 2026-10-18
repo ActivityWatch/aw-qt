@@ -323,6 +323,50 @@ class TestTrayClick:
         persist.assert_called_once_with("aw-watcher-afk", False, DEFAULT_PROFILE)
         assert "aw-watcher-afk" not in fake._restart_timestamps
 
+    @pytest.mark.parametrize("watcher", ["aw-watcher-window-wayland", "aw-awatcher"])
+    def test_wayland_stop_stays_disabled_after_reload(self, watcher):
+        from aw_qt.manager import _apply_wayland_substitutions
+
+        path = _config_path(DEFAULT_PROFILE)
+        path.write_text(USER_CONFIG)
+        module = Module(watcher, Path(f"/bundled/{watcher}"), "bundled")
+        module.toggle = MagicMock(return_value=False)
+        _, click = self._tray(True, [module])
+        with patch("aw_qt.manager._is_wayland", return_value=True):
+            click(module)
+            saved = AwQtSettings().autostart_modules
+            assert _apply_wayland_substitutions(saved, {"aw-server", watcher}) == [
+                "aw-server"
+            ]
+        assert "# My ActivityWatch setup" in path.read_text()
+        assert tomlkit.parse(path.read_text())["aw-qt-testing"][
+            "autostart_modules"
+        ] == ["aw-server"]
+
+    @pytest.mark.parametrize("profile", ["testing", "research"])
+    def test_wayland_stop_uses_profile_and_first_run_defaults(self, profile):
+        from aw_qt.manager import _apply_wayland_substitutions
+
+        AwQtSettings(profile)  # commented-out first-run defaults
+        module = Module("aw-awatcher", Path("/bundled/aw-awatcher"), "bundled")
+        module.toggle = MagicMock(return_value=False)
+        fake, click = self._tray(True, [module])
+        fake.profile = profile
+        with patch("aw_qt.manager._is_wayland", return_value=True):
+            click(module)
+            saved = AwQtSettings(profile).autostart_modules
+            assert _apply_wayland_substitutions(saved, {"aw-awatcher"}) == ["aw-server"]
+        assert AwQtSettings().autostart_modules == [
+            "aw-server", "aw-watcher-afk", "aw-watcher-window"
+        ]
+
+    def test_wayland_stop_on_x11_keeps_x11_watchers(self):
+        path = _config_path(DEFAULT_PROFILE)
+        path.write_text(USER_CONFIG)
+        with patch("aw_qt.manager._is_wayland", return_value=False):
+            assert not persist_module_autostart("aw-awatcher", False)
+        assert path.read_text() == USER_CONFIG
+
     def test_cli_override_only_changes_running_state(self):
         module = self._module(return_value=True)
         _, click = self._tray(False, [module])

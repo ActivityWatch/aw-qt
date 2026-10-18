@@ -140,6 +140,16 @@ class TestAwatcherAsWaylandWatcher:
             result = _apply_wayland_substitutions(self._DEFAULT_MODULES, available)
         assert result.index("aw-awatcher") == 1
 
+    def test_explicit_awatcher_is_reused_before_or_after_x11_selection(self):
+        available = {*self._DEFAULT_MODULES, WAYLAND_WATCHER, "aw-awatcher"}
+        for modules in (
+            ["aw-server", "aw-awatcher", "aw-watcher-window"],
+            ["aw-server", "aw-watcher-afk", "aw-awatcher"],
+        ):
+            with patch("aw_qt.manager._is_wayland", return_value=True):
+                result = _apply_wayland_substitutions(modules, available)
+            assert result == ["aw-server", "aw-awatcher"]
+
     def test_no_wayland_watcher_keeps_original(self):
         with patch("aw_qt.manager._is_wayland", return_value=True):
             result = _apply_wayland_substitutions(

@@ -79,7 +79,12 @@ def _apply_wayland_substitutions(
     """
     if not _is_wayland():
         return modules
-    watcher = _select_wayland_watcher(available_names)
+    # An explicit selection takes precedence over the automatic preference.
+    # Otherwise a selected aw-awatcher could run alongside the substitute.
+    watcher = next(
+        (name for name in modules if name in WAYLAND_WATCHERS and name in available_names),
+        _select_wayland_watcher(available_names),
+    )
     if watcher is None:
         logger.warning(
             "Running on Wayland but no Wayland watcher is installed; "
@@ -89,7 +94,7 @@ def _apply_wayland_substitutions(
         return modules
 
     result: List[str] = []
-    inserted = False
+    inserted = watcher in modules
     for name in modules:
         if name in _WAYLAND_REPLACED_MODULES:
             if not inserted:

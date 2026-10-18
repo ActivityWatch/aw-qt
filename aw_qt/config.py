@@ -378,6 +378,21 @@ def persist_module_autostart(
 
     try:
         updated = set_module_autostart(source, section, name, enabled)
+        # A stopped Wayland replacement must also disable the selections that
+        # would recreate it on restart. Apply all removals before one atomic
+        # write, preserving the profile, comments and unrelated modules.
+        from .manager import WAYLAND_WATCHERS, _WAYLAND_REPLACED_MODULES, _is_wayland
+
+        if not enabled and name in WAYLAND_WATCHERS and _is_wayland():
+            for original in _WAYLAND_REPLACED_MODULES:
+                changed = set_module_autostart(
+                    updated if updated is not None else source,
+                    section,
+                    original,
+                    False,
+                )
+                if changed is not None:
+                    updated = changed
     except ValueError as e:
         logger.warning(f"Not saving autostart change for {name} to {path}: {e}")
         return False
