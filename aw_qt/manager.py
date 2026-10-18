@@ -65,6 +65,8 @@ def _apply_wayland_substitutions(
     Only modules the user actually selected are replaced. An empty or
     server-only list is returned unchanged: explicitly disabling tracking
     (``--autostart-modules none`` or an empty config) must not start a watcher.
+    An unavailable explicit Wayland selection is kept unchanged unless X11
+    watchers were also selected: those still use an installed replacement.
     """
     if not _is_wayland():
         return modules
@@ -73,7 +75,8 @@ def _apply_wayland_substitutions(
     explicit = [name for name in modules if name in WAYLAND_WATCHERS]
     if explicit and not any(name in available_names for name in explicit):
         logger.warning("Selected Wayland watcher is not installed: %s", explicit)
-        return modules
+        if not any(name in _WAYLAND_REPLACED_MODULES for name in modules):
+            return modules
     watcher = next(
         (name for name in explicit if name in available_names),
         _select_wayland_watcher(available_names),

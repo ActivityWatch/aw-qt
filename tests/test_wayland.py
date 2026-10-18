@@ -167,11 +167,34 @@ class TestAwatcherAsWaylandWatcher:
             (WAYLAND_WATCHER, "aw-awatcher"),
             ("aw-awatcher", WAYLAND_WATCHER),
         ):
-            for originals in ([], ["aw-watcher-window"]):
-                modules = ["aw-server", selected, *originals]
-                with patch("aw_qt.manager._is_wayland", return_value=True):
-                    result = _apply_wayland_substitutions(modules, {installed})
-                assert result == modules
+            modules = ["aw-server", selected]
+            with patch("aw_qt.manager._is_wayland", return_value=True):
+                result = _apply_wayland_substitutions(modules, {installed})
+            assert result == modules
+
+    def test_missing_explicit_watcher_does_not_block_x11_substitution(self):
+        for selected, installed in (
+            (WAYLAND_WATCHER, "aw-awatcher"),
+            ("aw-awatcher", WAYLAND_WATCHER),
+        ):
+            for originals in (
+                ["aw-watcher-window"],
+                ["aw-watcher-afk"],
+                ["aw-watcher-window", "aw-watcher-afk"],
+            ):
+                for selections in ([selected, *originals], [*originals, selected]):
+                    modules = ["aw-server", *selections, "aw-watcher-input"]
+                    available = {*modules, installed} - {selected}
+                    with patch("aw_qt.manager._is_wayland", return_value=True):
+                        result = _apply_wayland_substitutions(modules, available)
+                    assert result == ["aw-server", installed, "aw-watcher-input"]
+                    assert modules == ["aw-server", *selections, "aw-watcher-input"]
+
+    def test_missing_explicit_and_no_alternative_keeps_original(self):
+        modules = ["aw-server", "aw-awatcher", "aw-watcher-window"]
+        with patch("aw_qt.manager._is_wayland", return_value=True):
+            result = _apply_wayland_substitutions(modules, {"aw-server"})
+        assert result == modules
 
     def test_no_wayland_watcher_keeps_original(self):
         with patch("aw_qt.manager._is_wayland", return_value=True):
