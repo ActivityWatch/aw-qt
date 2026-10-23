@@ -152,8 +152,8 @@ def _read_server_rust_port(profile: str) -> Optional[int]:
     return None
 
 
-def dashboard_api_key(profile: str, port: int) -> Optional[str]:
-    """Read a key only from this profile's matching local Rust endpoint.
+def dashboard_auth(profile: str, port: int) -> Optional[Tuple[str, str]]:
+    """Read the numeric address and key for this profile's local Rust endpoint.
 
     Do not include parser exceptions in logs: malformed input can contain
     the credential itself. Missing or invalid auth must leave the URL plain.
@@ -183,10 +183,12 @@ def dashboard_api_key(profile: str, port: int) -> Optional[str]:
             if configured_port != port:
                 return None
             address = config.get("address", "127.0.0.1")
-            if address not in ("127.0.0.1", "localhost", "::1"):
+            # Keep the exact address family: localhost could resolve to a different
+            # listener on the same port. Rust requires a numeric bind address too.
+            if address not in ("127.0.0.1", "::1"):
                 return None
             key = config.get("auth", {}).get("api_key")
-            return str(key) if isinstance(key, str) and key else None
+            return (str(address), str(key)) if isinstance(key, str) and key else None
         except Exception:
             logger.warning("Could not read dashboard authentication configuration")
             return None
