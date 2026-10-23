@@ -10,7 +10,7 @@ import urllib.request
 from pathlib import Path
 from glob import glob
 from time import monotonic, sleep
-from typing import Optional, List, Hashable, Set, Iterable, Dict
+from typing import Optional, List, Hashable, Set, Iterable, Dict, Tuple
 
 import aw_core
 
@@ -354,6 +354,7 @@ class Module:
         # self.location = "system" if _is_system_module(name) else "bundled"
         self._process: Optional[subprocess.Popen[str]] = None
         self._last_process: Optional[subprocess.Popen[str]] = None
+        self.dashboard_endpoint: Optional[Tuple[str, str, int]] = None
         self._external_server: bool = False  # True if we detected an already-running server
         self._external_server_testing: bool = False
         self._external_server_probe_cache: Optional[bool] = None
@@ -409,6 +410,7 @@ class Module:
 
     def start(self, testing: bool) -> None:
         logger.info(f"Starting module {self.name}")
+        self.dashboard_endpoint = None
 
         # For server modules, check if a server is already running before attempting
         # to start one. This avoids port conflicts and the confusing "Restart" requirement
@@ -429,6 +431,20 @@ class Module:
         exec_cmd = [str(self.path)]
         if testing:
             exec_cmd.append("--testing")
+        endpoint = None
+        if self.name == "aw-server-rust":
+            from .config import dashboard_auth
+            from .profile import profile_from_env
+
+            profile = profile_from_env(testing)
+            port = self._get_server_port(testing)
+            auth = dashboard_auth(profile, port) if port is not None else None
+            if auth is not None and port is not None:
+                address, _ = auth
+                # Pin the child to the endpoint we authorize, even if the config
+                # changes between this read and the child's startup read.
+                exec_cmd.extend(["--host", address, "--port", str(port)])
+                endpoint = (profile, address, port)
         # logger.debug("Running: {}".format(exec_cmd))
 
         # Don't display a console window on Windows
@@ -448,6 +464,7 @@ class Module:
         self._process = subprocess.Popen(
             exec_cmd, universal_newlines=True, startupinfo=startupinfo
         )
+        self.dashboard_endpoint = endpoint
         self.started = True
 
     def stop(self) -> None:

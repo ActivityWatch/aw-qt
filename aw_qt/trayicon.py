@@ -273,6 +273,11 @@ class TrayIcon(QSystemTrayIcon):
             and servers[0].is_alive()
         ):
             auth = dashboard_auth(self.profile, self.port)
+            if auth and getattr(servers[0], "dashboard_endpoint", None) != (
+                self.profile, auth[0], self.port
+            ):
+                # Config edits cannot redirect a running child's credential.
+                auth = None
         url = self.root_url
         if auth:
             address, key = auth

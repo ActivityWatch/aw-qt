@@ -7,8 +7,9 @@ from unittest.mock import patch
 
 import pytest
 from aw_core import dirs
-from aw_qt.config import _with_profile_env
+from aw_qt.config import _with_profile_env, dashboard_auth
 from aw_qt.trayicon import TrayIcon
+from aw_qt.manager import Module
 
 
 def write_config(profile, text, filename="config.toml"):
@@ -27,7 +28,14 @@ def open_dashboard(profile="default", port=5601, modules=None):
         manager=SimpleNamespace(
             modules=modules
             if modules is not None
-            else [SimpleNamespace(name="aw-server-rust", started=True, is_alive=lambda: True)]
+            else [SimpleNamespace(
+                name="aw-server-rust", started=True, is_alive=lambda: True,
+                dashboard_endpoint=(
+                    profile,
+                    (dashboard_auth(profile, port) or ("127.0.0.1", ""))[0],
+                    port,
+                ),
+            )]
         ),
     )
     with patch("aw_qt.trayicon.open_webui") as opened:
@@ -205,6 +213,76 @@ def test_dashboard_menu_uses_same_handoff_path():
         assert len(callbacks) == 1
         callbacks[0]()
         opened.assert_called_once_with()
+
+
+@pytest.mark.parametrize("initial,changed", [("127.0.0.1", "::1"), ("::1", "127.0.0.1")])
+def test_running_child_does_not_authorize_changed_address(initial, changed):
+    path = write_config(
+        "default", f'port = 5601\naddress = "{initial}"\n[auth]\napi_key = "secret"'
+    )
+    module = Module("aw-server-rust", Path("/synthetic/aw-server-rust"), "bundled")
+    with patch.object(module, "_probe_external_server", return_value=False), patch(
+        "aw_qt.manager.subprocess.Popen"
+    ) as spawned:
+        spawned.return_value.returncode = None
+        module.start(False)
+        assert spawned.call_args.args[0] == [
+            str(module.path), "--host", initial, "--port", "5601"
+        ]
+        assert "secret" not in spawned.call_args.args[0]
+        assert parse_qs(urlsplit(open_dashboard(modules=[module])).query) == {
+            "token": ["secret"]
+        }
+        path.write_text(
+            f'port = 5601\naddress = "{changed}"\n[auth]\napi_key = "secret"'
+        )
+        assert open_dashboard(modules=[module]) == "http://localhost:5601"
+        module.clear_exited_process()  # A live child must retain its endpoint.
+        assert open_dashboard(modules=[module]) == "http://localhost:5601"
+        spawned.return_value.wait.side_effect = lambda: setattr(
+            spawned.return_value, "returncode", 0
+        )
+        module.stop()
+        spawned.return_value.returncode = None
+        module.start(False)
+        assert spawned.call_args.args[0] == [
+            str(module.path), "--host", changed, "--port", "5601"
+        ]
+        assert urlsplit(open_dashboard(modules=[module])).hostname == changed
+        assert parse_qs(urlsplit(open_dashboard(modules=[module])).query) == {
+            "token": ["secret"]
+        }
+        path.write_text(
+            f'port = 5601\naddress = "{changed}"\n[auth]\napi_key = "rotated"'
+        )
+        assert parse_qs(urlsplit(open_dashboard(modules=[module])).query) == {
+            "token": ["rotated"]
+        }
+
+
+def test_auth_enabled_after_child_start_requires_restart():
+    path = write_config("default", "port = 5601")
+    module = Module("aw-server-rust", Path("/synthetic/aw-server-rust"), "bundled")
+    with patch.object(module, "_probe_external_server", return_value=False), patch(
+        "aw_qt.manager.subprocess.Popen"
+    ) as spawned:
+        spawned.return_value.returncode = None
+        module.start(False)
+        assert spawned.call_args.args[0] == [str(module.path)]
+        path.write_text('port = 5601\n[auth]\napi_key = "secret"')
+        assert open_dashboard(modules=[module]) == "http://localhost:5601"
+
+
+def test_changed_tray_port_does_not_retarget_running_child():
+    path = write_config("default", 'port = 5601\n[auth]\napi_key = "secret"')
+    module = Module("aw-server-rust", Path("/synthetic/aw-server-rust"), "bundled")
+    with patch.object(module, "_probe_external_server", return_value=False), patch(
+        "aw_qt.manager.subprocess.Popen"
+    ) as spawned:
+        spawned.return_value.returncode = None
+        module.start(False)
+        path.write_text('port = 5602\n[auth]\napi_key = "secret"')
+        assert open_dashboard(port=5602, modules=[module]) == "http://localhost:5602"
 
 
 def test_adopted_external_server_does_not_receive_key():
