@@ -40,7 +40,7 @@ def test_handoff_encodes_key_and_preserves_dashboard_destination():
     write_config("default", f'port = 5601\n[auth]\napi_key = "{key}"\n')
     url = urlsplit(open_dashboard())
     assert url.scheme == "http"
-    assert url.netloc == "localhost:5601"
+    assert url.netloc == "127.0.0.1:5601"
     assert parse_qs(url.query) == {"token": [key]}
 
 
@@ -147,6 +147,24 @@ def test_isolated_profile_config_disables_legacy_key_fallback():
         "config-research.toml",
     )
     assert open_dashboard("research") == "http://localhost:5601"
+
+
+@pytest.mark.parametrize("address", ["127.0.0.1", "::1"])
+def test_authenticated_destination_matches_configured_address(address):
+    write_config(
+        "default", f'port = 5601\naddress = "{address}"\n[auth]\napi_key = "secret"'
+    )
+    url = urlsplit(open_dashboard())
+    assert url.hostname == address
+    assert url.port == 5601
+    assert parse_qs(url.query) == {"token": ["secret"]}
+
+
+def test_hostname_config_does_not_authorize_key_handoff():
+    write_config(
+        "default", 'port = 5601\naddress = "localhost"\n[auth]\napi_key = "secret"'
+    )
+    assert open_dashboard() == "http://localhost:5601"
 
 
 def test_non_loopback_config_does_not_authorize_key_handoff():
