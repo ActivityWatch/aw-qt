@@ -17,6 +17,10 @@ by this launcher (not a listener adopted through the public health probe), and
 its configured loopback port must match the tray destination. Authenticated URLs
 use the configured numeric address (`127.0.0.1` or `[::1]`), not `localhost`, to
 avoid sending the key to another address family's listener on the same port.
+For authenticated children the launcher pins this address and port with command
+line overrides and records the profile/endpoint. Changing the address or port,
+or enabling auth after startup, requires restarting the server before handoff;
+key-only edits at the same endpoint are still read at click time.
 Missing or invalid configuration leaves the dashboard URL unchanged. Hostname
 bind addresses are not eligible for key handoff. The API Browser is not
 token-bootstrapped.
