@@ -23,7 +23,7 @@ from PyQt6.QtWidgets import (
 )
 
 from . import autostart
-from .config import dashboard_api_key, persist_module_autostart
+from .config import dashboard_auth, persist_module_autostart
 from .manager import (
     NOTIFY_MODULE,
     Manager,
@@ -264,7 +264,7 @@ class TrayIcon(QSystemTrayIcon):
             module for module in self.manager.modules
             if module.started and module.name in ("aw-server", "aw-server-rust")
         ]
-        key = None
+        auth = None
         if (
             len(servers) == 1
             and servers[0].name == "aw-server-rust"
@@ -272,10 +272,12 @@ class TrayIcon(QSystemTrayIcon):
             and not getattr(servers[0], "_external_server", False)
             and servers[0].is_alive()
         ):
-            key = dashboard_api_key(self.profile, self.port)
+            auth = dashboard_auth(self.profile, self.port)
         url = self.root_url
-        if key:
-            url += "?" + urlencode({"token": key})
+        if auth:
+            address, key = auth
+            host = f"[{address}]" if ":" in address else address
+            url = f"http://{host}:{self.port}?" + urlencode({"token": key})
         open_webui(url)
 
     def on_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:

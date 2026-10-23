@@ -14,8 +14,11 @@ and a tray double-click pass the matching profile's key to the web UI's token
 bootstrap. The key is read when opening the dashboard, not stored in the tray URL.
 The Rust server must be the only started server backend, be a live child owned
 by this launcher (not a listener adopted through the public health probe), and
-its configured loopback port must match the tray destination. Missing or invalid
-configuration leaves the dashboard URL unchanged. The API Browser is not
+its configured loopback port must match the tray destination. Authenticated URLs
+use the configured numeric address (`127.0.0.1` or `[::1]`), not `localhost`, to
+avoid sending the key to another address family's listener on the same port.
+Missing or invalid configuration leaves the dashboard URL unchanged. Hostname
+bind addresses are not eligible for key handoff. The API Browser is not
 token-bootstrapped.
 This does not enable authentication automatically or make separate ports a
 security boundary between OS users. Treat a dashboard bootstrap URL as a secret:
