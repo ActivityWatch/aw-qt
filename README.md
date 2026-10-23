@@ -9,4 +9,17 @@ A service manager and tray icon managing aw-server and watchers, built with Qt.
 Use `--profile NAME` to run an isolated named instance. Enabling **Start at login**
 from that instance's tray registers the same profile-specific launch command.
 
+When using `aw-server-rust` with opt-in `[auth].api_key`, **Open Dashboard**
+and a tray double-click pass the matching profile's key to the web UI's token
+bootstrap. The key is read when opening the dashboard, not stored in the tray URL.
+The Rust server must be the only started server backend, be a live child owned
+by this launcher (not a listener adopted through the public health probe), and
+its configured loopback port must match the tray destination. Missing or invalid
+configuration leaves the dashboard URL unchanged. The API Browser is not
+token-bootstrapped.
+This does not enable authentication automatically or make separate ports a
+security boundary between OS users. Treat a dashboard bootstrap URL as a secret:
+it is briefly passed to the OS/browser opener and can be visible in process
+arguments before the web UI removes it from the address bar.
+
 For instructions how to build, see `Makefile`.

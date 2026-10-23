@@ -152,6 +152,47 @@ def _read_server_rust_port(profile: str) -> Optional[int]:
     return None
 
 
+def dashboard_api_key(profile: str, port: int) -> Optional[str]:
+    """Read a key only from this profile's matching local Rust endpoint.
+
+    Do not include parser exceptions in logs: malformed input can contain
+    the credential itself. Missing or invalid auth must leave the URL plain.
+    """
+    with _with_profile_env(profile):
+        config_dir = dirs.get_config_dir("aw-server-rust")
+        filename = (
+            f"config-{TESTING_PROFILE}.toml"
+            if _using_legacy_testing_root()
+            else "config.toml"
+        )
+        paths = [os.path.join(config_dir, filename)]
+    if _is_named_profile(profile):
+        paths.append(
+            os.path.join(
+                _shared_root_config_dir("aw-server-rust"), f"config-{profile}.toml"
+            )
+        )
+    for path in paths:
+        if not os.path.isfile(path):
+            continue
+        try:
+            with open(path, encoding="utf-8") as f:
+                config = tomlkit.parse(f.read())
+            default_port = 5666 if is_testing(profile) else 5600
+            configured_port = int(str(config.get("port", default_port)))
+            if configured_port != port:
+                return None
+            address = config.get("address", "127.0.0.1")
+            if address not in ("127.0.0.1", "localhost", "::1"):
+                return None
+            key = config.get("auth", {}).get("api_key")
+            return str(key) if isinstance(key, str) and key else None
+        except Exception:
+            logger.warning("Could not read dashboard authentication configuration")
+            return None
+    return None
+
+
 def _read_aw_server_port(profile: str) -> Optional[int]:
     """Read port from aw-server (Python) config, returns None if not found/set.
 
