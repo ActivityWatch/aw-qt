@@ -1,6 +1,9 @@
 """Dashboard token handoff is scoped to the selected Rust instance."""
 
+import json
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from threading import Thread
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
 from unittest.mock import patch
@@ -10,6 +13,11 @@ from aw_core import dirs
 from aw_qt.config import _with_profile_env, dashboard_auth
 from aw_qt.trayicon import TrayIcon
 from aw_qt.manager import Module
+
+
+def authorize_listener(module):
+    module._probe_dashboard_listener = lambda *args, **kwargs: True
+    return module
 
 
 def write_config(profile, text, filename="config.toml"):
@@ -226,6 +234,7 @@ def test_running_child_does_not_authorize_changed_address(initial, changed):
     ) as spawned:
         spawned.return_value.returncode = None
         module.start(False)
+        authorize_listener(module)
         assert spawned.call_args.args[0] == [
             str(module.path), "--host", initial, "--port", "5601"
         ]
@@ -245,6 +254,7 @@ def test_running_child_does_not_authorize_changed_address(initial, changed):
         module.stop()
         spawned.return_value.returncode = None
         module.start(False)
+        authorize_listener(module)
         assert spawned.call_args.args[0] == [
             str(module.path), "--host", changed, "--port", "5601"
         ]
@@ -268,6 +278,7 @@ def test_auth_enabled_after_child_start_requires_restart():
     ) as spawned:
         spawned.return_value.returncode = None
         module.start(False)
+        authorize_listener(module)
         assert spawned.call_args.args[0] == [str(module.path)]
         path.write_text('port = 5601\n[auth]\napi_key = "secret"')
         assert open_dashboard(modules=[module]) == "http://localhost:5601"
@@ -281,6 +292,7 @@ def test_changed_tray_port_does_not_retarget_running_child():
     ) as spawned:
         spawned.return_value.returncode = None
         module.start(False)
+        authorize_listener(module)
         path.write_text('port = 5602\n[auth]\napi_key = "secret"')
         assert open_dashboard(port=5602, modules=[module]) == "http://localhost:5602"
 
@@ -295,3 +307,106 @@ def test_crashed_owned_server_does_not_receive_key():
     write_config("default", 'port = 5601\n[auth]\napi_key = "rust-secret"')
     module = SimpleNamespace(name="aw-server-rust", started=True, is_alive=lambda: False)
     assert open_dashboard(modules=[module]) == "http://localhost:5601"
+
+
+def _serve_info(status=200, body=None):
+    captured = {"authorization": None, "path": None}
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            captured["path"] = self.path
+            captured["authorization"] = self.headers.get("Authorization")
+            payload = body
+            if payload is None and status == 200:
+                payload = json.dumps({"hostname": "bob-test", "version": "0"}).encode()
+            elif isinstance(payload, str):
+                payload = payload.encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            if payload:
+                self.wfile.write(payload)
+
+        def log_message(self, format, *args):
+            return
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    return server, captured
+
+
+def _started_owned_child():
+    module = Module("aw-server-rust", Path("/synthetic/aw-server-rust"), "bundled")
+    with patch.object(module, "_probe_external_server", return_value=False), patch(
+        "aw_qt.manager.subprocess.Popen"
+    ) as spawned:
+        spawned.return_value.returncode = None
+        module.start(False)
+    return module
+
+
+def test_404_occupant_does_not_receive_key():
+    server, captured = _serve_info(status=404)
+    try:
+        port = server.server_address[1]
+        write_config("default", f'port = {port}\n[auth]\napi_key = "secret"')
+        module = _started_owned_child()
+        assert module.dashboard_endpoint == ("default", "127.0.0.1", port)
+        assert module.is_alive()
+        assert open_dashboard(port=port, modules=[module]) == f"http://localhost:{port}"
+        assert captured["authorization"] is None
+        assert captured["path"] == "/api/0/info"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_aw_info_listener_authorizes_key():
+    server, captured = _serve_info(status=200)
+    try:
+        port = server.server_address[1]
+        write_config("default", f'port = {port}\n[auth]\napi_key = "secret"')
+        module = _started_owned_child()
+        url = urlsplit(open_dashboard(port=port, modules=[module]))
+        assert url.hostname == "127.0.0.1"
+        assert url.port == port
+        assert parse_qs(url.query) == {"token": ["secret"]}
+        assert captured["authorization"] is None
+        assert captured["path"] == "/api/0/info"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_non_aw_200_html_does_not_authorize_key():
+    server, _ = _serve_info(status=200, body="<html>not aw</html>")
+    try:
+        port = server.server_address[1]
+        write_config("default", f'port = {port}\n[auth]\napi_key = "secret"')
+        module = _started_owned_child()
+        assert open_dashboard(port=port, modules=[module]) == f"http://localhost:{port}"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_unbound_child_does_not_receive_key():
+    import socket
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(("127.0.0.1", 0))
+    port = sock.getsockname()[1]
+    sock.close()
+    write_config("default", f'port = {port}\n[auth]\napi_key = "secret"')
+    module = _started_owned_child()
+    assert module.is_alive()
+    assert open_dashboard(port=port, modules=[module]) == f"http://localhost:{port}"
+
+
+def test_ipv6_probe_uses_bracketed_numeric_address():
+    module = Module("aw-server-rust", Path("/synthetic/aw-server-rust"), "bundled")
+    with patch("aw_qt.manager.urllib.request.urlopen") as opened:
+        opened.side_effect = OSError("refused")
+        assert module._probe_dashboard_listener("::1", 5601) is False
+    assert opened.call_args.args[0] == "http://[::1]:5601/api/0/info"
