@@ -404,6 +404,37 @@ def test_unbound_child_does_not_receive_key():
     assert open_dashboard(port=port, modules=[module]) == f"http://localhost:{port}"
 
 
+def test_truncated_info_response_does_not_abort_dashboard():
+    captured = {"path": None}
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            captured["path"] = self.path
+            payload = b"{}"
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", "100")
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, format, *args):
+            return
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        port = server.server_address[1]
+        write_config("default", f'port = {port}\n[auth]\napi_key = "secret"')
+        module = _started_owned_child()
+        assert module._probe_dashboard_listener("127.0.0.1", port) is False
+        assert open_dashboard(port=port, modules=[module]) == f"http://localhost:{port}"
+        assert captured["path"] == "/api/0/info"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def test_ipv6_probe_uses_bracketed_numeric_address():
     module = Module("aw-server-rust", Path("/synthetic/aw-server-rust"), "bundled")
     with patch("aw_qt.manager.urllib.request.urlopen") as opened:
