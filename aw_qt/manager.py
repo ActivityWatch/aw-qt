@@ -337,6 +337,30 @@ def _discover_modules_system() -> List["Module"]:
     return modules
 
 
+# /api/0/info is a small JSON object. Cap body size and wall-clock duration so a
+# slow local listener cannot freeze the tray Qt callback.
+DASHBOARD_INFO_MAX_BYTES = 4096
+
+
+def _read_dashboard_info_body(resp, sock, deadline: float) -> bytes:
+    buf = bytearray()
+    while len(buf) <= DASHBOARD_INFO_MAX_BYTES:
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            raise TimeoutError("dashboard info probe timed out")
+        if sock is not None:
+            sock.settimeout(remaining)
+        # One byte at a time: HTTPResponse.read(n) waits for n bytes when
+        # Content-Length is known, which would ignore the deadline on a drip.
+        chunk = resp.read(1)
+        if not chunk:
+            break
+        buf.extend(chunk)
+    if len(buf) > DASHBOARD_INFO_MAX_BYTES:
+        raise ValueError("dashboard info body too large")
+    return bytes(buf)
+
+
 class Module:
     def __init__(self, name: str, path: Path, type: str) -> None:
         self.name = name
@@ -410,16 +434,34 @@ class Module:
         """Return True only if the pinned numeric endpoint answers as ActivityWatch.
 
         GET /api/0/info is public even with auth enabled, so this must not send
-        the API key. HTTP errors (including 404 occupants) fail closed.
+        the API key. HTTP errors (including 404 occupants) fail closed. Body size
+        and wall-clock duration are bounded so a slow listener cannot freeze Qt.
         """
         host = f"[{address}]" if ":" in address else address
+        deadline = monotonic() + timeout
+        conn = None
         try:
-            with urllib.request.urlopen(
-                f"http://{host}:{port}/api/0/info", timeout=timeout
-            ) as resp:
-                if getattr(resp, "status", 200) != 200:
+            conn = http.client.HTTPConnection(host, port, timeout=timeout)
+            conn.request("GET", "/api/0/info")
+            remaining = deadline - monotonic()
+            if remaining <= 0:
+                return False
+            if conn.sock is not None:
+                conn.sock.settimeout(remaining)
+            resp = conn.getresponse()
+            if resp.status != 200:
+                return False
+            length_header = resp.getheader("Content-Length")
+            if length_header is not None:
+                try:
+                    length = int(length_header)
+                except ValueError:
                     return False
-                body = json.loads(resp.read().decode("utf-8"))
+                if length < 0 or length > DASHBOARD_INFO_MAX_BYTES:
+                    return False
+            body = json.loads(
+                _read_dashboard_info_body(resp, conn.sock, deadline).decode("utf-8")
+            )
             return isinstance(body, dict) and "hostname" in body
         except (
             urllib.error.URLError,
@@ -429,6 +471,9 @@ class Module:
             http.client.HTTPException,
         ):
             return False
+        finally:
+            if conn is not None:
+                conn.close()
 
     def dashboard_listener_owned(self) -> bool:
         """Whether a live owned child currently answers on the pinned endpoint.
