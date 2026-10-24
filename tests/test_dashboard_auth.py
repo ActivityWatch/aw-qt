@@ -533,6 +533,7 @@ def test_slow_http_framing_fails_closed_within_deadline(prefix):
                     self.wfile.flush()
                     sleep(0.05)
             except OSError:
+                # The deadline closes the client socket before this drip finishes.
                 pass
 
         def log_message(self, format, *args):
