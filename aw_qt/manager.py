@@ -6,6 +6,7 @@ import threading
 import subprocess
 import platform
 import http.client
+import io
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -342,23 +343,33 @@ def _discover_modules_system() -> List["Module"]:
 DASHBOARD_INFO_MAX_BYTES = 4096
 
 
-def _read_dashboard_info_body(resp, sock, deadline: float) -> bytes:
-    buf = bytearray()
-    while len(buf) <= DASHBOARD_INFO_MAX_BYTES:
-        remaining = deadline - monotonic()
+class _DashboardInfoReader(io.RawIOBase):
+    """Apply the total deadline to every socket read, including HTTP framing."""
+
+    def __init__(self, sock, deadline: float) -> None:
+        super().__init__()
+        self.sock = sock
+        self.deadline = deadline
+
+    def readable(self) -> bool:
+        return True
+
+    def readinto(self, buffer) -> int:
+        remaining = self.deadline - monotonic()
         if remaining <= 0:
             raise TimeoutError("dashboard info probe timed out")
-        if sock is not None:
-            sock.settimeout(remaining)
-        # One byte at a time: HTTPResponse.read(n) waits for n bytes when
-        # Content-Length is known, which would ignore the deadline on a drip.
-        chunk = resp.read(1)
-        if not chunk:
-            break
-        buf.extend(chunk)
-    if len(buf) > DASHBOARD_INFO_MAX_BYTES:
-        raise ValueError("dashboard info body too large")
-    return bytes(buf)
+        self.sock.settimeout(remaining)
+        return self.sock.recv_into(buffer)
+
+
+class _DashboardInfoSocket:
+    def __init__(self, sock, deadline: float) -> None:
+        self.sock = sock
+        self.deadline = deadline
+
+    def makefile(self, mode):
+        # HTTPResponse uses this stream for status, headers, chunks and body.
+        return io.BufferedReader(_DashboardInfoReader(self.sock, self.deadline))
 
 
 class Module:
@@ -442,26 +453,31 @@ class Module:
         conn = None
         try:
             conn = http.client.HTTPConnection(host, port, timeout=timeout)
-            conn.request("GET", "/api/0/info")
+            conn.connect()
             remaining = deadline - monotonic()
             if remaining <= 0:
                 return False
-            if conn.sock is not None:
-                conn.sock.settimeout(remaining)
-            resp = conn.getresponse()
-            if resp.status != 200:
-                return False
-            length_header = resp.getheader("Content-Length")
-            if length_header is not None:
-                try:
-                    length = int(length_header)
-                except ValueError:
+            conn.sock.settimeout(remaining)
+            conn.request("GET", "/api/0/info")
+            with http.client.HTTPResponse(
+                # HTTPResponse only needs makefile(); keep the real socket owned by conn.
+                _DashboardInfoSocket(conn.sock, deadline)  # type: ignore[arg-type]
+            ) as resp:
+                resp.begin()
+                if resp.status != 200:
                     return False
-                if length < 0 or length > DASHBOARD_INFO_MAX_BYTES:
+                length_header = resp.getheader("Content-Length")
+                if length_header is not None:
+                    try:
+                        length = int(length_header)
+                    except ValueError:
+                        return False
+                    if length < 0 or length > DASHBOARD_INFO_MAX_BYTES:
+                        return False
+                payload = resp.read(DASHBOARD_INFO_MAX_BYTES + 1)
+                if len(payload) > DASHBOARD_INFO_MAX_BYTES or resp.length not in (None, 0):
                     return False
-            body = json.loads(
-                _read_dashboard_info_body(resp, conn.sock, deadline).decode("utf-8")
-            )
+                body = json.loads(payload.decode("utf-8"))
             return isinstance(body, dict) and "hostname" in body
         except (
             urllib.error.URLError,
