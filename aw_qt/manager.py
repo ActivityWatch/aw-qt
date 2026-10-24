@@ -5,12 +5,14 @@ import logging
 import threading
 import subprocess
 import platform
+import http.client
+import io
 import urllib.error
 import urllib.request
 from pathlib import Path
 from glob import glob
 from time import monotonic, sleep
-from typing import Optional, List, Hashable, Set, Iterable
+from typing import Optional, List, Hashable, Set, Iterable, Tuple
 
 import aw_core
 
@@ -336,6 +338,40 @@ def _discover_modules_system() -> List["Module"]:
     return modules
 
 
+# /api/0/info is a small JSON object. Cap body size and wall-clock duration so a
+# slow local listener cannot freeze the tray Qt callback.
+DASHBOARD_INFO_MAX_BYTES = 4096
+
+
+class _DashboardInfoReader(io.RawIOBase):
+    """Apply the total deadline to every socket read, including HTTP framing."""
+
+    def __init__(self, sock, deadline: float) -> None:
+        super().__init__()
+        self.sock = sock
+        self.deadline = deadline
+
+    def readable(self) -> bool:
+        return True
+
+    def readinto(self, buffer) -> int:
+        remaining = self.deadline - monotonic()
+        if remaining <= 0:
+            raise TimeoutError("dashboard info probe timed out")
+        self.sock.settimeout(remaining)
+        return self.sock.recv_into(buffer)
+
+
+class _DashboardInfoSocket:
+    def __init__(self, sock, deadline: float) -> None:
+        self.sock = sock
+        self.deadline = deadline
+
+    def makefile(self, mode):
+        # HTTPResponse uses this stream for status, headers, chunks and body.
+        return io.BufferedReader(_DashboardInfoReader(self.sock, self.deadline))
+
+
 class Module:
     def __init__(self, name: str, path: Path, type: str) -> None:
         self.name = name
@@ -349,6 +385,7 @@ class Module:
         # self.location = "system" if _is_system_module(name) else "bundled"
         self._process: Optional[subprocess.Popen[str]] = None
         self._last_process: Optional[subprocess.Popen[str]] = None
+        self.dashboard_endpoint: Optional[Tuple[str, str, int]] = None
         self._external_server: bool = False  # True if we detected an already-running server
         self._external_server_testing: bool = False
         self._external_server_probe_cache: Optional[bool] = None
@@ -402,8 +439,77 @@ class Module:
         self._external_server_probe_cache_at = now
         return alive
 
+    def _probe_dashboard_listener(
+        self, address: str, port: int, timeout: float = 0.2
+    ) -> bool:
+        """Return True only if the pinned numeric endpoint answers as ActivityWatch.
+
+        GET /api/0/info is public even with auth enabled, so this must not send
+        the API key. HTTP errors (including 404 occupants) fail closed. Body size
+        and wall-clock duration are bounded so a slow listener cannot freeze Qt.
+        """
+        host = f"[{address}]" if ":" in address else address
+        deadline = monotonic() + timeout
+        conn = None
+        try:
+            conn = http.client.HTTPConnection(host, port, timeout=timeout)
+            conn.connect()
+            remaining = deadline - monotonic()
+            if remaining <= 0:
+                return False
+            conn.sock.settimeout(remaining)
+            conn.request("GET", "/api/0/info")
+            with http.client.HTTPResponse(
+                # HTTPResponse only needs makefile(); keep the real socket owned by conn.
+                _DashboardInfoSocket(conn.sock, deadline)  # type: ignore[arg-type]
+            ) as resp:
+                resp.begin()
+                if resp.status != 200:
+                    return False
+                length_header = resp.getheader("Content-Length")
+                if length_header is not None:
+                    try:
+                        length = int(length_header)
+                    except ValueError:
+                        return False
+                    if length < 0 or length > DASHBOARD_INFO_MAX_BYTES:
+                        return False
+                payload = resp.read(DASHBOARD_INFO_MAX_BYTES + 1)
+                if len(payload) > DASHBOARD_INFO_MAX_BYTES or resp.length not in (None, 0):
+                    return False
+                body = json.loads(payload.decode("utf-8"))
+            return isinstance(body, dict) and "hostname" in body
+        except (
+            urllib.error.URLError,
+            OSError,
+            ValueError,
+            UnicodeDecodeError,
+            RecursionError,
+            http.client.HTTPException,
+        ):
+            return False
+        finally:
+            if conn is not None:
+                conn.close()
+
+    def dashboard_listener_owned(self) -> bool:
+        """Whether a live owned child currently answers on the pinned endpoint.
+
+        ``dashboard_endpoint`` is launch identity (profile/address/port), not
+        listener ownership. A 404 occupant or a still-initializing child must
+        not receive the credential.
+        """
+        if self._external_server or not self.is_alive():
+            return False
+        endpoint = self.dashboard_endpoint
+        if endpoint is None:
+            return False
+        _, address, port = endpoint
+        return self._probe_dashboard_listener(address, port)
+
     def start(self, testing: bool) -> None:
         logger.info(f"Starting module {self.name}")
+        self.dashboard_endpoint = None
 
         # For server modules, check if a server is already running before attempting
         # to start one. This avoids port conflicts and the confusing "Restart" requirement
@@ -424,6 +530,20 @@ class Module:
         exec_cmd = [str(self.path)]
         if testing:
             exec_cmd.append("--testing")
+        endpoint = None
+        if self.name == "aw-server-rust":
+            from .config import dashboard_auth
+            from .profile import profile_from_env
+
+            profile = profile_from_env(testing)
+            port = self._get_server_port(testing)
+            auth = dashboard_auth(profile, port) if port is not None else None
+            if auth is not None and port is not None:
+                address, _ = auth
+                # Pin the child to the endpoint we authorize, even if the config
+                # changes between this read and the child's startup read.
+                exec_cmd.extend(["--host", address, "--port", str(port)])
+                endpoint = (profile, address, port)
         # logger.debug("Running: {}".format(exec_cmd))
 
         # Don't display a console window on Windows
@@ -443,6 +563,7 @@ class Module:
         self._process = subprocess.Popen(
             exec_cmd, universal_newlines=True, startupinfo=startupinfo
         )
+        self.dashboard_endpoint = endpoint
         self.started = True
 
     def stop(self) -> None:
