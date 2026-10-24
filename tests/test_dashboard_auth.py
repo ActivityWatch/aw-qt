@@ -413,7 +413,8 @@ def test_truncated_info_response_does_not_abort_dashboard():
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             captured["path"] = self.path
-            payload = b"{}"
+            # Valid JSON must still be rejected when HTTP framing is incomplete.
+            payload = b'{"hostname":"x"}'
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", "100")
@@ -511,3 +512,75 @@ def test_slow_drip_info_body_fails_closed_within_timeout():
     finally:
         server.shutdown()
         server.server_close()
+
+
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        b"HTTP/1.1 200 ",
+        b"HTTP/1.1 200 OK\r\nX-Slow: ",
+        b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n1;",
+    ],
+)
+def test_slow_http_framing_fails_closed_within_deadline(prefix):
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            try:
+                self.wfile.write(prefix)
+                self.wfile.flush()
+                for _ in range(30):
+                    self.wfile.write(b"x")
+                    self.wfile.flush()
+                    sleep(0.05)
+            except OSError:
+                pass
+
+        def log_message(self, format, *args):
+            return
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        port = server.server_address[1]
+        write_config("default", f'port = {port}\n[auth]\napi_key = "secret"')
+        module = _started_owned_child()
+        started = monotonic()
+        assert open_dashboard(port=port, modules=[module]) == f"http://localhost:{port}"
+        assert monotonic() - started < 1.0
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        b"HTTP/1.1 200 OK\r\nContent-Length: 16\r\n\r\n" + b'{"hostname":"x"}',
+        b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n"
+        + b'10\r\n{"hostname":"x"}\r\n0\r\n\r\n',
+    ],
+)
+def test_complete_http_framing_authorizes_key(response):
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.wfile.write(response)
+
+        def log_message(self, format, *args):
+            return
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        port = server.server_address[1]
+        write_config("default", f'port = {port}\n[auth]\napi_key = "secret"')
+        module = _started_owned_child()
+        assert parse_qs(urlsplit(open_dashboard(port=port, modules=[module])).query) == {
+            "token": ["secret"]
+        }
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)

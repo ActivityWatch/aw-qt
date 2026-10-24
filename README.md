@@ -24,7 +24,13 @@ before handoff; key-only edits at the same endpoint are still read at click time
 Credential handoff additionally requires the pinned numeric listener to answer
 `GET /api/0/info` as ActivityWatch (HTTP 200 with a hostname field). The probe
 does not send the API key. A non-AW occupant (for example HTTP 404) or a child
-that has not yet bound keeps the tokenless URL.
+that has not yet bound keeps the tokenless URL. The credential-free probe has a
+0.2-second total network deadline (including HTTP status, headers and chunk
+framing) and a 4KiB decoded-body limit; invalid or incomplete responses fail closed.
+This public response is a readiness check, **not proof of socket ownership**:
+another listener returning the same public JSON on the pinned endpoint can still
+receive the key while the child is initializing. Stronger listener authentication
+requires a separate design; do not rely on this handoff against hostile local users.
 Missing or invalid configuration leaves the dashboard URL unchanged. Hostname
 bind addresses are not eligible for key handoff. The API Browser is not
 token-bootstrapped.
