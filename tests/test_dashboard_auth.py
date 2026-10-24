@@ -4,6 +4,7 @@ import json
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from threading import Thread
+from time import monotonic, sleep
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
 from unittest.mock import patch
@@ -12,7 +13,7 @@ import pytest
 from aw_core import dirs
 from aw_qt.config import _with_profile_env, dashboard_auth
 from aw_qt.trayicon import TrayIcon
-from aw_qt.manager import Module
+from aw_qt.manager import DASHBOARD_INFO_MAX_BYTES, Module
 
 
 def authorize_listener(module):
@@ -397,11 +398,13 @@ def test_unbound_child_does_not_receive_key():
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.bind(("127.0.0.1", 0))
     port = sock.getsockname()[1]
-    sock.close()
-    write_config("default", f'port = {port}\n[auth]\napi_key = "secret"')
-    module = _started_owned_child()
-    assert module.is_alive()
-    assert open_dashboard(port=port, modules=[module]) == f"http://localhost:{port}"
+    try:
+        write_config("default", f'port = {port}\n[auth]\napi_key = "secret"')
+        module = _started_owned_child()
+        assert module.is_alive()
+        assert open_dashboard(port=port, modules=[module]) == f"http://localhost:{port}"
+    finally:
+        sock.close()
 
 
 def test_truncated_info_response_does_not_abort_dashboard():
@@ -437,7 +440,74 @@ def test_truncated_info_response_does_not_abort_dashboard():
 
 def test_ipv6_probe_uses_bracketed_numeric_address():
     module = Module("aw-server-rust", Path("/synthetic/aw-server-rust"), "bundled")
-    with patch("aw_qt.manager.urllib.request.urlopen") as opened:
-        opened.side_effect = OSError("refused")
+    with patch("aw_qt.manager.http.client.HTTPConnection") as conn_cls:
+        conn_cls.side_effect = OSError("refused")
         assert module._probe_dashboard_listener("::1", 5601) is False
-    assert opened.call_args.args[0] == "http://[::1]:5601/api/0/info"
+    conn_cls.assert_called_once_with("[::1]", 5601, timeout=0.2)
+
+
+def test_oversized_info_body_does_not_authorize_or_block():
+    captured = {"path": None}
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            captured["path"] = self.path
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(DASHBOARD_INFO_MAX_BYTES + 1))
+            self.end_headers()
+            self.wfile.write(b'{"hostname":"x"}')
+
+        def log_message(self, format, *args):
+            return
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        port = server.server_address[1]
+        write_config("default", f'port = {port}\n[auth]\napi_key = "secret"')
+        module = _started_owned_child()
+        started = monotonic()
+        assert module._probe_dashboard_listener("127.0.0.1", port) is False
+        assert monotonic() - started < 1.0
+        assert open_dashboard(port=port, modules=[module]) == f"http://localhost:{port}"
+        assert captured["path"] == "/api/0/info"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_slow_drip_info_body_fails_closed_within_timeout():
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", "64")
+            self.end_headers()
+            payload = b'{"hostname":"x"}' + b" " * (64 - 16)
+            for byte in payload:
+                try:
+                    self.wfile.write(bytes([byte]))
+                    self.wfile.flush()
+                except BrokenPipeError:
+                    return
+                sleep(0.05)
+
+        def log_message(self, format, *args):
+            return
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        port = server.server_address[1]
+        write_config("default", f'port = {port}\n[auth]\napi_key = "secret"')
+        module = _started_owned_child()
+        started = monotonic()
+        assert module._probe_dashboard_listener("127.0.0.1", port) is False
+        assert monotonic() - started < 1.0
+        assert open_dashboard(port=port, modules=[module]) == f"http://localhost:{port}"
+    finally:
+        server.shutdown()
+        server.server_close()
