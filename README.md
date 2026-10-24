@@ -18,9 +18,13 @@ its configured loopback port must match the tray destination. Authenticated URLs
 use the configured numeric address (`127.0.0.1` or `[::1]`), not `localhost`, to
 avoid sending the key to another address family's listener on the same port.
 For authenticated children the launcher pins this address and port with command
-line overrides and records the profile/endpoint. Changing the address or port,
-or enabling auth after startup, requires restarting the server before handoff;
-key-only edits at the same endpoint are still read at click time.
+line overrides and records the profile/endpoint as launch identity. Changing the
+address or port, or enabling auth after startup, requires restarting the server
+before handoff; key-only edits at the same endpoint are still read at click time.
+Credential handoff additionally requires the pinned numeric listener to answer
+`GET /api/0/info` as ActivityWatch (HTTP 200 with a hostname field). The probe
+does not send the API key. A non-AW occupant (for example HTTP 404) or a child
+that has not yet bound keeps the tokenless URL.
 Missing or invalid configuration leaves the dashboard URL unchanged. Hostname
 bind addresses are not eligible for key handoff. The API Browser is not
 token-bootstrapped.
