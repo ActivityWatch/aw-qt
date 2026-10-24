@@ -212,6 +212,10 @@ class TrayIcon(QSystemTrayIcon):
             ):
                 # Config edits cannot redirect a running child's credential.
                 auth = None
+            owned = getattr(servers[0], "dashboard_listener_owned", None)
+            if auth and callable(owned) and not owned():
+                # Launch identity is not listener ownership.
+                auth = None
         url = self.root_url
         if auth:
             address, key = auth

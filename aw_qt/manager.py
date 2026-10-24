@@ -403,6 +403,41 @@ class Module:
         self._external_server_probe_cache_at = now
         return alive
 
+    def _probe_dashboard_listener(
+        self, address: str, port: int, timeout: float = 0.2
+    ) -> bool:
+        """Return True only if the pinned numeric endpoint answers as ActivityWatch.
+
+        GET /api/0/info is public even with auth enabled, so this must not send
+        the API key. HTTP errors (including 404 occupants) fail closed.
+        """
+        host = f"[{address}]" if ":" in address else address
+        try:
+            with urllib.request.urlopen(
+                f"http://{host}:{port}/api/0/info", timeout=timeout
+            ) as resp:
+                if getattr(resp, "status", 200) != 200:
+                    return False
+                body = json.loads(resp.read().decode("utf-8"))
+            return isinstance(body, dict) and "hostname" in body
+        except (urllib.error.URLError, OSError, ValueError, UnicodeDecodeError):
+            return False
+
+    def dashboard_listener_owned(self) -> bool:
+        """Whether a live owned child currently answers on the pinned endpoint.
+
+        ``dashboard_endpoint`` is launch identity (profile/address/port), not
+        listener ownership. A 404 occupant or a still-initializing child must
+        not receive the credential.
+        """
+        if self._external_server or not self.is_alive():
+            return False
+        endpoint = self.dashboard_endpoint
+        if endpoint is None:
+            return False
+        _, address, port = endpoint
+        return self._probe_dashboard_listener(address, port)
+
     def start(self, testing: bool) -> None:
         logger.info(f"Starting module {self.name}")
         self.dashboard_endpoint = None
