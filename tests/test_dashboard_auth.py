@@ -447,6 +447,25 @@ def test_ipv6_probe_uses_bracketed_numeric_address():
     conn_cls.assert_called_once_with("[::1]", 5601, timeout=0.2)
 
 
+def test_json_recursion_error_fails_closed_without_aborting():
+    server, captured = _serve_info(status=200)
+    try:
+        port = server.server_address[1]
+        write_config("default", f'port = {port}\n[auth]\napi_key = "secret"')
+        module = _started_owned_child()
+        with patch("aw_qt.manager.json.loads", side_effect=RecursionError):
+            assert module._probe_dashboard_listener("127.0.0.1", port) is False
+            assert (
+                open_dashboard(port=port, modules=[module])
+                == f"http://localhost:{port}"
+            )
+        assert captured["authorization"] is None
+        assert captured["path"] == "/api/0/info"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def test_oversized_info_body_does_not_authorize_or_block():
     captured = {"path": None}
 

@@ -491,6 +491,7 @@ class Module:
             OSError,
             ValueError,
             UnicodeDecodeError,
+            RecursionError,
             http.client.HTTPException,
         ):
             return False
