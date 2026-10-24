@@ -5,6 +5,7 @@ import logging
 import threading
 import subprocess
 import platform
+import http.client
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -425,7 +426,13 @@ class Module:
                     return False
                 body = json.loads(resp.read().decode("utf-8"))
             return isinstance(body, dict) and "hostname" in body
-        except (urllib.error.URLError, OSError, ValueError, UnicodeDecodeError):
+        except (
+            urllib.error.URLError,
+            OSError,
+            ValueError,
+            UnicodeDecodeError,
+            http.client.HTTPException,
+        ):
             return False
 
     def dashboard_listener_owned(self) -> bool:
