@@ -680,6 +680,37 @@ class TestServerDependentAutostart:
         assert sync_start.call_count == (0 if manual_action == "stop" else 1)
         assert sync.started == (manual_action in ("start", "tray"))
 
+    def test_cancelled_worker_cannot_consume_replacement_request(self):
+        mgr, sync, _watcher = self._manager()
+        entered = {port: threading.Event() for port in (5601, 5602)}
+        release = {port: threading.Event() for port in (5601, 5602)}
+
+        def wait_for_server(port):
+            entered[port].set()
+            assert release[port].wait(timeout=5)
+            return True
+
+        threads = []
+        with patch.object(sync, "start") as sync_start, patch.object(
+            sync, "stop"
+        ), patch.object(manager_module, "wait_for_server", side_effect=wait_for_server):
+            try:
+                threads.append(mgr.autostart(["aw-sync"], port=5601))
+                assert entered[5601].wait(timeout=5)
+                mgr.stop("aw-sync")
+                threads.append(mgr.autostart(["aw-sync"], port=5602))
+                assert entered[5602].wait(timeout=5)
+                release[5601].set()
+                threads[0].join(timeout=5)
+                assert not threads[0].is_alive()
+                sync_start.assert_not_called()
+            finally:
+                for event in release.values():
+                    event.set()
+                for thread in threads:
+                    thread.join(timeout=5)
+            sync_start.assert_called_once_with(True)
+
     def test_aw_sync_starts_anyway_when_server_unreachable(self):
         mgr, sync, _watcher = self._manager()
         with patch.object(sync, "start") as sync_start, patch.object(

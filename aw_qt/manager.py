@@ -10,7 +10,7 @@ import urllib.request
 from pathlib import Path
 from glob import glob
 from time import monotonic, sleep
-from typing import Optional, List, Hashable, Set, Iterable
+from typing import Optional, List, Hashable, Set, Iterable, Dict
 
 import aw_core
 
@@ -565,7 +565,7 @@ class Manager:
         # Set once shutdown begins so a late autostart thread cannot start
         # aw-notify after stop_all() has already run.
         self._shutting_down = False
-        self._pending_autostart: Set[str] = set()
+        self._pending_autostart: Dict[str, object] = {}
 
         self.discover_modules()
 
@@ -607,7 +607,7 @@ class Manager:
 
     def start(self, module_name: str) -> None:
         with self._notify_lock:
-            self._pending_autostart.discard(module_name)
+            self._pending_autostart.pop(module_name, None)
             if self._shutting_down:
                 return
             module = self.resolve(module_name)
@@ -620,7 +620,7 @@ class Manager:
     def toggle(self, module: Module) -> bool:
         """Apply a tray choice to the selected copy, cancelling deferred startup."""
         with self._notify_lock:
-            self._pending_autostart.discard(module.name)
+            self._pending_autostart.pop(module.name, None)
             if self._shutting_down:
                 return module.started
             return module.toggle(self.testing)
@@ -667,8 +667,10 @@ class Manager:
         if port is None or not deferred:
             return None
         server_port = port
+        request = object()
         with self._notify_lock:
-            self._pending_autostart.update(deferred)
+            # A cancelled worker must not consume a later autostart request.
+            self._pending_autostart.update(dict.fromkeys(deferred, request))
 
         def _run() -> None:
             if not wait_for_server(server_port):
@@ -679,7 +681,7 @@ class Manager:
                 if self._shutting_down:
                     return
                 for name in deferred:
-                    if name in self._pending_autostart:
+                    if self._pending_autostart.get(name) is request:
                         self.start(name)
 
         t = threading.Thread(target=_run, name="server-dependent-autostart", daemon=True)
@@ -734,7 +736,7 @@ class Manager:
 
     def stop(self, module_name: str) -> None:
         with self._notify_lock:
-            self._pending_autostart.discard(module_name)
+            self._pending_autostart.pop(module_name, None)
             for m in self.modules:
                 if m.name == module_name:
                     m.stop()

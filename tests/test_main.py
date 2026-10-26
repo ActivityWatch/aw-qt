@@ -18,7 +18,8 @@ from click.testing import CliRunner
 def test_cli_server_override_uses_selected_port(
     saved, selected, saved_port, selected_port, profile, monkeypatch
 ):
-    monkeypatch.delenv("AW_PROFILE", raising=False)
+    # Register restoration even when main() writes directly to os.environ.
+    monkeypatch.setenv("AW_PROFILE", "default")
     main_module = importlib.import_module("aw_qt.main")
     settings = MagicMock(
         autostart_modules=[saved, "aw-sync"],
