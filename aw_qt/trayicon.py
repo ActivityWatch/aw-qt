@@ -8,6 +8,7 @@ import time
 import webbrowser
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
+from urllib.parse import urlencode
 
 import aw_core
 from PyQt6 import QtCore
@@ -22,7 +23,7 @@ from PyQt6.QtWidgets import (
 )
 
 from . import autostart
-from .config import persist_module_autostart
+from .config import dashboard_auth, persist_module_autostart
 from .manager import (
     NOTIFY_MODULE,
     Manager,
@@ -256,9 +257,41 @@ class TrayIcon(QSystemTrayIcon):
         # Always reflect the real state, the toggle may have failed
         self._refresh_autostart_action()
 
+    def _open_dashboard(self) -> None:
+        # Resolve at click time so rotating the key does not require a tray restart.
+        # Never hand a Rust credential to a Python or ambiguously selected server.
+        servers = [
+            module for module in self.manager.modules
+            if module.started and module.name in ("aw-server", "aw-server-rust")
+        ]
+        auth = None
+        if (
+            len(servers) == 1
+            and servers[0].name == "aw-server-rust"
+            # The public /info probe cannot establish an adopted listener's identity.
+            and not getattr(servers[0], "_external_server", False)
+            and servers[0].is_alive()
+        ):
+            auth = dashboard_auth(self.profile, self.port)
+            if auth and getattr(servers[0], "dashboard_endpoint", None) != (
+                self.profile, auth[0], self.port
+            ):
+                # Config edits cannot redirect a running child's credential.
+                auth = None
+            owned = getattr(servers[0], "dashboard_listener_owned", None)
+            if auth and callable(owned) and not owned():
+                # Launch identity is not listener ownership.
+                auth = None
+        url = self.root_url
+        if auth:
+            address, key = auth
+            host = f"[{address}]" if ":" in address else address
+            url = f"http://{host}:{self.port}?" + urlencode({"token": key})
+        open_webui(url)
+
     def on_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
         if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
-            open_webui(self.root_url)
+            self._open_dashboard()
 
     def _build_rootmenu(self) -> None:
         menu = QMenu(self._parent)
@@ -273,7 +306,7 @@ class TrayIcon(QSystemTrayIcon):
             menu.addSeparator()
 
         # openWebUIIcon = QIcon.fromTheme("open")
-        menu.addAction("Open Dashboard", lambda: open_webui(self.root_url))
+        menu.addAction("Open Dashboard", lambda: self._open_dashboard())
         menu.addAction("Open API Browser", lambda: open_apibrowser(self.root_url))
 
         menu.addSeparator()
