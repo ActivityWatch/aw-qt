@@ -736,3 +736,48 @@ class TestServerDependentAutostart:
         with patch.object(sync, "start") as sync_start:
             assert mgr.autostart(["aw-sync"]) is None
         sync_start.assert_called_once_with(True)
+
+
+class TestRustLogLookup:
+    """On Windows, Rust modules log outside aw-core's platformdirs log dir."""
+
+    def _fake_windows(self, monkeypatch, tmp_path):
+        calls = []
+
+        def user_log_dir(appname, appauthor=None):
+            calls.append((appname, appauthor))
+            # platformdirs' Windows layout: an appauthor level unless appauthor=False
+            parts = [appname] if appauthor is False else [appauthor or appname, appname]
+            return str(tmp_path.joinpath(*parts, "Logs"))
+
+        monkeypatch.setattr(manager_module.sys, "platform", "win32")
+        monkeypatch.setattr(manager_module.platformdirs, "user_log_dir", user_log_dir)
+        monkeypatch.setattr(manager_module.aw_core.dirs, "_get_appname", lambda: "activitywatch")
+        monkeypatch.setattr(
+            manager_module.aw_core.log, "get_latest_log_file", lambda name, testing=False: None
+        )
+        return calls
+
+    def test_reads_newest_rust_log(self, monkeypatch, tmp_path):
+        calls = self._fake_windows(monkeypatch, tmp_path)
+        log_dir = tmp_path / "activitywatch" / "Logs" / "aw-sync"
+        log_dir.mkdir(parents=True)
+        (log_dir / "aw-sync_2026-10-20T08-00-00+0200.log").write_text("old")
+        (log_dir / "aw-sync_2026-10-21T08-00-00+0200.log").write_text("Error during sync cycle")
+        (log_dir / "aw-sync-testing_2026-10-22T08-00-00+0200.log").write_text("testing")
+        module = Module("aw-sync", Path("/usr/bin/true"), "system")
+        assert module.read_log(testing=False) == "Error during sync cycle"
+        assert ("activitywatch", False) in calls
+
+    def test_no_log_anywhere(self, monkeypatch, tmp_path):
+        self._fake_windows(monkeypatch, tmp_path)
+        module = Module("aw-sync", Path("/usr/bin/true"), "system")
+        assert module.read_log(testing=False) == "No log file found"
+
+    def test_not_used_off_windows(self, monkeypatch, tmp_path):
+        self._fake_windows(monkeypatch, tmp_path)
+        monkeypatch.setattr(manager_module.sys, "platform", "linux")
+        log_dir = tmp_path / "activitywatch" / "Logs" / "aw-sync"
+        log_dir.mkdir(parents=True)
+        (log_dir / "aw-sync_2026-10-21T08-00-00+0200.log").write_text("x")
+        assert manager_module._latest_rust_log_file("aw-sync", False) is None

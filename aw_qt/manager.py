@@ -13,6 +13,8 @@ from time import monotonic, sleep
 from typing import Optional, List, Hashable, Set, Iterable, Dict
 
 import aw_core
+import aw_core.dirs
+import platformdirs
 
 from .wayland import WAYLAND_WATCHER  # noqa: F401 - retained for existing imports
 from .wayland import (
@@ -544,12 +546,37 @@ class Module:
 
     def read_log(self, testing: bool) -> str:
         """Useful if you want to retrieve the logs of a module"""
-        log_path = aw_core.log.get_latest_log_file(self.name, testing)
+        log_path = aw_core.log.get_latest_log_file(
+            self.name, testing
+        ) or _latest_rust_log_file(self.name, testing)
         if log_path:
             with open(log_path) as f:
                 return f.read()
         else:
             return "No log file found"
+
+
+def _latest_rust_log_file(name: str, testing: bool) -> Optional[str]:
+    """Newest log of a Rust module (aw-server-rust, aw-sync) on Windows.
+
+    aw-core's platformdirs log dir on Windows is
+    %LOCALAPPDATA%\\activitywatch\\activitywatch\\Logs (appauthor defaults to the
+    appname), but the Rust modules log to %LOCALAPPDATA%\\activitywatch\\Logs.
+    Linux and macOS layouts already agree.
+    """
+    if sys.platform != "win32":
+        return None
+    log_dir = os.path.join(
+        platformdirs.user_log_dir(aw_core.dirs._get_appname(), appauthor=False), name
+    )
+    try:
+        files = os.listdir(log_dir)
+    except OSError:
+        return None
+    files = [f for f in files if name in f and ("testing" in f) == testing]
+    if not files:
+        return None
+    return os.path.join(log_dir, max(files))
 
 
 class Manager:
