@@ -14,7 +14,7 @@ from aw_core.log import setup_logging
 
 from . import autostart
 from .manager import Manager
-from .config import AwQtSettings, _read_server_port
+from .config import AwQtSettings, SERVER_MODULES, _read_server_port
 from .profile import (
     DEFAULT_PROFILE,
     export_profile,
@@ -139,9 +139,11 @@ def main(
 
     # A CLI override can select a different server type with its own port.
     # Keep the startup wait and tray URL on that effective server endpoint.
+    # Without a server selection, retain the configured external server port.
     port = (
         _read_server_port(profile, _autostart_modules)
         if autostart_overridden
+        and any(name in SERVER_MODULES for name in _autostart_modules)
         else config.port
     )
 
