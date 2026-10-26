@@ -556,8 +556,8 @@ class Manager:
     def __init__(self, testing: bool = False) -> None:
         self.modules: List[Module] = []
         self.testing = testing
-        # Serialises the autostart background thread against the tray toggle so
-        # that only one path can check-and-start/stop aw-notify at a time.
+        # Serialises background autostart against manual start/stop/toggle so
+        # that a pending server wait cannot override a user's module choice.
         # Reentrant: a SIGINT/SIGTERM handler runs on the main thread and calls
         # stop_all(), which takes this lock again while a toggle callback on the
         # same thread may still hold it. A plain Lock would deadlock shutdown.
@@ -565,6 +565,7 @@ class Manager:
         # Set once shutdown begins so a late autostart thread cannot start
         # aw-notify after stop_all() has already run.
         self._shutting_down = False
+        self._pending_autostart: Set[str] = set()
 
         self.discover_modules()
 
@@ -605,11 +606,24 @@ class Manager:
         return None
 
     def start(self, module_name: str) -> None:
-        module = self.resolve(module_name)
-        if module is not None:
-            module.start(self.testing)
-        else:
-            logger.error(f"Manager tried to start nonexistent module {module_name}")
+        with self._notify_lock:
+            self._pending_autostart.discard(module_name)
+            if self._shutting_down:
+                return
+            module = self.resolve(module_name)
+            if module is not None:
+                if not module.is_alive():
+                    module.start(self.testing)
+            else:
+                logger.error(f"Manager tried to start nonexistent module {module_name}")
+
+    def toggle(self, module: Module) -> bool:
+        """Apply a tray choice to the selected copy, cancelling deferred startup."""
+        with self._notify_lock:
+            self._pending_autostart.discard(module.name)
+            if self._shutting_down:
+                return module.started
+            return module.toggle(self.testing)
 
     def autostart(
         self, autostart_modules: List[str], port: Optional[int] = None
@@ -653,6 +667,8 @@ class Manager:
         if port is None or not deferred:
             return None
         server_port = port
+        with self._notify_lock:
+            self._pending_autostart.update(deferred)
 
         def _run() -> None:
             if not wait_for_server(server_port):
@@ -663,7 +679,8 @@ class Manager:
                 if self._shutting_down:
                     return
                 for name in deferred:
-                    self.start(name)
+                    if name in self._pending_autostart:
+                        self.start(name)
 
         t = threading.Thread(target=_run, name="server-dependent-autostart", daemon=True)
         t.start()
@@ -716,12 +733,14 @@ class Manager:
         return t
 
     def stop(self, module_name: str) -> None:
-        for m in self.modules:
-            if m.name == module_name:
-                m.stop()
-                break
-        else:
-            logger.error(f"Manager tried to stop nonexistent module {module_name}")
+        with self._notify_lock:
+            self._pending_autostart.discard(module_name)
+            for m in self.modules:
+                if m.name == module_name:
+                    m.stop()
+                    break
+            else:
+                logger.error(f"Manager tried to stop nonexistent module {module_name}")
 
     def start_notify(self) -> None:
         """Start aw-notify unless it is already running or shutdown has begun.
