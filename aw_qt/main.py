@@ -14,7 +14,7 @@ from aw_core.log import setup_logging
 
 from . import autostart
 from .manager import Manager
-from .config import AwQtSettings
+from .config import AwQtSettings, SERVER_MODULES, _read_server_port
 from .profile import (
     DEFAULT_PROFILE,
     export_profile,
@@ -137,14 +137,24 @@ def main(
         else config.autostart_modules
     )
 
+    # A CLI override can select a different server type with its own port.
+    # Keep the startup wait and tray URL on that effective server endpoint.
+    # Without a server selection, retain the configured external server port.
+    port = (
+        _read_server_port(profile, _autostart_modules)
+        if autostart_overridden
+        and any(name in SERVER_MODULES for name in _autostart_modules)
+        else config.port
+    )
+
     if config.autostart_on_first_run and not testing:
         autostart.ensure_enabled_on_first_run()
 
     manager = Manager(testing=testing)
-    manager.autostart(_autostart_modules)
+    manager.autostart(_autostart_modules, port=port)
     if autostart_modules is None:
         # An explicit --autostart-modules list overrides the opt-in notify path too
-        manager.autostart_notify_if_enabled(config.port)
+        manager.autostart_notify_if_enabled(port)
 
     if not no_gui and not interactive_cli:
         from . import trayicon  # pylint: disable=import-outside-toplevel
@@ -153,7 +163,7 @@ def main(
         error_code = trayicon.run(
             manager,
             testing=testing,
-            port=config.port,
+            port=port,
             profile=profile,
             persist_toggles=not autostart_overridden,
         )

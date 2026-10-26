@@ -10,7 +10,7 @@ import urllib.request
 from pathlib import Path
 from glob import glob
 from time import monotonic, sleep
-from typing import Optional, List, Hashable, Set, Iterable
+from typing import Optional, List, Hashable, Set, Iterable, Dict
 
 import aw_core
 
@@ -39,6 +39,11 @@ def _log_modules(modules: List["Module"]) -> None:
 # `aw-notify` has `enabled: true` (ActivityWatch/activitywatch#1435).
 NOTIFY_MODULE = "aw-notify"
 NOTIFY_SETTINGS_KEY = "aw-notify"
+
+# Modules that talk to the server on startup. aw-sync's first sync cycle fails
+# if it starts before aw-server listens, so at login it is started only once
+# the server answers (or after the wait times out).
+SERVER_DEPENDENT_MODULES = {"aw-sync"}
 
 
 def _select_wayland_watcher(available_names: Set[str]) -> Optional[str]:
@@ -551,8 +556,8 @@ class Manager:
     def __init__(self, testing: bool = False) -> None:
         self.modules: List[Module] = []
         self.testing = testing
-        # Serialises the autostart background thread against the tray toggle so
-        # that only one path can check-and-start/stop aw-notify at a time.
+        # Serialises background autostart against manual start/stop/toggle so
+        # that a pending server wait cannot override a user's module choice.
         # Reentrant: a SIGINT/SIGTERM handler runs on the main thread and calls
         # stop_all(), which takes this lock again while a toggle callback on the
         # same thread may still hold it. A plain Lock would deadlock shutdown.
@@ -560,6 +565,7 @@ class Manager:
         # Set once shutdown begins so a late autostart thread cannot start
         # aw-notify after stop_all() has already run.
         self._shutting_down = False
+        self._pending_autostart: Dict[str, object] = {}
 
         self.discover_modules()
 
@@ -600,13 +606,33 @@ class Manager:
         return None
 
     def start(self, module_name: str) -> None:
-        module = self.resolve(module_name)
-        if module is not None:
-            module.start(self.testing)
-        else:
-            logger.error(f"Manager tried to start nonexistent module {module_name}")
+        with self._notify_lock:
+            self._pending_autostart.pop(module_name, None)
+            if self._shutting_down:
+                return
+            module = self.resolve(module_name)
+            if module is not None:
+                if not module.is_alive():
+                    module.start(self.testing)
+            else:
+                logger.error(f"Manager tried to start nonexistent module {module_name}")
 
-    def autostart(self, autostart_modules: List[str]) -> None:
+    def toggle(self, module: Module) -> bool:
+        """Apply a tray choice to the selected copy, cancelling deferred startup."""
+        with self._notify_lock:
+            self._pending_autostart.pop(module.name, None)
+            if self._shutting_down:
+                return module.started
+            return module.toggle(self.testing)
+
+    def autostart(
+        self, autostart_modules: List[str], port: Optional[int] = None
+    ) -> Optional[threading.Thread]:
+        """Start the server, then the other autostart modules.
+
+        With `port`, server-dependent modules start from a background thread
+        once the server answers; that thread is returned (for tests).
+        """
         # NOTE: Currently impossible to autostart a system module if a bundled module with the same name exists
 
         # On Wayland, transparently swap aw-watcher-window / aw-watcher-afk for
@@ -629,8 +655,38 @@ class Manager:
         autostart_modules = list(
             set(autostart_modules) - {"aw-server", "aw-server-rust"}
         )
+        deferred = (
+            sorted(SERVER_DEPENDENT_MODULES.intersection(autostart_modules))
+            if port is not None
+            else []
+        )
         for name in autostart_modules:
-            self.start(name)
+            if name not in deferred:
+                self.start(name)
+
+        if port is None or not deferred:
+            return None
+        server_port = port
+        request = object()
+        with self._notify_lock:
+            # A cancelled worker must not consume a later autostart request.
+            self._pending_autostart.update(dict.fromkeys(deferred, request))
+
+        def _run() -> None:
+            if not wait_for_server(server_port):
+                logger.warning(
+                    f"Server not reachable on port {server_port}, starting {', '.join(deferred)} anyway"
+                )
+            with self._notify_lock:
+                if self._shutting_down:
+                    return
+                for name in deferred:
+                    if self._pending_autostart.get(name) is request:
+                        self.start(name)
+
+        t = threading.Thread(target=_run, name="server-dependent-autostart", daemon=True)
+        t.start()
+        return t
 
     def autostart_notify_if_enabled(self, port: int) -> threading.Thread:
         """Start aw-notify once the server is up, iff the shared `enabled` flag is true.
@@ -679,12 +735,14 @@ class Manager:
         return t
 
     def stop(self, module_name: str) -> None:
-        for m in self.modules:
-            if m.name == module_name:
-                m.stop()
-                break
-        else:
-            logger.error(f"Manager tried to stop nonexistent module {module_name}")
+        with self._notify_lock:
+            self._pending_autostart.pop(module_name, None)
+            for m in self.modules:
+                if m.name == module_name:
+                    m.stop()
+                    break
+            else:
+                logger.error(f"Manager tried to stop nonexistent module {module_name}")
 
     def start_notify(self) -> None:
         """Start aw-notify unless it is already running or shutdown has begun.

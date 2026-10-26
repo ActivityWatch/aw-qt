@@ -412,7 +412,7 @@ class TrayIcon(QSystemTrayIcon):
         Only an explicit click lands here. Crash restarts and shutdown go
         through ``Module.start``/``stop`` directly and never touch the config.
         """
-        enabled = module.toggle(self.testing)
+        enabled = self.manager.toggle(module)
         # Reset auto-restart timestamps on manual toggle
         self._restart_timestamps.pop(module.name, None)
         if not self.persist_toggles:
