@@ -40,6 +40,11 @@ def _log_modules(modules: List["Module"]) -> None:
 NOTIFY_MODULE = "aw-notify"
 NOTIFY_SETTINGS_KEY = "aw-notify"
 
+# Modules that talk to the server on startup. aw-sync's first sync cycle fails
+# if it starts before aw-server listens, so at login it is started only once
+# the server answers (or after the wait times out).
+SERVER_DEPENDENT_MODULES = {"aw-sync"}
+
 
 def _select_wayland_watcher(available_names: Set[str]) -> Optional[str]:
     """Return the first available Wayland watcher implementation, if any."""
@@ -606,7 +611,14 @@ class Manager:
         else:
             logger.error(f"Manager tried to start nonexistent module {module_name}")
 
-    def autostart(self, autostart_modules: List[str]) -> None:
+    def autostart(
+        self, autostart_modules: List[str], port: Optional[int] = None
+    ) -> Optional[threading.Thread]:
+        """Start the server, then the other autostart modules.
+
+        With `port`, server-dependent modules start from a background thread
+        once the server answers; that thread is returned (for tests).
+        """
         # NOTE: Currently impossible to autostart a system module if a bundled module with the same name exists
 
         # On Wayland, transparently swap aw-watcher-window / aw-watcher-afk for
@@ -629,8 +641,33 @@ class Manager:
         autostart_modules = list(
             set(autostart_modules) - {"aw-server", "aw-server-rust"}
         )
+        deferred = (
+            sorted(SERVER_DEPENDENT_MODULES.intersection(autostart_modules))
+            if port is not None
+            else []
+        )
         for name in autostart_modules:
-            self.start(name)
+            if name not in deferred:
+                self.start(name)
+
+        if port is None or not deferred:
+            return None
+        server_port = port
+
+        def _run() -> None:
+            if not wait_for_server(server_port):
+                logger.warning(
+                    f"Server not reachable on port {server_port}, starting {', '.join(deferred)} anyway"
+                )
+            with self._notify_lock:
+                if self._shutting_down:
+                    return
+                for name in deferred:
+                    self.start(name)
+
+        t = threading.Thread(target=_run, name="server-dependent-autostart", daemon=True)
+        t.start()
+        return t
 
     def autostart_notify_if_enabled(self, port: int) -> threading.Thread:
         """Start aw-notify once the server is up, iff the shared `enabled` flag is true.

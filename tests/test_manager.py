@@ -592,3 +592,55 @@ class TestCleanExitDetection:
 
         assert mod.started is True
         assert mod._process is proc
+
+
+class TestServerDependentAutostart:
+    """aw-sync starts only once the server answers, so a login race cannot crash it."""
+
+    def _manager(self):
+        mgr = manager_module.Manager(testing=True)
+        sync = Module("aw-sync", Path("/usr/bin/true"), "system")
+        watcher = Module("aw-watcher-afk", Path("/usr/bin/true"), "system")
+        mgr.modules = [sync, watcher]
+        return mgr, sync, watcher
+
+    def test_aw_sync_waits_for_server(self, settings_server):
+        server, _handler = settings_server
+        mgr, sync, watcher = self._manager()
+        with patch.object(sync, "start") as sync_start, patch.object(
+            watcher, "start"
+        ) as watcher_start, patch.object(
+            manager_module, "wait_for_server", wraps=manager_module.wait_for_server
+        ) as wait:
+            t = mgr.autostart(["aw-sync", "aw-watcher-afk"], port=server.server_port)
+            watcher_start.assert_called_once_with(True)
+            assert t is not None
+            t.join(timeout=5)
+        wait.assert_called_once_with(server.server_port)
+        sync_start.assert_called_once_with(True)
+
+    def test_aw_sync_starts_anyway_when_server_unreachable(self):
+        mgr, sync, _watcher = self._manager()
+        with patch.object(sync, "start") as sync_start, patch.object(
+            manager_module, "wait_for_server", return_value=False
+        ):
+            t = mgr.autostart(["aw-sync"], port=1)
+            assert t is not None
+            t.join(timeout=5)
+        sync_start.assert_called_once_with(True)
+
+    def test_aw_sync_not_started_after_shutdown_begins(self, settings_server):
+        server, _handler = settings_server
+        mgr, sync, _watcher = self._manager()
+        mgr._shutting_down = True
+        with patch.object(sync, "start") as sync_start:
+            t = mgr.autostart(["aw-sync"], port=server.server_port)
+            assert t is not None
+            t.join(timeout=5)
+        sync_start.assert_not_called()
+
+    def test_without_port_starts_synchronously(self):
+        mgr, sync, _watcher = self._manager()
+        with patch.object(sync, "start") as sync_start:
+            assert mgr.autostart(["aw-sync"]) is None
+        sync_start.assert_called_once_with(True)

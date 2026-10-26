@@ -141,7 +141,7 @@ def main(
         autostart.ensure_enabled_on_first_run()
 
     manager = Manager(testing=testing)
-    manager.autostart(_autostart_modules)
+    manager.autostart(_autostart_modules, port=config.port)
     if autostart_modules is None:
         # An explicit --autostart-modules list overrides the opt-in notify path too
         manager.autostart_notify_if_enabled(config.port)
