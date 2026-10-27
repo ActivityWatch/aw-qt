@@ -3,10 +3,11 @@ import os
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 import webbrowser
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import aw_core
 from PyQt6 import QtCore
@@ -21,7 +22,14 @@ from PyQt6.QtWidgets import (
 )
 
 from . import autostart
-from .manager import Manager, Module
+from .config import persist_module_autostart
+from .manager import (
+    NOTIFY_MODULE,
+    Manager,
+    Module,
+    read_notify_enabled,
+    write_notify_enabled,
+)
 from .profile import DEFAULT_PROFILE, TESTING_PROFILE
 
 logger = logging.getLogger(__name__)
@@ -34,6 +42,18 @@ def get_env() -> Dict[str, str]:
     https://github.com/ActivityWatch/activitywatch/issues/208#issuecomment-417346407
     """
     env = dict(os.environ)  # make a copy of the environment
+    if env.get("APPIMAGE"):
+        # Inside an AppImage, PyInstaller's "original" library path belongs
+        # to the AppImage, not the host. Its Qt plugins likewise cannot be
+        # used by a system browser or file manager (ActivityWatch/activitywatch#1528).
+        for key in (
+            "LD_LIBRARY_PATH",
+            "LD_LIBRARY_PATH_ORIG",
+            "QT_PLUGIN_PATH",
+            "QT_QPA_PLATFORM_PLUGIN_PATH",
+        ):
+            env.pop(key, None)
+        return env
     lp_key = "LD_LIBRARY_PATH"  # for GNU/Linux and *BSD.
     lp_orig = env.get(lp_key + "_ORIG")
     if lp_orig is not None:
@@ -63,15 +83,68 @@ def open_apibrowser(root_url: str) -> None:
     open_url(root_url + "/api")
 
 
-def open_dir(d: str) -> None:
+def open_dir(d: Union[str, Path]) -> None:
     """From: http://stackoverflow.com/a/1795849/965332"""
+    d = str(d)
     if sys.platform == "win32":
         os.startfile(d)
     elif sys.platform == "darwin":
         subprocess.Popen(["open", d])
     else:
-        env = get_env()
-        subprocess.Popen(["xdg-open", d], env=env)
+        # xdg-open can stay alive as long as the file manager. Poll without
+        # blocking Qt, and use a file so a full stderr pipe cannot stall it.
+        try:
+            stderr = tempfile.TemporaryFile()
+        except OSError as exc:
+            _show_open_dir_error(d, str(exc))
+            return
+        try:
+            process = subprocess.Popen(["xdg-open", d], env=get_env(), stderr=stderr)
+        except OSError as exc:
+            stderr.close()
+            _show_open_dir_error(d, str(exc))
+            return
+
+        timer = QtCore.QTimer(QApplication.instance())
+
+        def check_finished() -> None:
+            returncode = process.poll()
+            if returncode is None:
+                return
+            timer.stop()
+            timer.deleteLater()
+            if returncode == 0:
+                stderr.close()
+                return
+            try:
+                size = stderr.seek(0, os.SEEK_END)
+                stderr.seek(max(0, size - 8192))
+                details = stderr.read(8192).decode("utf-8", errors="replace").strip()
+                if size > 8192:
+                    details = "[Earlier diagnostics truncated]\n" + details
+            except OSError as exc:
+                details = f"Could not read opener diagnostics: {exc}"
+            finally:
+                stderr.close()
+            _show_open_dir_error(d, f"xdg-open exited with status {returncode}.\n{details}")
+
+        timer.timeout.connect(check_finished)
+        timer.start(100)
+
+
+def _show_open_dir_error(path: str, details: str) -> None:
+    logger.warning("Could not open folder %s: %s", path, details)
+    box = QMessageBox()
+    box.setIcon(QMessageBox.Icon.Warning)
+    box.setWindowTitle("Could not open folder")
+    box.setTextFormat(QtCore.Qt.TextFormat.PlainText)
+    box.setText("Open this folder manually in your file manager:")
+    box.setInformativeText(path)
+    box.setDetailedText(details)
+    box.setStandardButtons(QMessageBox.StandardButton.Close)
+    copy_button = box.addButton("Copy path", QMessageBox.ButtonRole.ActionRole)
+    copy_button.clicked.connect(lambda: QApplication.clipboard().setText(path))
+    box.exec()
 
 
 class TrayIcon(QSystemTrayIcon):
@@ -86,6 +159,7 @@ class TrayIcon(QSystemTrayIcon):
         testing: bool = False,
         port: Optional[int] = None,
         profile: str = DEFAULT_PROFILE,
+        persist_toggles: bool = True,
     ) -> None:
         QSystemTrayIcon.__init__(self, icon, parent)
         self._parent = parent  # QSystemTrayIcon also tries to save parent info but it screws up the type info
@@ -96,11 +170,16 @@ class TrayIcon(QSystemTrayIcon):
         self.manager = manager
         self.testing = testing
         self.profile = profile
+        # Whether a module start/stop from the menu is saved to
+        # autostart_modules (off when --autostart-modules overrides the config).
+        self.persist_toggles = persist_toggles
         self._restart_timestamps: Dict[str, List[float]] = {}
         self._autostart_action: Optional[QAction] = None
+        self._notify_action: Optional[QAction] = None
 
         if port is None:
             port = 5666 if testing else 5600
+        self.port = port
         self.root_url = f"http://localhost:{port}"
         self.activated.connect(self.on_activated)
 
@@ -127,6 +206,33 @@ class TrayIcon(QSystemTrayIcon):
         """Sync the menu item with the actual OS-level autostart state."""
         if self._autostart_action is not None:
             self._autostart_action.setChecked(autostart.is_enabled())
+
+    def _refresh_notify_action(self) -> None:
+        """Sync the menu item with the shared `aw-notify.enabled` setting."""
+        if self._notify_action is not None:
+            self._notify_action.setChecked(read_notify_enabled(self.port, timeout=0.5))
+
+    def _on_notify_toggled(self) -> None:
+        """Persist the opt-in flag, then start/stop aw-notify right away."""
+        if self._notify_action is None:
+            return
+        checked = self._notify_action.isChecked()
+        # Hold _notify_lock so the autostart background thread cannot start a
+        # second aw-notify instance between this write and the start/stop call.
+        with self.manager._notify_lock:
+            if write_notify_enabled(self.port, checked):
+                if checked:
+                    self.manager._start_notify_locked()
+                else:
+                    self.manager.stop_notify()
+            else:
+                logger.error("Failed to save the aw-notify setting, is the server running?")
+                box = QMessageBox(self._parent)
+                box.setIcon(QMessageBox.Icon.Warning)
+                box.setText("Could not save the notifications setting. Is aw-server running?")
+                box.show()
+        # Always reflect the real state, the toggle may have failed
+        self._refresh_notify_action()
 
     def _on_autostart_toggled(self) -> None:
         """Enable/disable starting ActivityWatch at login."""
@@ -182,6 +288,15 @@ class TrayIcon(QSystemTrayIcon):
         menu.addAction(
             "Open config folder", lambda: open_dir(aw_core.dirs.get_config_dir(None))
         )
+
+        if NOTIFY_MODULE in [m.name for m in self.manager.modules]:
+            self._notify_action = menu.addAction(
+                "Enable notifications", self._on_notify_toggled
+            )
+            self._notify_action.setCheckable(True)
+            self._notify_action.setChecked(read_notify_enabled(self.port, timeout=0.5))
+            # The flag can also be changed from the web UI, re-read it on open
+            menu.aboutToShow.connect(self._refresh_notify_action)
 
         if autostart.is_supported():
             self._autostart_action = menu.addAction(
@@ -249,6 +364,20 @@ class TrayIcon(QSystemTrayIcon):
         def check_module_status() -> None:
             unexpected_exits = self.manager.get_unexpected_stops()
             for module in unexpected_exits:
+                if module.exited_cleanly():
+                    # A clean exit (code 0) is intentional, not a crash — e.g.
+                    # aw-notify exits 0 while notifications are disabled by its
+                    # opt-in gate. Restarting it here would loop every interval.
+                    logger.info(
+                        f"Module {module.name} exited cleanly (exit 0); "
+                        "not auto-restarting"
+                    )
+                    module.clear_exited_process()
+                    # A clean exit ends the crash episode: drop the restart
+                    # history so a later single crash is not mistaken for a
+                    # repeated failure. Mirrors the manual toggle/restart paths.
+                    self._restart_timestamps.pop(module.name, None)
+                    continue
                 recent = self._recent_restart_count(module.name)
                 if recent < self.MAX_AUTO_RESTARTS:
                     logger.info(
@@ -277,6 +406,33 @@ class TrayIcon(QSystemTrayIcon):
 
         QtCore.QTimer.singleShot(5000, check_module_status)
 
+    def _on_module_clicked(self, module: Module) -> None:
+        """Start or stop ``module`` from the menu, and keep that choice.
+
+        Only an explicit click lands here. Crash restarts and shutdown go
+        through ``Module.start``/``stop`` directly and never touch the config.
+        """
+        enabled = self.manager.toggle(module)
+        # Reset auto-restart timestamps on manual toggle
+        self._restart_timestamps.pop(module.name, None)
+        if not self.persist_toggles:
+            return
+        if self.manager.resolve(module.name) is not module:
+            # autostart_modules holds names, and a name autostarts the bundled
+            # copy. Saving a click on the system copy would start (or stop)
+            # the other one next time.
+            logger.info(
+                f"Not saving tray toggle of {module.name} ({module.type}): "
+                "autostart would run the bundled copy"
+            )
+            return
+        try:
+            persist_module_autostart(module.name, enabled, self.profile)
+        except Exception:
+            # An exception escaping a Qt slot aborts the app; the module has
+            # already been started/stopped, so just log it.
+            logger.exception(f"Failed to save autostart change for {module.name}")
+
     def _build_modulemenu(self, moduleMenu: QMenu) -> None:
         moduleMenu.clear()
 
@@ -284,9 +440,7 @@ class TrayIcon(QSystemTrayIcon):
             title = module.name
 
             def on_toggle(m: Module = module) -> None:
-                m.toggle(self.testing)
-                # Reset auto-restart timestamps on manual toggle
-                self._restart_timestamps.pop(m.name, None)
+                self._on_module_clicked(m)
 
             ac = moduleMenu.addAction(title, on_toggle)
 
@@ -321,6 +475,7 @@ def run(
     testing: bool = False,
     port: Optional[int] = None,
     profile: str = DEFAULT_PROFILE,
+    persist_toggles: bool = True,
 ) -> Any:
     logger.info("Creating trayicon...")
     # print(QIcon.themeSearchPaths())
@@ -388,7 +543,15 @@ def run(
     else:
         icon = QIcon("icons:logo.png")
 
-    trayIcon = TrayIcon(manager, icon, widget, testing=testing, port=port, profile=profile)
+    trayIcon = TrayIcon(
+        manager,
+        icon,
+        widget,
+        testing=testing,
+        port=port,
+        profile=profile,
+        persist_toggles=persist_toggles,
+    )
     trayIcon.show()
 
     # Re-apply tooltip after show() to ensure it registers with the
