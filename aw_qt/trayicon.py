@@ -23,7 +23,7 @@ from PyQt6.QtWidgets import (
 )
 
 from . import autostart
-from .config import dashboard_auth, persist_module_autostart
+from .config import child_environment, dashboard_auth, persist_module_autostart
 from .manager import (
     NOTIFY_MODULE,
     Manager,
@@ -42,7 +42,7 @@ def get_env() -> Dict[str, str]:
 
     https://github.com/ActivityWatch/activitywatch/issues/208#issuecomment-417346407
     """
-    env = dict(os.environ)  # make a copy of the environment
+    env = child_environment()  # a copy, consistent with any in-flight profile switch
     if env.get("APPIMAGE"):
         # Inside an AppImage, PyInstaller's "original" library path belongs
         # to the AppImage, not the host. Its Qt plugins likewise cannot be
@@ -90,7 +90,7 @@ def open_dir(d: Union[str, Path]) -> None:
     if sys.platform == "win32":
         os.startfile(d)
     elif sys.platform == "darwin":
-        subprocess.Popen(["open", d])
+        subprocess.Popen(["open", d], env=child_environment())
     else:
         # xdg-open can stay alive as long as the file manager. Poll without
         # blocking Qt, and use a file so a full stderr pipe cannot stall it.

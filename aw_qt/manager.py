@@ -16,6 +16,7 @@ from typing import Optional, List, Hashable, Set, Iterable, Dict, Tuple
 
 import aw_core
 
+from .config import child_environment
 from .wayland import WAYLAND_WATCHER  # noqa: F401 - retained for existing imports
 from .wayland import (
     WAYLAND_WATCHERS,
@@ -565,8 +566,14 @@ class Module:
 
         # There is a very good reason stdout and stderr is not PIPE here
         # See: https://github.com/ActivityWatch/aw-server/issues/27
+        # Snapshot under the profile-env lock: the tray thread may be resolving
+        # another profile's paths right now, and the child must not inherit a
+        # temporarily rewritten AW_PROFILE (ActivityWatch/aw-qt#144).
         self._process = subprocess.Popen(
-            exec_cmd, universal_newlines=True, startupinfo=startupinfo
+            exec_cmd,
+            universal_newlines=True,
+            startupinfo=startupinfo,
+            env=child_environment(),
         )
         self.dashboard_endpoint = endpoint
         self.started = True

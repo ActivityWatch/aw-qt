@@ -1,8 +1,9 @@
 import logging
 import os
 import tempfile
+import threading
 from contextlib import contextmanager
-from typing import Any, Iterator, List, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 import tomlkit
 from aw_core import dirs
@@ -26,6 +27,28 @@ autostart_on_first_run = false
 """.strip()
 
 
+# A child process inherits the environment it is spawned with, and aw-qt spawns
+# modules from a background thread while the tray thread may be resolving
+# another profile's paths. `_with_profile_env` rewrites AW_PROFILE for the
+# duration of that resolution, so an unserialized spawn would hand the child the
+# wrong profile and point `aw-sync` at another instance
+# (ActivityWatch/aw-qt#144). Every temporary mutation and every environment
+# snapshot therefore share one lock, making a snapshot wholly-before or
+# wholly-after a mutation, never during one.
+_spawn_env_lock = threading.RLock()
+
+
+def child_environment() -> Dict[str, str]:
+    """Snapshot the environment for a child process.
+
+    Always use this instead of reading ``os.environ`` directly before a spawn:
+    it cannot observe a temporary ``AW_PROFILE`` rewrite performed by
+    :func:`_with_profile_env` on another thread.
+    """
+    with _spawn_env_lock:
+        return dict(os.environ)
+
+
 @contextmanager
 def _with_profile_env(profile: str) -> Iterator[None]:
     """Resolve dirs for ``profile`` even if the caller has not exported it.
@@ -34,19 +57,23 @@ def _with_profile_env(profile: str) -> Iterator[None]:
     profile argument, so they must set the env for the duration of the
     path computation — otherwise a test or a probe for a sibling profile
     would read the process's current root.
+
+    The rewrite is held under ``_spawn_env_lock`` so a concurrent spawn cannot
+    inherit this temporary value.
     """
-    old = os.environ.get(ENV_VAR)
-    if profile == DEFAULT_PROFILE:
-        os.environ.pop(ENV_VAR, None)
-    else:
-        os.environ[ENV_VAR] = profile
-    try:
-        yield
-    finally:
-        if old is None:
+    with _spawn_env_lock:
+        old = os.environ.get(ENV_VAR)
+        if profile == DEFAULT_PROFILE:
             os.environ.pop(ENV_VAR, None)
         else:
-            os.environ[ENV_VAR] = old
+            os.environ[ENV_VAR] = profile
+        try:
+            yield
+        finally:
+            if old is None:
+                os.environ.pop(ENV_VAR, None)
+            else:
+                os.environ[ENV_VAR] = old
 
 
 def _using_legacy_testing_root() -> bool:
