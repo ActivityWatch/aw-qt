@@ -781,3 +781,52 @@ class TestRustLogLookup:
         log_dir.mkdir(parents=True)
         (log_dir / "aw-sync_2026-10-21T08-00-00+0200.log").write_text("x")
         assert manager_module._latest_rust_log_file("aw-sync", False) is None
+
+
+class TestShutdownLockOrder:
+    """Spawn must not hold ``_notify_lock`` while taking ``_spawn_env_lock``.
+
+    ActivityWatch/aw-qt#144 P2 ``05f5a4518acc``: autostart holds the notify
+    lock, then ``child_environment()`` / ``dashboard_auth()`` wait on the env
+    lock. A SIGTERM handler on the main thread (which may already hold the env
+    lock) calls ``stop_all()`` and waits for notify. Both sides block, so
+    managed children are never stopped.
+    """
+
+    def test_stop_all_does_not_deadlock_behind_env_lock(self):
+        from aw_qt.config import _spawn_env_lock
+
+        mgr = manager_module.Manager(testing=True)
+        module = Module("aw-watcher-afk", Path("/usr/bin/true"), "system")
+        mgr.modules = [module]
+
+        spawn_entered = threading.Event()
+
+        def blocking_start(testing):
+            spawn_entered.set()
+            with _spawn_env_lock:
+                module.started = True
+
+        with patch.object(module, "start", side_effect=blocking_start):
+            _spawn_env_lock.acquire()
+            try:
+                starter = threading.Thread(
+                    target=lambda: mgr.start("aw-watcher-afk"), daemon=True
+                )
+                starter.start()
+                assert spawn_entered.wait(2), "start never reached spawn"
+                finished = threading.Event()
+
+                def shutdown():
+                    mgr.stop_all()
+                    finished.set()
+
+                threading.Thread(target=shutdown, daemon=True).start()
+                assert finished.wait(2), (
+                    "stop_all deadlocked: spawn held _notify_lock while "
+                    "waiting for _spawn_env_lock"
+                )
+            finally:
+                _spawn_env_lock.release()
+            starter.join(2)
+            assert not starter.is_alive()
