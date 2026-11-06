@@ -689,11 +689,17 @@ class Manager:
         # Reentrant: a SIGINT/SIGTERM handler runs on the main thread and calls
         # stop_all(), which takes this lock again while a toggle callback on the
         # same thread may still hold it. A plain Lock would deadlock shutdown.
+        # Never hold this lock while taking ``_spawn_env_lock`` (child env
+        # snapshot / dashboard_auth): that inversion deadlocks signal-driven
+        # stop_all() (ActivityWatch/aw-qt#144).
         self._notify_lock = threading.RLock()
         # Set once shutdown begins so a late autostart thread cannot start
         # aw-notify after stop_all() has already run.
         self._shutting_down = False
         self._pending_autostart: Dict[str, object] = {}
+        # Names claimed for spawn so two callers cannot both Popen after
+        # releasing _notify_lock.
+        self._starting: Set[str] = set()
 
         self.discover_modules()
 
@@ -733,17 +739,45 @@ class Manager:
             return system[0]
         return None
 
-    def start(self, module_name: str) -> None:
-        with self._notify_lock:
-            self._pending_autostart.pop(module_name, None)
+    def _take_start_locked(self, module_name: str) -> Optional[Module]:
+        """Claim ``module_name`` for spawn. Caller holds ``_notify_lock``.
+
+        Returns the module to start *after* releasing the lock. Spawn takes
+        ``_spawn_env_lock``; holding ``_notify_lock`` across that inverts with
+        a signal-driven ``stop_all()``.
+        """
+        self._pending_autostart.pop(module_name, None)
+        if self._shutting_down:
+            return None
+        module = self.resolve(module_name)
+        if module is None:
+            logger.error(
+                "Manager tried to start nonexistent module %s", module_name
+            )
+            return None
+        if module.is_alive() or module.name in self._starting:
+            return None
+        self._starting.add(module.name)
+        return module
+
+    def _spawn_claimed(self, module: Optional[Module]) -> None:
+        """Run ``Module.start`` without holding ``_notify_lock``."""
+        if module is None:
+            return
+        try:
             if self._shutting_down:
                 return
-            module = self.resolve(module_name)
-            if module is not None:
-                if not module.is_alive():
-                    module.start(self.testing)
-            else:
-                logger.error(f"Manager tried to start nonexistent module {module_name}")
+            module.start(self.testing)
+        finally:
+            with self._notify_lock:
+                self._starting.discard(module.name)
+                if self._shutting_down and module.is_alive():
+                    module.stop()
+
+    def start(self, module_name: str) -> None:
+        with self._notify_lock:
+            module = self._take_start_locked(module_name)
+        self._spawn_claimed(module)
 
     def toggle(self, module: Module) -> bool:
         """Apply a tray choice to the selected copy, cancelling deferred startup."""
@@ -751,7 +785,19 @@ class Manager:
             self._pending_autostart.pop(module.name, None)
             if self._shutting_down:
                 return module.started
+            if module.is_alive():
+                # Stop holds no env lock; keep it serialised with autostart.
+                return module.toggle(self.testing)
+            if module.name in self._starting:
+                return module.started
+            self._starting.add(module.name)
+        try:
             return module.toggle(self.testing)
+        finally:
+            with self._notify_lock:
+                self._starting.discard(module.name)
+                if self._shutting_down and module.is_alive():
+                    module.stop()
 
     def autostart(
         self, autostart_modules: List[str], port: Optional[int] = None
@@ -805,12 +851,17 @@ class Manager:
                 logger.warning(
                     f"Server not reachable on port {server_port}, starting {', '.join(deferred)} anyway"
                 )
+            claimed: List[Module] = []
             with self._notify_lock:
                 if self._shutting_down:
                     return
                 for name in deferred:
                     if self._pending_autostart.get(name) is request:
-                        self.start(name)
+                        module = self._take_start_locked(name)
+                        if module is not None:
+                            claimed.append(module)
+            for module in claimed:
+                self._spawn_claimed(module)
 
         t = threading.Thread(target=_run, name="server-dependent-autostart", daemon=True)
         t.start()
@@ -854,9 +905,11 @@ class Manager:
                     return
                 if enabled:
                     logger.info(f"{NOTIFY_MODULE} enabled in settings, starting")
-                    self._start_notify_locked()
+                    module = self._start_notify_locked()
                 else:
                     logger.info(f"{NOTIFY_MODULE} not enabled in settings, not starting")
+                    module = None
+            self._spawn_claimed(module)
 
         t = threading.Thread(target=_run, name="aw-notify-autostart", daemon=True)
         t.start()
@@ -875,19 +928,25 @@ class Manager:
     def start_notify(self) -> None:
         """Start aw-notify unless it is already running or shutdown has begun.
 
-        Shared by the autostart thread and the tray toggle; holds _notify_lock
-        so the two cannot both start a second instance.
+        Shared by the autostart thread and the tray toggle. The start
+        decision holds _notify_lock so the two cannot both claim a second
+        instance. Spawn runs after the lock is released.
         """
         with self._notify_lock:
-            self._start_notify_locked()
+            module = self._start_notify_locked()
+        self._spawn_claimed(module)
 
-    def _start_notify_locked(self) -> None:
-        # Caller must hold _notify_lock.
+    def _start_notify_locked(self) -> Optional[Module]:
+        # Caller must hold _notify_lock. Returns the module to spawn after
+        # releasing it; spawn takes _spawn_env_lock.
         if self._shutting_down:
-            return
-        if any(m.name == NOTIFY_MODULE and m.started for m in self.modules):
-            return
-        self.start(NOTIFY_MODULE)
+            return None
+        if any(
+            m.name == NOTIFY_MODULE and (m.started or m.name in self._starting)
+            for m in self.modules
+        ):
+            return None
+        return self._take_start_locked(NOTIFY_MODULE)
 
     def stop_notify(self) -> None:
         """Stop every started aw-notify copy.

@@ -218,12 +218,14 @@ class TrayIcon(QSystemTrayIcon):
         if self._notify_action is None:
             return
         checked = self._notify_action.isChecked()
-        # Hold _notify_lock so the autostart background thread cannot start a
-        # second aw-notify instance between this write and the start/stop call.
+        # Hold _notify_lock so the autostart background thread cannot claim a
+        # second aw-notify instance between this write and the start/stop
+        # decision. Spawn runs after release: it takes _spawn_env_lock.
+        claimed = None
         with self.manager._notify_lock:
             if write_notify_enabled(self.port, checked):
                 if checked:
-                    self.manager._start_notify_locked()
+                    claimed = self.manager._start_notify_locked()
                 else:
                     self.manager.stop_notify()
             else:
@@ -232,6 +234,7 @@ class TrayIcon(QSystemTrayIcon):
                 box.setIcon(QMessageBox.Icon.Warning)
                 box.setText("Could not save the notifications setting. Is aw-server running?")
                 box.show()
+        self.manager._spawn_claimed(claimed)
         # Always reflect the real state, the toggle may have failed
         self._refresh_notify_action()
 
