@@ -83,6 +83,15 @@ def open_apibrowser(root_url: str) -> None:
     open_url(root_url + "/api")
 
 
+# Attributed so the click is counted as `qt-tray` on activitywatch.net/go/
+SUPPORT_URL = "https://activitywatch.net/go/?src=qt-tray"
+
+
+def open_support() -> None:
+    print("Opening support page")
+    open_url(SUPPORT_URL)
+
+
 def open_dir(d: Union[str, Path]) -> None:
     """From: http://stackoverflow.com/a/1795849/965332"""
     d = str(d)
@@ -275,6 +284,7 @@ class TrayIcon(QSystemTrayIcon):
         # openWebUIIcon = QIcon.fromTheme("open")
         menu.addAction("Open Dashboard", lambda: open_webui(self.root_url))
         menu.addAction("Open API Browser", lambda: open_apibrowser(self.root_url))
+        menu.addAction("Support ActivityWatch", open_support)
 
         menu.addSeparator()
 
