@@ -16,8 +16,10 @@ from aw_qt.trayicon import TrayIcon
 
 @pytest.fixture(scope="module")
 def app():
-    instance = QApplication.instance() or QApplication([])
-    yield instance
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv("QT_QPA_PLATFORM", "offscreen")
+        instance = QApplication.instance() or QApplication([])
+        yield instance
 
 
 @pytest.fixture
@@ -34,7 +36,9 @@ def server():
             self.send_response(state["status"])
             self.end_headers()
             try:
-                self.wfile.write(state.get("raw", json.dumps(state["body"]).encode()))
+                self.wfile.write(
+                    state.get("raw", json.dumps(state["body"]).encode())
+                )
             except BrokenPipeError:
                 pass  # A timeout may have closed the client connection.
 
@@ -70,9 +74,12 @@ def tray(app, server):
 
 
 @pytest.mark.parametrize(
-    "value,visible", [(True, False), (False, True), ("true", True), ({}, True)]
+    "value,visible",
+    [(True, False), (False, True), ("true", True), ({}, True)],
 )
-def test_support_item_visibility_follows_server(app, server, tray, value, visible):
+def test_support_item_visibility_follows_server(
+    app, server, tray, value, visible
+):
     server[1]["body"] = value
     server[3].set()
     tray._refresh_support_action()
@@ -99,7 +106,9 @@ def test_slow_server_does_not_block_or_duplicate_reads(app, server, tray):
     assert not tray._support_action.isVisible()
 
 
-def test_failed_read_restores_fail_open_and_next_read_recovers(app, server, tray):
+def test_failed_read_restores_fail_open_and_next_read_recovers(
+    app, server, tray
+):
     tray._support_action.setVisible(False)
     server[1]["status"] = 404
     server[3].set()
@@ -143,9 +152,11 @@ def test_missing_action_does_not_start_a_read(tray):
 
 def test_build_rootmenu_starts_read_and_rechecks_on_open(tray):
     tray.manager.modules = []
-    with patch.object(tray, "_refresh_support_action") as refresh, patch.object(
-        tray, "_build_modulemenu"
-    ), patch("aw_qt.trayicon.autostart.is_supported", return_value=False):
+    with patch.object(
+        tray, "_refresh_support_action"
+    ) as refresh, patch.object(tray, "_build_modulemenu"), patch(
+        "aw_qt.trayicon.autostart.is_supported", return_value=False
+    ):
         tray._build_rootmenu()
         refresh.assert_called_once_with()
         tray.contextMenu().aboutToShow.emit()
