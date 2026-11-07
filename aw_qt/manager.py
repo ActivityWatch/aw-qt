@@ -524,7 +524,6 @@ class Module:
         launch_guard: Optional[Callable[[], ContextManager[bool]]] = None,
     ) -> None:
         logger.info(f"Starting module {self.name}")
-        self.dashboard_endpoint = None
 
         # For server modules, check if a server is already running before attempting
         # to start one. This avoids port conflicts and the confusing "Restart" requirement
@@ -538,6 +537,7 @@ class Module:
             with launch_guard() if launch_guard else nullcontext(True) as allowed:
                 if not allowed:
                     return
+                self.dashboard_endpoint = None
                 self._external_server = True
                 self._external_server_testing = testing
                 self._external_server_probe_cache = True
@@ -829,8 +829,10 @@ class Manager:
             if self._shutting_down:
                 return module.started
             if module.is_alive():
-                # Stop holds no env lock; keep it serialised with autostart.
-                return module.toggle(self.testing)
+                # Commit to Stop: re-running toggle could observe an expired
+                # external-listener cache and enter Start under this lock.
+                module.stop()
+                return False
             pending = self._starting.pop(module.name, None)
             if pending is not None and pending[0] is module:
                 return False  # Second click on the preparing copy cancels it.
