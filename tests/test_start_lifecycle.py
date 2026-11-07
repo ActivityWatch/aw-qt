@@ -198,3 +198,33 @@ def test_selecting_other_copy_replaces_preparing_autostart():
         start.assert_called_once()
         manager._spawn_claimed(stale)
         old.assert_not_called()
+
+
+def test_stop_toggle_does_not_recheck_into_start():
+    manager, module = make_manager("aw-server-rust")
+    module.started = True
+    with patch.object(module, "is_alive", side_effect=[True, False]), patch.object(
+        module, "stop"
+    ) as stop, patch.object(module, "start") as start:
+        manager.toggle(module)
+    stop.assert_called_once()
+    start.assert_not_called()
+
+
+def test_cancelled_start_does_not_clear_replacement_endpoint():
+    from contextlib import contextmanager
+
+    _, module = make_manager("aw-server-rust")
+    endpoint = ("research", "127.0.0.1", 5601)
+    module.dashboard_endpoint = endpoint
+
+    @contextmanager
+    def cancelled():
+        yield False
+
+    with patch.object(module, "_probe_external_server", return_value=False), patch(
+        "aw_qt.manager.subprocess.Popen"
+    ) as spawned:
+        module.start(False, launch_guard=cancelled)
+    spawned.assert_not_called()
+    assert module.dashboard_endpoint == endpoint
