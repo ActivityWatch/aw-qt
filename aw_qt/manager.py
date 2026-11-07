@@ -397,6 +397,7 @@ class Module:
         self.dashboard_endpoint: Optional[Tuple[str, str, int]] = None
         self._external_server: bool = False  # True if we detected an already-running server
         self._external_server_testing: bool = False
+        self._external_server_port: Optional[int] = None
         self._external_server_probe_cache: Optional[bool] = None
         self._external_server_probe_cache_at: float = 0.0
 
@@ -413,17 +414,20 @@ class Module:
         if self.name not in ("aw-server", "aw-server-rust"):
             return None
 
-        from .config import _read_aw_server_port, _read_server_rust_port
+        from .config import _read_aw_server_port, _read_server_rust_port, _spawn_env_lock
         from .profile import profile_from_env
 
-        profile = profile_from_env(testing)
-        default_port = 5666 if testing else 5600
-        if self.name == "aw-server":
-            return _read_aw_server_port(profile) or default_port
-        return _read_server_rust_port(profile) or default_port
+        with _spawn_env_lock:
+            profile = profile_from_env(testing)
+            default_port = 5666 if testing else 5600
+            if self.name == "aw-server":
+                return _read_aw_server_port(profile) or default_port
+            return _read_server_rust_port(profile) or default_port
 
     def _probe_external_server(self, testing: bool, timeout: float = 0.2) -> bool:
-        port = self._get_server_port(testing)
+        # Reprobe an adopted endpoint without config/environment lookup: callers
+        # such as Manager.start may hold _notify_lock during is_alive().
+        port = self._external_server_port if self._external_server else self._get_server_port(testing)
         if port is None:
             return False
 
@@ -431,6 +435,7 @@ class Module:
             with urllib.request.urlopen(
                 f"http://localhost:{port}/api/0/info", timeout=timeout
             ):
+                self._external_server_port = port
                 return True
         except (urllib.error.URLError, OSError):
             return False
@@ -527,7 +532,7 @@ class Module:
         # to start one. This avoids port conflicts and the confusing "Restart" requirement
         # when aw-server is managed externally (e.g. via systemd or Docker).
         if self._probe_external_server(testing, timeout=1.0):
-            port = self._get_server_port(testing)
+            port = self._external_server_port
             logger.info(
                 f"{self.name}: server already running on port {port}, "
                 "using existing instance instead of starting a new one"
@@ -739,7 +744,7 @@ class Manager:
         self._pending_autostart: Dict[str, object] = {}
         # Names claimed for spawn so two callers cannot both Popen after
         # releasing _notify_lock.
-        self._starting: Dict[str, object] = {}
+        self._starting: Dict[str, Tuple[Module, object]] = {}
 
         self.discover_modules()
 
@@ -798,7 +803,7 @@ class Manager:
             return None
         if module.is_alive() or module.name in self._starting:
             return None
-        request = object()
+        request = (module, object())
         self._starting[module.name] = request
         return module, request
 
@@ -853,12 +858,12 @@ class Manager:
             if module.is_alive():
                 # Stop holds no env lock; keep it serialised with autostart.
                 return module.toggle(self.testing)
-            if module.name in self._starting:
-                self._starting.pop(module.name, None)
-                return False
+            pending = self._starting.pop(module.name, None)
+            if pending is not None and pending[0] is module:
+                return False  # Second click on the preparing copy cancels it.
             if module.started:
                 module.stop()  # Clean up an exited process before restarting.
-            request = object()
+            request = (module, object())
             self._starting[module.name] = request
         self._spawn_claimed((module, request))
         return module.started
