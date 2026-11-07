@@ -253,6 +253,7 @@ class TrayIcon(QSystemTrayIcon):
                 try:
                     supporter = json.loads(reply.readAll().data()) is True
                 except (ValueError, UnicodeDecodeError):
+                    # Invalid settings fail open, just like an unavailable server.
                     pass
             if self._support_action is not None:
                 self._support_action.setVisible(not supporter)

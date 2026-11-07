@@ -428,8 +428,12 @@ class TestSupporterFlag:
         handler.supporter_value = value
         assert manager_module.read_supporter(server.server_port) is expected
 
-    def test_read_supporter_server_down(self):
-        assert manager_module.read_supporter(1, timeout=0.2) is False
+    def test_read_supporter_server_down(self, monkeypatch):
+        def unavailable(*args, **kwargs):
+            raise manager_module.urllib.error.URLError("server unavailable")
+
+        monkeypatch.setattr(manager_module.urllib.request, "urlopen", unavailable)
+        assert manager_module.read_supporter(5600, timeout=0.2) is False
 
     def test_supporter_key_matches_the_web_ui(self):
         # aw-webui writes POST /0/settings/supporter with a bare boolean.
