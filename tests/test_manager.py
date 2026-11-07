@@ -7,7 +7,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Optional
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 
@@ -439,7 +439,7 @@ class TestNotifyOptIn:
         mgr, notify = self._manager_with_notify()
         with patch.object(notify, "start") as mock_start:
             self._run_autostart(mgr, server.server_port)
-        mock_start.assert_called_once_with(True)
+        mock_start.assert_called_once_with(True, launch_guard=ANY)
 
     @pytest.mark.parametrize("settings", [{"enabled": False}, {"alerts": []}, None])
     def test_does_not_start_when_disabled_or_missing(self, settings_server, settings):
@@ -489,7 +489,7 @@ class TestNotifyOptIn:
         ), patch.object(notify, "start") as mock_start:
             self._run_autostart(mgr, server.server_port)
         assert calls["n"] == 2
-        mock_start.assert_called_once_with(True)
+        mock_start.assert_called_once_with(True, launch_guard=ANY)
 
     def test_noop_without_installed_module(self, settings_server):
         server, handler = settings_server
@@ -623,14 +623,14 @@ class TestServerDependentAutostart:
             assert t is not None
             try:
                 assert entered.wait(timeout=5)
-                watcher_start.assert_called_once_with(True)
+                watcher_start.assert_called_once_with(True, launch_guard=ANY)
                 sync_start.assert_not_called()
             finally:
                 release.set()
                 t.join(timeout=5)
             assert not t.is_alive()
         wait.assert_called_once_with(5600)
-        sync_start.assert_called_once_with(True)
+        sync_start.assert_called_once_with(True, launch_guard=ANY)
 
     @pytest.mark.parametrize("manual_action", ["start", "stop", "tray", "tray_stop"])
     def test_manual_control_cancels_pending_start(self, manual_action):
@@ -646,8 +646,10 @@ class TestServerDependentAutostart:
             assert release.wait(timeout=5)
             return True
 
-        def start(testing):
-            sync.started = True
+        def start(testing, launch_guard):
+            with launch_guard() as allowed:
+                if allowed:
+                    sync.started = True
 
         def stop():
             sync.started = False
@@ -709,7 +711,7 @@ class TestServerDependentAutostart:
                     event.set()
                 for thread in threads:
                     thread.join(timeout=5)
-            sync_start.assert_called_once_with(True)
+            sync_start.assert_called_once_with(True, launch_guard=ANY)
 
     def test_aw_sync_starts_anyway_when_server_unreachable(self):
         mgr, sync, _watcher = self._manager()
@@ -719,7 +721,7 @@ class TestServerDependentAutostart:
             t = mgr.autostart(["aw-sync"], port=1)
             assert t is not None
             t.join(timeout=5)
-        sync_start.assert_called_once_with(True)
+        sync_start.assert_called_once_with(True, launch_guard=ANY)
 
     def test_aw_sync_not_started_after_shutdown_begins(self, settings_server):
         server, _handler = settings_server
@@ -735,7 +737,7 @@ class TestServerDependentAutostart:
         mgr, sync, _watcher = self._manager()
         with patch.object(sync, "start") as sync_start:
             assert mgr.autostart(["aw-sync"]) is None
-        sync_start.assert_called_once_with(True)
+        sync_start.assert_called_once_with(True, launch_guard=ANY)
 
 
 class TestRustLogLookup:
@@ -802,10 +804,13 @@ class TestShutdownLockOrder:
 
         spawn_entered = threading.Event()
 
-        def blocking_start(testing):
+        def blocking_start(testing, launch_guard):
             spawn_entered.set()
             with _spawn_env_lock:
-                module.started = True
+                pass
+            with launch_guard() as allowed:
+                if allowed:
+                    module.started = True
 
         with patch.object(module, "start", side_effect=blocking_start):
             _spawn_env_lock.acquire()

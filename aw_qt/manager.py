@@ -12,7 +12,8 @@ import urllib.request
 from pathlib import Path
 from glob import glob
 from time import monotonic, sleep
-from typing import Optional, List, Hashable, Set, Iterable, Dict, Tuple
+from typing import Optional, List, Hashable, Set, Iterable, Dict, Tuple, Callable, ContextManager
+from contextlib import contextmanager, nullcontext
 
 import aw_core
 import aw_core.dirs
@@ -515,7 +516,10 @@ class Module:
         _, address, port = endpoint
         return self._probe_dashboard_listener(address, port)
 
-    def start(self, testing: bool) -> None:
+    def start(
+        self, testing: bool,
+        launch_guard: Optional[Callable[[], ContextManager[bool]]] = None,
+    ) -> None:
         logger.info(f"Starting module {self.name}")
         self.dashboard_endpoint = None
 
@@ -528,30 +532,37 @@ class Module:
                 f"{self.name}: server already running on port {port}, "
                 "using existing instance instead of starting a new one"
             )
-            self._external_server = True
-            self._external_server_testing = testing
-            self._external_server_probe_cache = True
-            self._external_server_probe_cache_at = monotonic()
-            self.started = True
+            with launch_guard() if launch_guard else nullcontext(True) as allowed:
+                if not allowed:
+                    return
+                self._external_server = True
+                self._external_server_testing = testing
+                self._external_server_probe_cache = True
+                self._external_server_probe_cache_at = monotonic()
+                self.started = True
             return
 
         exec_cmd = [str(self.path)]
         if testing:
             exec_cmd.append("--testing")
-        endpoint = None
-        if self.name == "aw-server-rust":
-            from .config import dashboard_auth
-            from .profile import profile_from_env
+        from .config import _spawn_env_lock, dashboard_auth
+        from .profile import profile_from_env
 
-            profile = profile_from_env(testing)
-            port = self._get_server_port(testing)
-            auth = dashboard_auth(profile, port) if port is not None else None
-            if auth is not None and port is not None:
-                address, _ = auth
-                # Pin the child to the endpoint we authorize, even if the config
-                # changes between this read and the child's startup read.
-                exec_cmd.extend(["--host", address, "--port", str(port)])
-                endpoint = (profile, address, port)
+        endpoint = None
+        # Resolve identity and environment in one critical section. Never take
+        # the manager launch guard until this environment lock is released.
+        with _spawn_env_lock:
+            env = child_environment()
+            if self.name == "aw-server-rust":
+                profile = profile_from_env(testing)
+                port = self._get_server_port(testing)
+                auth = dashboard_auth(profile, port) if port is not None else None
+                if auth is not None and port is not None:
+                    address, _ = auth
+                    # Pin the child to the endpoint we authorize, even if the config
+                    # changes between this read and the child's startup read.
+                    exec_cmd.extend(["--host", address, "--port", str(port)])
+                    endpoint = (profile, address, port)
         # logger.debug("Running: {}".format(exec_cmd))
 
         # Don't display a console window on Windows
@@ -568,17 +579,19 @@ class Module:
 
         # There is a very good reason stdout and stderr is not PIPE here
         # See: https://github.com/ActivityWatch/aw-server/issues/27
-        # Snapshot under the profile-env lock: the tray thread may be resolving
-        # another profile's paths right now, and the child must not inherit a
-        # temporarily rewritten AW_PROFILE (ActivityWatch/aw-qt#144).
-        self._process = subprocess.Popen(
-            exec_cmd,
-            universal_newlines=True,
-            startupinfo=startupinfo,
-            env=child_environment(),
-        )
-        self.dashboard_endpoint = endpoint
-        self.started = True
+        # Stop/shutdown may cancel preparation. Once admitted, publish the
+        # handle before releasing the guard so shutdown cannot miss the child.
+        with launch_guard() if launch_guard else nullcontext(True) as allowed:
+            if not allowed:
+                return
+            self._process = subprocess.Popen(
+                exec_cmd,
+                universal_newlines=True,
+                startupinfo=startupinfo,
+                env=env,
+            )
+            self.dashboard_endpoint = endpoint
+            self.started = True
 
     def stop(self) -> None:
         """
@@ -726,7 +739,7 @@ class Manager:
         self._pending_autostart: Dict[str, object] = {}
         # Names claimed for spawn so two callers cannot both Popen after
         # releasing _notify_lock.
-        self._starting: Set[str] = set()
+        self._starting: Dict[str, object] = {}
 
         self.discover_modules()
 
@@ -766,10 +779,11 @@ class Manager:
             return system[0]
         return None
 
-    def _take_start_locked(self, module_name: str) -> Optional[Module]:
+    def _take_start_locked(self, module_name: str) -> Optional[Tuple[Module, object]]:
         """Claim ``module_name`` for spawn. Caller holds ``_notify_lock``.
 
-        Returns the module to start *after* releasing the lock. Spawn takes
+        Returns the module and request identity to start after releasing the lock.
+        Spawn takes
         ``_spawn_env_lock``; holding ``_notify_lock`` across that inverts with
         a signal-driven ``stop_all()``.
         """
@@ -784,22 +798,46 @@ class Manager:
             return None
         if module.is_alive() or module.name in self._starting:
             return None
-        self._starting.add(module.name)
-        return module
+        request = object()
+        self._starting[module.name] = request
+        return module, request
 
-    def _spawn_claimed(self, module: Optional[Module]) -> None:
-        """Run ``Module.start`` without holding ``_notify_lock``."""
-        if module is None:
+    def _spawn_claimed(self, claim: Optional[Tuple[Module, object]]) -> None:
+        """Prepare outside ``_notify_lock``; serialize spawn and publication."""
+        if claim is None:
             return
-        try:
-            if self._shutting_down:
+        module, request = claim
+        with self._notify_lock:
+            if self._starting.get(module.name) is not request or self._shutting_down:
                 return
-            module.start(self.testing)
+
+        @contextmanager
+        def launch_guard():
+            # Only process creation/publication holds this lock, never profile
+            # lookup or environment snapshot. Shutdown can cancel preparation
+            # without waiting for a lock held by its interrupted main thread.
+            with self._notify_lock:
+                allowed = (
+                    not self._shutting_down
+                    and self._starting.get(module.name) is request
+                )
+                try:
+                    yield allowed
+                finally:
+                    # A main-thread signal handler may reenter the RLock while
+                    # Popen is running. Retire a handle published after that stop.
+                    if allowed and (
+                        self._shutting_down
+                        or self._starting.get(module.name) is not request
+                    ) and module.started:
+                        module.stop()
+
+        try:
+            module.start(self.testing, launch_guard=launch_guard)
         finally:
             with self._notify_lock:
-                self._starting.discard(module.name)
-                if self._shutting_down and module.is_alive():
-                    module.stop()
+                if self._starting.get(module.name) is request:
+                    self._starting.pop(module.name, None)
 
     def start(self, module_name: str) -> None:
         with self._notify_lock:
@@ -816,15 +854,14 @@ class Manager:
                 # Stop holds no env lock; keep it serialised with autostart.
                 return module.toggle(self.testing)
             if module.name in self._starting:
-                return module.started
-            self._starting.add(module.name)
-        try:
-            return module.toggle(self.testing)
-        finally:
-            with self._notify_lock:
-                self._starting.discard(module.name)
-                if self._shutting_down and module.is_alive():
-                    module.stop()
+                self._starting.pop(module.name, None)
+                return False
+            if module.started:
+                module.stop()  # Clean up an exited process before restarting.
+            request = object()
+            self._starting[module.name] = request
+        self._spawn_claimed((module, request))
+        return module.started
 
     def autostart(
         self, autostart_modules: List[str], port: Optional[int] = None
@@ -878,7 +915,7 @@ class Manager:
                 logger.warning(
                     f"Server not reachable on port {server_port}, starting {', '.join(deferred)} anyway"
                 )
-            claimed: List[Module] = []
+            claimed: List[Tuple[Module, object]] = []
             with self._notify_lock:
                 if self._shutting_down:
                     return
@@ -945,6 +982,7 @@ class Manager:
     def stop(self, module_name: str) -> None:
         with self._notify_lock:
             self._pending_autostart.pop(module_name, None)
+            self._starting.pop(module_name, None)
             for m in self.modules:
                 if m.name == module_name:
                     m.stop()
@@ -963,7 +1001,7 @@ class Manager:
             module = self._start_notify_locked()
         self._spawn_claimed(module)
 
-    def _start_notify_locked(self) -> Optional[Module]:
+    def _start_notify_locked(self) -> Optional[Tuple[Module, object]]:
         # Caller must hold _notify_lock. Returns the module to spawn after
         # releasing it; spawn takes _spawn_env_lock.
         if self._shutting_down:
@@ -982,6 +1020,8 @@ class Manager:
         stops the first match, so a running second copy would survive a disable.
         """
         with self._notify_lock:
+            self._starting.pop(NOTIFY_MODULE, None)
+            self._pending_autostart.pop(NOTIFY_MODULE, None)
             for m in self.modules:
                 if m.name == NOTIFY_MODULE and m.started:
                     m.stop()
@@ -989,8 +1029,10 @@ class Manager:
     def stop_all(self) -> None:
         with self._notify_lock:
             self._shutting_down = True
-        for module in filter(lambda m: m.is_alive(), self.modules):
-            module.stop()
+            self._starting.clear()
+            self._pending_autostart.clear()
+            for module in filter(lambda m: m.is_alive(), self.modules):
+                module.stop()
 
     def print_status(self, module_name: Optional[str] = None) -> None:
         header = "name                status      type"
