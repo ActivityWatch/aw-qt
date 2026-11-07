@@ -352,11 +352,18 @@ class _SettingsHandler(BaseHTTPRequestHandler):
     """Minimal aw-server stand-in serving /api/0/info and /api/0/settings/aw-notify."""
 
     notify_settings = None  # None => 404 (key missing)
+    supporter_value = None  # None => 404 (key missing)
     settings_get_error: Optional[int] = None  # set to an HTTP status code to force an error
 
     def do_GET(self):
         if self.path == "/api/0/info":
             body = b"{}"
+        elif self.path == "/api/0/settings/supporter":
+            if self.supporter_value is None:
+                self.send_response(404)
+                self.end_headers()
+                return
+            body = json.dumps(self.supporter_value).encode()
         elif self.path == "/api/0/settings/aw-notify":
             if self.settings_get_error is not None:
                 self.send_response(self.settings_get_error)
@@ -399,7 +406,34 @@ def settings_server():
     yield server, _SettingsHandler
     server.shutdown()
     _SettingsHandler.notify_settings = None
+    _SettingsHandler.supporter_value = None
     _SettingsHandler.settings_get_error = None
+
+
+class TestSupporterFlag:
+    """The honor-system supporter flag comes from the server's settings store."""
+
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            (True, True),
+            (False, False),
+            ("true", False),  # only a real boolean true counts
+            ({"supporter": True}, False),  # object is not the scalar the web UI writes
+            (None, False),  # key missing (404) => not a supporter
+        ],
+    )
+    def test_read_supporter(self, settings_server, value, expected):
+        server, handler = settings_server
+        handler.supporter_value = value
+        assert manager_module.read_supporter(server.server_port) is expected
+
+    def test_read_supporter_server_down(self):
+        assert manager_module.read_supporter(1, timeout=0.2) is False
+
+    def test_supporter_key_matches_the_web_ui(self):
+        # aw-webui writes POST /0/settings/supporter with a bare boolean.
+        assert manager_module.SUPPORTER_SETTINGS_KEY == "supporter"
 
 
 class TestNotifyOptIn:

@@ -26,6 +26,7 @@ def make_tray(module, manager, timestamps=None):
         _build_modulemenu=MagicMock(),
         _on_notify_toggled=MagicMock(),
         _refresh_notify_action=MagicMock(),
+        _refresh_support_action=MagicMock(),
         setContextMenu=MagicMock(),
         showMessage=MagicMock(),
         _restart_timestamps=dict(timestamps or {}),

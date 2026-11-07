@@ -28,6 +28,7 @@ from .manager import (
     Manager,
     Module,
     read_notify_enabled,
+    read_supporter,
     write_notify_enabled,
 )
 from .profile import DEFAULT_PROFILE, TESTING_PROFILE
@@ -185,6 +186,7 @@ class TrayIcon(QSystemTrayIcon):
         self._restart_timestamps: Dict[str, List[float]] = {}
         self._autostart_action: Optional[QAction] = None
         self._notify_action: Optional[QAction] = None
+        self._support_action: Optional[QAction] = None
 
         if port is None:
             port = 5666 if testing else 5600
@@ -220,6 +222,16 @@ class TrayIcon(QSystemTrayIcon):
         """Sync the menu item with the shared `aw-notify.enabled` setting."""
         if self._notify_action is not None:
             self._notify_action.setChecked(read_notify_enabled(self.port, timeout=0.5))
+
+    def _refresh_support_action(self) -> None:
+        """Hide the support item once the server says the user already supports us.
+
+        The menu is built once, possibly before aw-server answers, so this also
+        runs when the menu is opened and again right after building it. Anything
+        other than an explicit `true` keeps the item visible.
+        """
+        if self._support_action is not None:
+            self._support_action.setVisible(not read_supporter(self.port, timeout=0.5))
 
     def _on_notify_toggled(self) -> None:
         """Persist the opt-in flag, then start/stop aw-notify right away."""
@@ -284,7 +296,10 @@ class TrayIcon(QSystemTrayIcon):
         # openWebUIIcon = QIcon.fromTheme("open")
         menu.addAction("Open Dashboard", lambda: open_webui(self.root_url))
         menu.addAction("Open API Browser", lambda: open_apibrowser(self.root_url))
-        menu.addAction("Support ActivityWatch", open_support)
+        self._support_action = menu.addAction("Support ActivityWatch", open_support)
+        self._refresh_support_action()
+        # The flag is set from the web UI's Settings page, so re-read it on open
+        menu.aboutToShow.connect(self._refresh_support_action)
 
         menu.addSeparator()
 
