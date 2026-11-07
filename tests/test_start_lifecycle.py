@@ -151,3 +151,50 @@ def test_reentrant_shutdown_during_popen_stops_published_child():
         manager.start(module.name)
     process.terminate.assert_called_once()
     assert not module.is_alive()
+
+
+def test_server_port_waits_for_profile_rewrite(monkeypatch):
+    monkeypatch.setenv("AW_PROFILE", "research")
+    _, module = make_manager("aw-server-rust")
+    entered = threading.Event()
+    result = []
+
+    def read():
+        entered.set()
+        result.append(module._get_server_port(False))
+
+    with patch("aw_qt.config._read_server_rust_port", side_effect=lambda profile: 5601 if profile == "research" else 5600):
+        with _with_profile_env("default"):
+            worker = threading.Thread(target=read, daemon=True)
+            worker.start()
+            assert entered.wait(2)
+            worker.join(0.2)
+        worker.join(5)
+    assert result == [5601]
+
+
+def test_adopted_server_reprobe_uses_adopted_port_not_environment():
+    manager, module = make_manager("aw-server-rust")
+    with patch.object(module, "_get_server_port", return_value=5611), patch(
+        "aw_qt.manager.urllib.request.urlopen"
+    ):
+        module.start(False)
+    module._external_server_probe_cache = None
+    with patch.object(module, "_get_server_port", side_effect=AssertionError("env lookup under manager lock")), patch(
+        "aw_qt.manager.urllib.request.urlopen"
+    ) as opened:
+        manager.start(module.name)
+    opened.assert_called_once_with("http://localhost:5611/api/0/info", timeout=0.2)
+
+
+def test_selecting_other_copy_replaces_preparing_autostart():
+    manager, bundled = make_manager("aw-sync")
+    system = Module("aw-sync", Path("/system/aw-sync"), "system")
+    manager.modules.append(system)
+    with manager._notify_lock:
+        stale = manager._take_start_locked(bundled.name)
+    with patch.object(system, "start") as start, patch.object(bundled, "start") as old:
+        manager.toggle(system)
+        start.assert_called_once()
+        manager._spawn_claimed(stale)
+        old.assert_not_called()
