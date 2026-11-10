@@ -15,6 +15,7 @@ def test_system_opener_environment(monkeypatch, appimage):
     monkeypatch.setenv("LD_LIBRARY_PATH_ORIG", "/host/libraries")
     monkeypatch.setenv("QT_PLUGIN_PATH", "/host/qt/plugins")
     monkeypatch.setenv("QT_QPA_PLATFORM_PLUGIN_PATH", "/host/qt/platforms")
+    monkeypatch.setenv("QML2_IMPORT_PATH", "/host/qt/qml")
     monkeypatch.setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/run/user/1000/bus")
     monkeypatch.setenv("DISPLAY", ":0")
     if appimage:
@@ -25,6 +26,8 @@ def test_system_opener_environment(monkeypatch, appimage):
         monkeypatch.setenv(
             "QT_QPA_PLATFORM_PLUGIN_PATH", "/tmp/.mount_ActivityWatch/qt/platforms"
         )
+        # PyInstaller's PyQt6 runtime hook points this into the bundle too.
+        monkeypatch.setenv("QML2_IMPORT_PATH", "/tmp/.mount_ActivityWatch/qt/qml")
     parent = dict(os.environ)
 
     child = get_env()
@@ -35,12 +38,14 @@ def test_system_opener_environment(monkeypatch, appimage):
             "LD_LIBRARY_PATH_ORIG",
             "QT_PLUGIN_PATH",
             "QT_QPA_PLATFORM_PLUGIN_PATH",
+            "QML2_IMPORT_PATH",
         ):
             assert key not in child, key
     else:
         assert child["LD_LIBRARY_PATH"] == "/host/libraries"
         assert child["QT_PLUGIN_PATH"] == "/host/qt/plugins"
         assert child["QT_QPA_PLATFORM_PLUGIN_PATH"] == "/host/qt/platforms"
+        assert child["QML2_IMPORT_PATH"] == "/host/qt/qml"
     assert child["DBUS_SESSION_BUS_ADDRESS"] == parent["DBUS_SESSION_BUS_ADDRESS"]
     assert child["DISPLAY"] == parent["DISPLAY"]
     assert dict(os.environ) == parent
