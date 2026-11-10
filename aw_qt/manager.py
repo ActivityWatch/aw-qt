@@ -42,6 +42,12 @@ def _log_modules(modules: List["Module"]) -> None:
 NOTIFY_MODULE = "aw-notify"
 NOTIFY_SETTINGS_KEY = "aw-notify"
 
+# Honor-system flag set from the web UI Settings page ("I already support
+# ActivityWatch"). Stored in the server's generic settings store, so every
+# client reading /api/0/settings sees the same answer. Unset means "show the
+# support prompts", which is also what an unreachable server must mean.
+SUPPORTER_SETTINGS_KEY = "supporter"
+
 # Modules that talk to the server on startup. aw-sync's first sync cycle fails
 # if it starts before aw-server listens, so at login it is started only once
 # the server answers (or after the wait times out).
@@ -195,6 +201,25 @@ def write_notify_enabled(port: int, enabled: bool, timeout: float = 2.0) -> bool
             return True
     except (urllib.error.URLError, OSError):
         return False
+
+
+def read_supporter(port: int, timeout: float = 2.0) -> bool:
+    """Return True iff the server's `supporter` setting is boolean true.
+
+    The web UI stores this as a plain boolean (`/api/0/settings/supporter`), and
+    skips writing it while false, so a missing key (404), an unreachable server
+    or any non-boolean-true value all mean "not a supporter" — keep showing the
+    support prompts, which is today's behaviour.
+    """
+    try:
+        with urllib.request.urlopen(
+            f"http://localhost:{port}/api/0/settings/{SUPPORTER_SETTINGS_KEY}",
+            timeout=timeout,
+        ) as resp:
+            value = json.load(resp)
+    except (urllib.error.URLError, OSError, ValueError):
+        return False
+    return value is True
 
 
 def _read_notify_enabled_or_raise(port: int, timeout: float = 2.0) -> bool:

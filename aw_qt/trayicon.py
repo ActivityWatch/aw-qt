@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import signal
@@ -12,6 +13,7 @@ from typing import Any, Dict, List, Optional, Union
 import aw_core
 from PyQt6 import QtCore
 from PyQt6.QtGui import QAction, QIcon
+from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PyQt6.QtWidgets import (
     QApplication,
     QMenu,
@@ -25,6 +27,7 @@ from . import autostart
 from .config import persist_module_autostart
 from .manager import (
     NOTIFY_MODULE,
+    SUPPORTER_SETTINGS_KEY,
     Manager,
     Module,
     read_notify_enabled,
@@ -185,6 +188,9 @@ class TrayIcon(QSystemTrayIcon):
         self._restart_timestamps: Dict[str, List[float]] = {}
         self._autostart_action: Optional[QAction] = None
         self._notify_action: Optional[QAction] = None
+        self._support_action: Optional[QAction] = None
+        self._support_network = QNetworkAccessManager(self)
+        self._support_reply: Optional[QNetworkReply] = None
 
         if port is None:
             port = 5666 if testing else 5600
@@ -220,6 +226,41 @@ class TrayIcon(QSystemTrayIcon):
         """Sync the menu item with the shared `aw-notify.enabled` setting."""
         if self._notify_action is not None:
             self._notify_action.setChecked(read_notify_enabled(self.port, timeout=0.5))
+
+    def _refresh_support_action(self) -> None:
+        """Refresh asynchronously, leaving the last visibility in place meanwhile."""
+        if self._support_action is None or self._support_reply is not None:
+            return
+        request = QNetworkRequest(
+            QtCore.QUrl(f"{self.root_url}/api/0/settings/{SUPPORTER_SETTINGS_KEY}")
+        )
+        request.setTransferTimeout(500)
+        reply = self._support_network.get(request)
+        if reply is None:
+            self._support_action.setVisible(True)
+            return
+        self._support_reply = reply
+        # A total deadline also bounds a server that slowly trickles bytes.
+        deadline = QtCore.QTimer(reply)
+        deadline.setSingleShot(True)
+        deadline.timeout.connect(reply.abort)
+        deadline.start(500)
+
+        def finished() -> None:
+            deadline.stop()
+            supporter = False
+            if reply.error() == QNetworkReply.NetworkError.NoError:
+                try:
+                    supporter = json.loads(reply.readAll().data()) is True
+                except (ValueError, UnicodeDecodeError):
+                    # Invalid settings fail open, just like an unavailable server.
+                    pass
+            if self._support_action is not None:
+                self._support_action.setVisible(not supporter)
+            self._support_reply = None
+            reply.deleteLater()
+
+        reply.finished.connect(finished)
 
     def _on_notify_toggled(self) -> None:
         """Persist the opt-in flag, then start/stop aw-notify right away."""
@@ -284,7 +325,10 @@ class TrayIcon(QSystemTrayIcon):
         # openWebUIIcon = QIcon.fromTheme("open")
         menu.addAction("Open Dashboard", lambda: open_webui(self.root_url))
         menu.addAction("Open API Browser", lambda: open_apibrowser(self.root_url))
-        menu.addAction("Support ActivityWatch", open_support)
+        self._support_action = menu.addAction("Support ActivityWatch", open_support)
+        self._refresh_support_action()
+        # The flag is set from the web UI's Settings page, so re-read it on open
+        menu.aboutToShow.connect(self._refresh_support_action)
 
         menu.addSeparator()
 
