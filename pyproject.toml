@@ -13,7 +13,7 @@ packages = [
 aw-qt = "aw_qt:main"
 
 [tool.poetry.dependencies]
-python = "^3.8,<3.14"  # PyInstaller needs <3.14
+python = ">=3.9,<3.14"  # PyInstaller needs <3.14; PyQt6 >=6.8 needs >=3.9
 aw-core = "^0.5.18"
 
 pyobjc-framework-Cocoa = { version = "*", platform = "darwin" }
@@ -27,9 +27,16 @@ importlib-metadata = {version = "*", python = "<3.10"}
 setuptools = "*"
 
 [tool.poetry.group.pyqt.dependencies]
-# keep these in sync
-PyQt6 = "6.5.3"
-PyQt6-Qt6 = "6.5.3"
+# Keep these in sync. Qt 6.10 fixes the macOS 26/27 tray crash; retain 6.5.3
+# elsewhere so Linux wheels still support glibc 2.28 instead of requiring 2.34.
+PyQt6 = [
+    { version = "6.10.2", markers = "sys_platform == 'darwin'" },
+    { version = "6.5.3", markers = "sys_platform != 'darwin'" },
+]
+PyQt6-Qt6 = [
+    { version = "6.10.2", markers = "sys_platform == 'darwin'" },
+    { version = "6.5.3", markers = "sys_platform != 'darwin'" },
+]
 
 [tool.poetry.dev-dependencies]
 mypy = "*"

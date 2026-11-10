@@ -69,8 +69,15 @@ jobs:
       run: |
         source venv/bin/activate || source venv/Scripts/activate
         make package
+    - name: Archive package
+      # upload-artifact flattens symlinks and drops exec bits. On macOS the
+      # PyInstaller bundle's top-level Qt libraries are symlinks into the
+      # Qt frameworks; as plain copies Qt cannot find its QtCore bundle and
+      # aw-qt segfaults at startup. A tarball keeps the layout intact.
+      shell: bash
+      run: tar -czf dist/aw-qt.tar.gz -C dist aw-qt
     - name: Upload package
       uses: actions/upload-artifact@v4
       with:
         name: builds-${{ runner.os }}-py${{ matrix.python_version }}
-        path: dist/aw-qt
+        path: dist/aw-qt.tar.gz
