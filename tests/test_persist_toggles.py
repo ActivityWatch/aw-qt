@@ -301,6 +301,9 @@ class TestTrayClick:
         with patch.object(Manager, "discover_modules"):
             manager = Manager()
         manager.modules = list(modules)
+        # These slot/persistence tests stub the lifecycle boundary, not the
+        # Module implementation now used by Manager's guarded launch path.
+        manager.toggle = lambda module: module.toggle(False)
         fake = SimpleNamespace(
             manager=manager,
             testing=False,

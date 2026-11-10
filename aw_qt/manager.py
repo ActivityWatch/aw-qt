@@ -5,17 +5,21 @@ import logging
 import threading
 import subprocess
 import platform
+import http.client
+import io
 import urllib.error
 import urllib.request
 from pathlib import Path
 from glob import glob
 from time import monotonic, sleep
-from typing import Optional, List, Hashable, Set, Iterable, Dict
+from typing import Optional, List, Hashable, Set, Iterable, Dict, Tuple, Callable, ContextManager
+from contextlib import contextmanager, nullcontext
 
 import aw_core
 import aw_core.dirs
 import platformdirs
 
+from .config import child_environment
 from .wayland import WAYLAND_WATCHER  # noqa: F401 - retained for existing imports
 from .wayland import (
     WAYLAND_WATCHERS,
@@ -368,6 +372,40 @@ def _discover_modules_system() -> List["Module"]:
     return modules
 
 
+# /api/0/info is a small JSON object. Cap body size and wall-clock duration so a
+# slow local listener cannot freeze the tray Qt callback.
+DASHBOARD_INFO_MAX_BYTES = 4096
+
+
+class _DashboardInfoReader(io.RawIOBase):
+    """Apply the total deadline to every socket read, including HTTP framing."""
+
+    def __init__(self, sock, deadline: float) -> None:
+        super().__init__()
+        self.sock = sock
+        self.deadline = deadline
+
+    def readable(self) -> bool:
+        return True
+
+    def readinto(self, buffer) -> int:
+        remaining = self.deadline - monotonic()
+        if remaining <= 0:
+            raise TimeoutError("dashboard info probe timed out")
+        self.sock.settimeout(remaining)
+        return self.sock.recv_into(buffer)
+
+
+class _DashboardInfoSocket:
+    def __init__(self, sock, deadline: float) -> None:
+        self.sock = sock
+        self.deadline = deadline
+
+    def makefile(self, mode):
+        # HTTPResponse uses this stream for status, headers, chunks and body.
+        return io.BufferedReader(_DashboardInfoReader(self.sock, self.deadline))
+
+
 class Module:
     def __init__(self, name: str, path: Path, type: str) -> None:
         self.name = name
@@ -381,8 +419,10 @@ class Module:
         # self.location = "system" if _is_system_module(name) else "bundled"
         self._process: Optional[subprocess.Popen[str]] = None
         self._last_process: Optional[subprocess.Popen[str]] = None
+        self.dashboard_endpoint: Optional[Tuple[str, str, int]] = None
         self._external_server: bool = False  # True if we detected an already-running server
         self._external_server_testing: bool = False
+        self._external_server_port: Optional[int] = None
         self._external_server_probe_cache: Optional[bool] = None
         self._external_server_probe_cache_at: float = 0.0
 
@@ -399,17 +439,20 @@ class Module:
         if self.name not in ("aw-server", "aw-server-rust"):
             return None
 
-        from .config import _read_aw_server_port, _read_server_rust_port
+        from .config import _read_aw_server_port, _read_server_rust_port, _spawn_env_lock
         from .profile import profile_from_env
 
-        profile = profile_from_env(testing)
-        default_port = 5666 if testing else 5600
-        if self.name == "aw-server":
-            return _read_aw_server_port(profile) or default_port
-        return _read_server_rust_port(profile) or default_port
+        with _spawn_env_lock:
+            profile = profile_from_env(testing)
+            default_port = 5666 if testing else 5600
+            if self.name == "aw-server":
+                return _read_aw_server_port(profile) or default_port
+            return _read_server_rust_port(profile) or default_port
 
     def _probe_external_server(self, testing: bool, timeout: float = 0.2) -> bool:
-        port = self._get_server_port(testing)
+        # Reprobe an adopted endpoint without config/environment lookup: callers
+        # such as Manager.start may hold _notify_lock during is_alive().
+        port = self._external_server_port if self._external_server else self._get_server_port(testing)
         if port is None:
             return False
 
@@ -417,6 +460,7 @@ class Module:
             with urllib.request.urlopen(
                 f"http://localhost:{port}/api/0/info", timeout=timeout
             ):
+                self._external_server_port = port
                 return True
         except (urllib.error.URLError, OSError):
             return False
@@ -434,28 +478,121 @@ class Module:
         self._external_server_probe_cache_at = now
         return alive
 
-    def start(self, testing: bool) -> None:
+    def _probe_dashboard_listener(
+        self, address: str, port: int, timeout: float = 0.2
+    ) -> bool:
+        """Return True only if the pinned numeric endpoint answers as ActivityWatch.
+
+        GET /api/0/info is public even with auth enabled, so this must not send
+        the API key. HTTP errors (including 404 occupants) fail closed. Body size
+        and wall-clock duration are bounded so a slow listener cannot freeze Qt.
+        """
+        host = f"[{address}]" if ":" in address else address
+        deadline = monotonic() + timeout
+        conn = None
+        try:
+            conn = http.client.HTTPConnection(host, port, timeout=timeout)
+            conn.connect()
+            remaining = deadline - monotonic()
+            if remaining <= 0:
+                return False
+            conn.sock.settimeout(remaining)
+            conn.request("GET", "/api/0/info")
+            with http.client.HTTPResponse(
+                # HTTPResponse only needs makefile(); keep the real socket owned by conn.
+                _DashboardInfoSocket(conn.sock, deadline)  # type: ignore[arg-type]
+            ) as resp:
+                resp.begin()
+                if resp.status != 200:
+                    return False
+                length_header = resp.getheader("Content-Length")
+                if length_header is not None:
+                    try:
+                        length = int(length_header)
+                    except ValueError:
+                        return False
+                    if length < 0 or length > DASHBOARD_INFO_MAX_BYTES:
+                        return False
+                payload = resp.read(DASHBOARD_INFO_MAX_BYTES + 1)
+                if len(payload) > DASHBOARD_INFO_MAX_BYTES or resp.length not in (None, 0):
+                    return False
+                body = json.loads(payload.decode("utf-8"))
+            return isinstance(body, dict) and "hostname" in body
+        except (
+            urllib.error.URLError,
+            OSError,
+            ValueError,
+            UnicodeDecodeError,
+            RecursionError,
+            http.client.HTTPException,
+        ):
+            return False
+        finally:
+            if conn is not None:
+                conn.close()
+
+    def dashboard_listener_owned(self) -> bool:
+        """Whether a live owned child currently answers on the pinned endpoint.
+
+        ``dashboard_endpoint`` is launch identity (profile/address/port), not
+        listener ownership. A 404 occupant or a still-initializing child must
+        not receive the credential.
+        """
+        if self._external_server or not self.is_alive():
+            return False
+        endpoint = self.dashboard_endpoint
+        if endpoint is None:
+            return False
+        _, address, port = endpoint
+        return self._probe_dashboard_listener(address, port)
+
+    def start(
+        self, testing: bool,
+        launch_guard: Optional[Callable[[], ContextManager[bool]]] = None,
+    ) -> None:
         logger.info(f"Starting module {self.name}")
 
         # For server modules, check if a server is already running before attempting
         # to start one. This avoids port conflicts and the confusing "Restart" requirement
         # when aw-server is managed externally (e.g. via systemd or Docker).
         if self._probe_external_server(testing, timeout=1.0):
-            port = self._get_server_port(testing)
+            port = self._external_server_port
             logger.info(
                 f"{self.name}: server already running on port {port}, "
                 "using existing instance instead of starting a new one"
             )
-            self._external_server = True
-            self._external_server_testing = testing
-            self._external_server_probe_cache = True
-            self._external_server_probe_cache_at = monotonic()
-            self.started = True
+            with launch_guard() if launch_guard else nullcontext(True) as allowed:
+                if not allowed:
+                    return
+                self.dashboard_endpoint = None
+                self._external_server = True
+                self._external_server_testing = testing
+                self._external_server_probe_cache = True
+                self._external_server_probe_cache_at = monotonic()
+                self.started = True
             return
 
         exec_cmd = [str(self.path)]
         if testing:
             exec_cmd.append("--testing")
+        from .config import _spawn_env_lock, dashboard_auth
+        from .profile import profile_from_env
+
+        endpoint = None
+        # Resolve identity and environment in one critical section. Never take
+        # the manager launch guard until this environment lock is released.
+        with _spawn_env_lock:
+            env = child_environment()
+            if self.name == "aw-server-rust":
+                profile = profile_from_env(testing)
+                port = self._get_server_port(testing)
+                auth = dashboard_auth(profile, port) if port is not None else None
+                if auth is not None and port is not None:
+                    address, _ = auth
+                    # Pin the child to the endpoint we authorize, even if the config
+                    # changes between this read and the child's startup read.
+                    exec_cmd.extend(["--host", address, "--port", str(port)])
+                    endpoint = (profile, address, port)
         # logger.debug("Running: {}".format(exec_cmd))
 
         # Don't display a console window on Windows
@@ -472,10 +609,19 @@ class Module:
 
         # There is a very good reason stdout and stderr is not PIPE here
         # See: https://github.com/ActivityWatch/aw-server/issues/27
-        self._process = subprocess.Popen(
-            exec_cmd, universal_newlines=True, startupinfo=startupinfo
-        )
-        self.started = True
+        # Stop/shutdown may cancel preparation. Once admitted, publish the
+        # handle before releasing the guard so shutdown cannot miss the child.
+        with launch_guard() if launch_guard else nullcontext(True) as allowed:
+            if not allowed:
+                return
+            self._process = subprocess.Popen(
+                exec_cmd,
+                universal_newlines=True,
+                startupinfo=startupinfo,
+                env=env,
+            )
+            self.dashboard_endpoint = endpoint
+            self.started = True
 
     def stop(self) -> None:
         """
@@ -613,11 +759,17 @@ class Manager:
         # Reentrant: a SIGINT/SIGTERM handler runs on the main thread and calls
         # stop_all(), which takes this lock again while a toggle callback on the
         # same thread may still hold it. A plain Lock would deadlock shutdown.
+        # Never hold this lock while taking ``_spawn_env_lock`` (child env
+        # snapshot / dashboard_auth): that inversion deadlocks signal-driven
+        # stop_all() (ActivityWatch/aw-qt#144).
         self._notify_lock = threading.RLock()
         # Set once shutdown begins so a late autostart thread cannot start
         # aw-notify after stop_all() has already run.
         self._shutting_down = False
         self._pending_autostart: Dict[str, object] = {}
+        # Names claimed for spawn so two callers cannot both Popen after
+        # releasing _notify_lock.
+        self._starting: Dict[str, Tuple[Module, object]] = {}
 
         self.discover_modules()
 
@@ -657,17 +809,70 @@ class Manager:
             return system[0]
         return None
 
+    def _take_start_locked(self, module_name: str) -> Optional[Tuple[Module, object]]:
+        """Claim ``module_name`` for spawn. Caller holds ``_notify_lock``.
+
+        Returns the module and request identity to start after releasing the lock.
+        Spawn takes
+        ``_spawn_env_lock``; holding ``_notify_lock`` across that inverts with
+        a signal-driven ``stop_all()``.
+        """
+        self._pending_autostart.pop(module_name, None)
+        if self._shutting_down:
+            return None
+        module = self.resolve(module_name)
+        if module is None:
+            logger.error(
+                "Manager tried to start nonexistent module %s", module_name
+            )
+            return None
+        if module.is_alive() or module.name in self._starting:
+            return None
+        request = (module, object())
+        self._starting[module.name] = request
+        return module, request
+
+    def _spawn_claimed(self, claim: Optional[Tuple[Module, object]]) -> None:
+        """Prepare outside ``_notify_lock``; serialize spawn and publication."""
+        if claim is None:
+            return
+        module, request = claim
+        with self._notify_lock:
+            if self._starting.get(module.name) is not request or self._shutting_down:
+                return
+
+        @contextmanager
+        def launch_guard():
+            # Only process creation/publication holds this lock, never profile
+            # lookup or environment snapshot. Shutdown can cancel preparation
+            # without waiting for a lock held by its interrupted main thread.
+            with self._notify_lock:
+                allowed = (
+                    not self._shutting_down
+                    and self._starting.get(module.name) is request
+                )
+                try:
+                    yield allowed
+                finally:
+                    # A main-thread signal handler may reenter the RLock while
+                    # Popen is running. Retire a handle published after that stop.
+                    if allowed and (
+                        self._shutting_down
+                        or self._starting.get(module.name) is not request
+                    ) and module.started:
+                        module.stop()
+
+        try:
+            module.start(self.testing, launch_guard=launch_guard)
+        finally:
+            with self._notify_lock:
+                if self._starting.get(module.name) is request:
+                    self._starting.pop(module.name, None)
+
     def start(self, module_name: str) -> None:
         with self._notify_lock:
-            self._pending_autostart.pop(module_name, None)
-            if self._shutting_down:
-                return
-            module = self.resolve(module_name)
-            if module is not None:
-                if not module.is_alive():
-                    module.start(self.testing)
-            else:
-                logger.error(f"Manager tried to start nonexistent module {module_name}")
+            module = self._take_start_locked(module_name)
+        self._spawn_claimed(module)
 
     def toggle(self, module: Module) -> bool:
         """Apply a tray choice to the selected copy, cancelling deferred startup."""
@@ -675,7 +880,20 @@ class Manager:
             self._pending_autostart.pop(module.name, None)
             if self._shutting_down:
                 return module.started
-            return module.toggle(self.testing)
+            if module.is_alive():
+                # Commit to Stop: re-running toggle could observe an expired
+                # external-listener cache and enter Start under this lock.
+                module.stop()
+                return False
+            pending = self._starting.pop(module.name, None)
+            if pending is not None and pending[0] is module:
+                return False  # Second click on the preparing copy cancels it.
+            if module.started:
+                module.stop()  # Clean up an exited process before restarting.
+            request = (module, object())
+            self._starting[module.name] = request
+        self._spawn_claimed((module, request))
+        return module.started
 
     def autostart(
         self, autostart_modules: List[str], port: Optional[int] = None
@@ -729,12 +947,17 @@ class Manager:
                 logger.warning(
                     f"Server not reachable on port {server_port}, starting {', '.join(deferred)} anyway"
                 )
+            claimed: List[Tuple[Module, object]] = []
             with self._notify_lock:
                 if self._shutting_down:
                     return
                 for name in deferred:
                     if self._pending_autostart.get(name) is request:
-                        self.start(name)
+                        module = self._take_start_locked(name)
+                        if module is not None:
+                            claimed.append(module)
+            for module in claimed:
+                self._spawn_claimed(module)
 
         t = threading.Thread(target=_run, name="server-dependent-autostart", daemon=True)
         t.start()
@@ -778,9 +1001,11 @@ class Manager:
                     return
                 if enabled:
                     logger.info(f"{NOTIFY_MODULE} enabled in settings, starting")
-                    self._start_notify_locked()
+                    module = self._start_notify_locked()
                 else:
                     logger.info(f"{NOTIFY_MODULE} not enabled in settings, not starting")
+                    module = None
+            self._spawn_claimed(module)
 
         t = threading.Thread(target=_run, name="aw-notify-autostart", daemon=True)
         t.start()
@@ -789,6 +1014,7 @@ class Manager:
     def stop(self, module_name: str) -> None:
         with self._notify_lock:
             self._pending_autostart.pop(module_name, None)
+            self._starting.pop(module_name, None)
             for m in self.modules:
                 if m.name == module_name:
                     m.stop()
@@ -799,19 +1025,25 @@ class Manager:
     def start_notify(self) -> None:
         """Start aw-notify unless it is already running or shutdown has begun.
 
-        Shared by the autostart thread and the tray toggle; holds _notify_lock
-        so the two cannot both start a second instance.
+        Shared by the autostart thread and the tray toggle. The start
+        decision holds _notify_lock so the two cannot both claim a second
+        instance. Spawn runs after the lock is released.
         """
         with self._notify_lock:
-            self._start_notify_locked()
+            module = self._start_notify_locked()
+        self._spawn_claimed(module)
 
-    def _start_notify_locked(self) -> None:
-        # Caller must hold _notify_lock.
+    def _start_notify_locked(self) -> Optional[Tuple[Module, object]]:
+        # Caller must hold _notify_lock. Returns the module to spawn after
+        # releasing it; spawn takes _spawn_env_lock.
         if self._shutting_down:
-            return
-        if any(m.name == NOTIFY_MODULE and m.started for m in self.modules):
-            return
-        self.start(NOTIFY_MODULE)
+            return None
+        if any(
+            m.name == NOTIFY_MODULE and (m.started or m.name in self._starting)
+            for m in self.modules
+        ):
+            return None
+        return self._take_start_locked(NOTIFY_MODULE)
 
     def stop_notify(self) -> None:
         """Stop every started aw-notify copy.
@@ -820,6 +1052,8 @@ class Manager:
         stops the first match, so a running second copy would survive a disable.
         """
         with self._notify_lock:
+            self._starting.pop(NOTIFY_MODULE, None)
+            self._pending_autostart.pop(NOTIFY_MODULE, None)
             for m in self.modules:
                 if m.name == NOTIFY_MODULE and m.started:
                     m.stop()
@@ -827,8 +1061,10 @@ class Manager:
     def stop_all(self) -> None:
         with self._notify_lock:
             self._shutting_down = True
-        for module in filter(lambda m: m.is_alive(), self.modules):
-            module.stop()
+            self._starting.clear()
+            self._pending_autostart.clear()
+            for module in filter(lambda m: m.is_alive(), self.modules):
+                module.stop()
 
     def print_status(self, module_name: Optional[str] = None) -> None:
         header = "name                status      type"
