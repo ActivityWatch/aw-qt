@@ -13,7 +13,7 @@ packages = [
 aw-qt = "aw_qt:main"
 
 [tool.poetry.dependencies]
-python = "^3.8,<3.14"  # PyInstaller needs <3.14
+python = ">=3.9,<3.14"  # PyInstaller needs <3.14; PyQt6 >=6.8 needs >=3.9
 aw-core = "^0.5.18"
 
 pyobjc-framework-Cocoa = { version = "*", platform = "darwin" }
@@ -28,8 +28,8 @@ setuptools = "*"
 
 [tool.poetry.group.pyqt.dependencies]
 # keep these in sync
-PyQt6 = "6.5.3"
-PyQt6-Qt6 = "6.5.3"
+PyQt6 = "6.10.2"
+PyQt6-Qt6 = "6.10.2"
 
 [tool.poetry.dev-dependencies]
 mypy = "*"
