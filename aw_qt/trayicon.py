@@ -608,6 +608,16 @@ def run(
     )
     trayIcon.show()
 
+    if manager.foreign_server_port is not None:
+        trayIcon.showMessage(
+            "ActivityWatch",
+            f"Port {manager.foreign_server_port} is used by another ActivityWatch "
+            "datastore, possibly another user's. Modules were not started; "
+            "configure a distinct server port for this user.",
+            QSystemTrayIcon.MessageIcon.Warning,
+            15000,
+        )
+
     # Re-apply tooltip after show() to ensure it registers with the
     # platform's system tray backend.  On Windows 11 the tooltip can
     # appear empty when it is only set before the icon is visible.
