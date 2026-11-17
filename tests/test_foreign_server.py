@@ -7,6 +7,7 @@ identifies its datastore, so a mismatch with B's own datastore is refused.
 """
 
 import json
+import socket
 import threading
 import urllib.error
 import urllib.request
@@ -307,6 +308,45 @@ class TestManagerWithForeignServer:
         ):
             mgr.start_module(other)
             assert other.started
+            assert mgr.foreign_server_port == 5600
+            mgr.start(watcher.name)
+            watcher_start.assert_not_called()
+
+    def test_same_module_on_new_port_keeps_refusal(self):
+        # The user changes only the server's port after a refusal. Spawning on
+        # the new port must not clear the refusal on the port watchers use.
+        mgr, server, watcher, _notify = self._manager()
+        server.foreign_server_port = 5600
+        sock = socket.socket()
+        sock.bind(("127.0.0.1", 0))
+        free_port = sock.getsockname()[1]
+        sock.close()
+        with (
+            patch.object(server, "_get_server_port", return_value=free_port),
+            patch("subprocess.Popen") as popen,
+            patch.object(watcher, "start") as watcher_start,
+        ):
+            mgr.start_module(server)
+            popen.assert_called_once()
+            assert server.started
+            assert mgr.foreign_server_port == 5600
+            mgr.start(watcher.name)
+            watcher_start.assert_not_called()
+
+    def test_same_module_adopting_new_port_keeps_refusal(
+        self, info_server, _isolated_platform_dirs
+    ):
+        _write_device_id(_isolated_platform_dirs, "activitywatch", "aw-server-rust", "mine")
+        _InfoHandler.device_id = "mine"
+        mgr, server, watcher, _notify = self._manager()
+        server.foreign_server_port = 5600
+        with (
+            patch.object(server, "_get_server_port", return_value=info_server.server_port),
+            patch.object(watcher, "start") as watcher_start,
+        ):
+            mgr.start_module(server)
+            assert server.started
+            assert server._external_server
             assert mgr.foreign_server_port == 5600
             mgr.start(watcher.name)
             watcher_start.assert_not_called()

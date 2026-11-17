@@ -530,7 +530,7 @@ class Module:
                 f"{self.name}: server already running on port {port}, "
                 "using existing instance instead of starting a new one"
             )
-            self.foreign_server_port = None
+            self._clear_refusal_for_port(port)
             self._external_server = True
             self._external_server_testing = testing
             self._external_server_probe_cache = True
@@ -560,8 +560,14 @@ class Module:
         self._process = subprocess.Popen(
             exec_cmd, universal_newlines=True, startupinfo=startupinfo
         )
-        self.foreign_server_port = None
+        self._clear_refusal_for_port(self._get_server_port(testing))
         self.started = True
+
+    def _clear_refusal_for_port(self, port: Optional[int]) -> None:
+        # Watchers post to their own aw-client port, not this module's. A
+        # healthy server on another port does not make the refused one safe.
+        if self.foreign_server_port == port:
+            self.foreign_server_port = None
 
     def stop(self) -> None:
         """
