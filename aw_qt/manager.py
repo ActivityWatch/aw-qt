@@ -773,6 +773,18 @@ class Manager:
             return True
         return False
 
+    def _clear_superseded_refusals(self, module: Module) -> None:
+        # A successful start/adoption through another discovered server copy
+        # supersedes refusals on that same endpoint, not on other ports.
+        if module.name not in ("aw-server", "aw-server-rust") or not module.started:
+            return
+        if module.foreign_server_port is not None:
+            return
+        port = module._get_server_port(self.testing)
+        for other in self.modules:
+            if other.foreign_server_port == port:
+                other.foreign_server_port = None
+
     def _stop_refused_dependents(self) -> None:
         # Caller holds _notify_lock. Cancel pending workers too, otherwise an
         # old server wait could start aw-sync after we refused the listener.
@@ -794,6 +806,7 @@ class Manager:
                 if module.started:
                     module.stop()
                 module.start(self.testing)
+                self._clear_superseded_refusals(module)
                 self._stop_refused_dependents()
 
     def toggle(self, module: Module) -> bool:
@@ -805,6 +818,7 @@ class Manager:
             if self._start_blocked(module):
                 return module.started
             started = module.toggle(self.testing)
+            self._clear_superseded_refusals(module)
             self._stop_refused_dependents()
             return started
 

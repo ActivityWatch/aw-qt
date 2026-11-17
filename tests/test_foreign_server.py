@@ -270,6 +270,29 @@ class TestManagerWithForeignServer:
             mgr.start_notify()
             popen.assert_not_called()
 
+    @pytest.mark.parametrize("entry", ["start_module", "toggle"])
+    def test_switching_server_copy_clears_old_refusal(
+        self, entry, info_server, _isolated_platform_dirs
+    ):
+        _write_device_id(_isolated_platform_dirs, "activitywatch", "aw-server-rust", "mine")
+        mgr, server, watcher, _notify = self._manager()
+        other = Module("aw-server-rust", Path("/other/aw-server-rust"), "bundled")
+        mgr.modules.append(other)
+        with (
+            patch.object(server, "_get_server_port", return_value=info_server.server_port),
+            patch.object(other, "_get_server_port", return_value=info_server.server_port),
+            patch.object(watcher, "start") as watcher_start,
+        ):
+            _InfoHandler.device_id = "theirs"
+            mgr.start_module(server)
+            assert mgr.foreign_server_port is not None
+            _InfoHandler.device_id = "mine"
+            getattr(mgr, entry)(other)
+            assert other.started
+            assert mgr.foreign_server_port is None
+            mgr.start(watcher.name)
+            watcher_start.assert_called_once_with(False)
+
     def test_successful_retry_clears_refusal(self, info_server, _isolated_platform_dirs):
         _write_device_id(_isolated_platform_dirs, "activitywatch", "aw-server-rust", "mine")
         mgr, server, watcher, _notify = self._manager()
