@@ -134,3 +134,35 @@ def test_clean_exit_resets_restart_history():
         assert tray._restart_timestamps.get(module.name) is None
         module.start.assert_not_called()
     assert tray._recent_restart_count(module.name) == 0
+
+
+@pytest.mark.parametrize("manual", [False, True])
+def test_server_restart_refusal_stops_running_watchers(manual):
+    server, _process = make_module("aw-server-rust", 1)
+    watcher, watcher_process = make_module("aw-watcher-afk", None)
+    # A real stop waits for termination; make the fake process exit on wait.
+    watcher_process.wait.side_effect = lambda: setattr(watcher_process, "returncode", 0)
+    manager = make_manager(server)
+    manager.modules.append(watcher)
+    timestamps = {server.name: [time.monotonic()] * TrayIcon.MAX_AUTO_RESTARTS} if manual else {}
+    tray = make_tray(server, manager, timestamps)
+
+    def refuse(*_args):
+        server.foreign_server_port = 5600
+        server.started = False
+
+    with ExitStack() as stack:
+        single_shot = enter_tray_patches(stack, server)
+        server.start.side_effect = refuse
+        button = stack.enter_context(patch("aw_qt.trayicon.QPushButton"))
+        stack.enter_context(patch("aw_qt.trayicon.QMessageBox"))
+        stack.enter_context(patch.object(server, "read_log", return_value="crashed"))
+        TrayIcon._build_rootmenu(tray)
+        scheduled_status_callback(single_shot)()
+        if manual:
+            button.return_value.clicked.connect.call_args.args[0]()
+
+    watcher_process.terminate.assert_called_once_with()
+    assert not watcher.started
+    assert not server.started
+    assert manager.foreign_server_port == 5600

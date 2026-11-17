@@ -396,7 +396,7 @@ class TrayIcon(QSystemTrayIcon):
 
             def on_manual_restart() -> None:
                 self._restart_timestamps.pop(module.name, None)
-                module.start(self.testing)
+                self.manager.start_module(module)
 
             restart_button.clicked.connect(on_manual_restart)
             box.addButton(restart_button, QMessageBox.ButtonRole.AcceptRole)
@@ -440,11 +440,16 @@ class TrayIcon(QSystemTrayIcon):
                         f" in {self.RESTART_WINDOW_SECONDS // 60}min window)"
                     )
                     module.stop()  # Clean up state
-                    module.start(self.testing)
+                    self.manager.start_module(module)
                     self._record_restart(module.name)
                     self.showMessage(
                         "ActivityWatch",
-                        f"Module {module.name} crashed and was auto-restarted",
+                        (
+                            f"Server on port {self.manager.foreign_server_port} "
+                            "was refused or could not be verified; dependent modules stopped"
+                            if self.manager.foreign_server_port is not None
+                            else f"Module {module.name} crashed and was auto-restarted"
+                        ),
                         QSystemTrayIcon.MessageIcon.Warning,
                         5000,
                     )
@@ -611,9 +616,9 @@ def run(
     if manager.foreign_server_port is not None:
         trayIcon.showMessage(
             "ActivityWatch",
-            f"Port {manager.foreign_server_port} is used by another ActivityWatch "
-            "datastore, possibly another user's. Modules were not started; "
-            "configure a distinct server port for this user.",
+            f"Datastore on port {manager.foreign_server_port} was refused or "
+            "could not be verified. Modules were not started; check the server "
+            "and retry, or configure a distinct server port for this user.",
             QSystemTrayIcon.MessageIcon.Warning,
             15000,
         )

@@ -8,6 +8,8 @@ identifies its datastore, so a mismatch with B's own datastore is refused.
 
 import json
 import threading
+import urllib.error
+import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Optional
@@ -15,8 +17,7 @@ from unittest.mock import patch
 
 import pytest
 
-import aw_qt.manager as manager_module
-from aw_qt.manager import Manager, Module, _local_server_device_ids
+from aw_qt.manager import Manager, Module, NOTIFY_MODULE, _local_server_device_ids
 
 
 class _InfoHandler(BaseHTTPRequestHandler):
@@ -86,6 +87,48 @@ class TestAdoption:
         # Spawning our own server would only fail with AddrInUse.
         popen.assert_not_called()
 
+    @pytest.mark.parametrize("error", [
+        urllib.error.URLError("timeout"),
+        OSError("connection reset"),
+        ValueError("invalid JSON"),
+    ])
+    def test_failed_identity_check_refuses_adoption(
+        self, error, info_server, _isolated_platform_dirs
+    ):
+        _write_device_id(_isolated_platform_dirs, "activitywatch", "aw-server-rust", "mine")
+        real_urlopen = urllib.request.urlopen
+        requests = 0
+
+        def urlopen(*args, **kwargs):
+            nonlocal requests
+            requests += 1
+            if requests == 2:
+                raise error
+            return real_urlopen(*args, **kwargs)
+
+        with patch.object(urllib.request, "urlopen", side_effect=urlopen):
+            mod, popen = _start_server_module(info_server.server_port)
+
+        assert requests == 2
+        assert mod.started is False
+        assert mod._external_server is False
+        assert mod.foreign_server_port == info_server.server_port
+        popen.assert_not_called()
+
+    @pytest.mark.parametrize("body", [b"not JSON", b"[]", b"null", b"\xff"])
+    def test_invalid_identity_response_is_refused(self, body, _isolated_platform_dirs):
+        _write_device_id(_isolated_platform_dirs, "activitywatch", "aw-server-rust", "mine")
+        from unittest.mock import MagicMock
+
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = body
+        with patch.object(urllib.request, "urlopen", return_value=response):
+            mod, popen = _start_server_module(5600)
+
+        assert not mod.started
+        assert mod.foreign_server_port == 5600
+        popen.assert_not_called()
+
     def test_adopts_listener_with_own_datastore(self, info_server, _isolated_platform_dirs):
         _write_device_id(_isolated_platform_dirs, "activitywatch", "aw-server-rust", "mine")
         _InfoHandler.device_id = "mine\n"
@@ -153,7 +196,7 @@ class TestManagerWithForeignServer:
         mgr = Manager(testing=False)
         server = Module("aw-server-rust", Path("/nonexistent/aw-server-rust"), "system")
         watcher = Module("aw-watcher-afk", Path("/usr/bin/true"), "system")
-        notify = Module(manager_module.NOTIFY_MODULE, Path("/usr/bin/true"), "system")
+        notify = Module(NOTIFY_MODULE, Path("/usr/bin/true"), "system")
         mgr.modules = [server, watcher, notify]
         return mgr, server, watcher, notify
 
@@ -177,13 +220,73 @@ class TestManagerWithForeignServer:
         mgr, server, _watcher, notify = self._manager()
         server.foreign_server_port = info_server.server_port
 
-        with patch.object(notify, "start") as notify_start, patch.object(
-            manager_module, "_read_notify_enabled_or_raise", return_value=True
+        with patch.object(notify, "start") as notify_start, patch(
+            "aw_qt.manager._read_notify_enabled_or_raise", return_value=True
         ):
             t = mgr.autostart_notify_if_enabled(info_server.server_port)
             t.join(timeout=5)
 
         notify_start.assert_not_called()
+
+    @pytest.mark.parametrize("entry", ["start", "toggle", "start_module"])
+    @pytest.mark.parametrize("failed_check", [False, True])
+    def test_restart_refusal_stops_dependents_and_blocks_restarts(
+        self, entry, failed_check, info_server, _isolated_platform_dirs
+    ):
+        _write_device_id(_isolated_platform_dirs, "activitywatch", "aw-server-rust", "mine")
+        _InfoHandler.device_id = "theirs"
+        mgr, server, watcher, notify = self._manager()
+        # The user's server crashed while these processes were running.
+        watcher.started = notify.started = True
+        mgr._pending_autostart["aw-sync"] = object()
+
+        with (
+            patch.object(server, "_get_server_port", return_value=info_server.server_port),
+            patch.object(watcher, "stop", wraps=watcher.stop) as watcher_stop,
+            patch.object(notify, "stop", wraps=notify.stop) as notify_stop,
+            patch("subprocess.Popen") as popen,
+            patch.object(
+                server, "_external_server_device_id",
+                side_effect=OSError("timeout") if failed_check else None,
+                return_value="theirs",
+            ),
+        ):
+            if entry == "start":
+                mgr.start(server.name)
+            elif entry == "toggle":
+                mgr.toggle(server)
+            else:
+                mgr.start_module(server)
+
+            assert mgr.foreign_server_port == info_server.server_port
+            watcher_stop.assert_called_once_with()
+            notify_stop.assert_called_once_with()
+            assert not watcher.started and not notify.started
+            assert mgr._pending_autostart == {}
+            # Neither a menu click nor a stale deferred start may undo refusal.
+            mgr.start(watcher.name)
+            assert mgr.toggle(watcher) is False
+            mgr.start_module(watcher)
+            mgr.start_notify()
+            popen.assert_not_called()
+
+    def test_successful_retry_clears_refusal(self, info_server, _isolated_platform_dirs):
+        _write_device_id(_isolated_platform_dirs, "activitywatch", "aw-server-rust", "mine")
+        mgr, server, watcher, _notify = self._manager()
+        with (
+            patch.object(server, "_get_server_port", return_value=info_server.server_port),
+            patch.object(watcher, "start") as watcher_start,
+        ):
+            _InfoHandler.device_id = "theirs"
+            mgr.start(server.name)
+            mgr.start(watcher.name)
+            watcher_start.assert_not_called()
+            _InfoHandler.device_id = "mine"
+            mgr.start(server.name)
+            assert mgr.foreign_server_port is None
+            assert server.started
+            mgr.start(watcher.name)
+            watcher_start.assert_called_once_with(False)
 
     def test_watchers_start_with_own_server(self, info_server, _isolated_platform_dirs):
         _write_device_id(_isolated_platform_dirs, "activitywatch", "aw-server-rust", "mine")
