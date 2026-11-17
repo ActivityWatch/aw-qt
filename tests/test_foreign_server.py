@@ -16,7 +16,10 @@ from unittest.mock import patch
 import pytest
 
 import aw_qt.manager as manager_module
-from aw_qt.manager import Manager, Module, _local_server_device_ids
+
+Manager = manager_module.Manager
+Module = manager_module.Module
+_local_server_device_ids = manager_module._local_server_device_ids
 
 
 class _InfoHandler(BaseHTTPRequestHandler):
@@ -133,6 +136,25 @@ class TestAdoption:
         assert mod.foreign_server_port is None
 
 
+    def test_refuses_when_identity_request_fails(
+        self, info_server, _isolated_platform_dirs
+    ):
+        # The liveness probe answered but the identity read failed: with a
+        # datastore to protect, fail closed rather than adopt unverified.
+        _write_device_id(_isolated_platform_dirs, "activitywatch", "aw-server-rust", "mine")
+        mod = Module("aw-server-rust", Path("/nonexistent/aw-server-rust"), "system")
+        with (
+            patch.object(mod, "_get_server_port", return_value=info_server.server_port),
+            patch.object(mod, "_external_server_device_id", side_effect=OSError("timed out")),
+            patch("subprocess.Popen") as popen,
+        ):
+            mod.start(testing=False)
+
+        assert mod.started is False
+        assert mod.foreign_server_port == info_server.server_port
+        popen.assert_not_called()
+
+
 class TestLocalDeviceIds:
     def test_profile_selects_its_own_root(self, _isolated_platform_dirs):
         _write_device_id(_isolated_platform_dirs, "activitywatch", "aw-server-rust", "default")
@@ -198,3 +220,31 @@ class TestManagerWithForeignServer:
 
         assert mgr.foreign_server_port is None
         watcher_start.assert_called_once_with(False)
+
+    def test_restart_refusal_stops_running_watchers(
+        self, info_server, _isolated_platform_dirs
+    ):
+        # Own server crashed, another user's server took the port, and the
+        # tray restarts the server: watchers from the first start must stop.
+        _write_device_id(_isolated_platform_dirs, "activitywatch", "aw-server-rust", "mine")
+        _InfoHandler.device_id = "theirs"
+        mgr, server, watcher, _notify = self._manager()
+        watcher.started = True
+
+        with (
+            patch.object(server, "_get_server_port", return_value=info_server.server_port),
+            patch("subprocess.Popen"),
+            patch.object(watcher, "stop") as watcher_stop,
+        ):
+            server.start(testing=False)
+            assert mgr.halt_if_foreign_server() is True
+
+        watcher_stop.assert_called_once_with()
+
+    def test_halt_is_noop_with_own_server(self):
+        mgr, _server, watcher, _notify = self._manager()
+        watcher.started = True
+        with patch.object(watcher, "stop") as watcher_stop:
+            assert mgr.halt_if_foreign_server() is False
+        watcher_stop.assert_not_called()
+

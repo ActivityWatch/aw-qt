@@ -397,6 +397,7 @@ class TrayIcon(QSystemTrayIcon):
             def on_manual_restart() -> None:
                 self._restart_timestamps.pop(module.name, None)
                 module.start(self.testing)
+                self.manager.halt_if_foreign_server()
 
             restart_button.clicked.connect(on_manual_restart)
             box.addButton(restart_button, QMessageBox.ButtonRole.AcceptRole)
@@ -441,6 +442,7 @@ class TrayIcon(QSystemTrayIcon):
                     )
                     module.stop()  # Clean up state
                     module.start(self.testing)
+                    self.manager.halt_if_foreign_server()
                     self._record_restart(module.name)
                     self.showMessage(
                         "ActivityWatch",

@@ -461,14 +461,15 @@ class Module:
             return False
 
     def _external_server_device_id(self, port: int, timeout: float) -> Optional[str]:
-        """The ``device_id`` that the listener on ``port`` reports, if any."""
-        try:
-            with urllib.request.urlopen(
-                f"http://localhost:{port}/api/0/info", timeout=timeout
-            ) as response:
-                info = json.loads(response.read().decode("utf-8"))
-        except (urllib.error.URLError, OSError, ValueError):
-            return None
+        """The ``device_id`` that the listener on ``port`` reports, if any.
+
+        Raises on a failed request: callers must not treat "could not ask" as
+        "has no identity" (that would adopt an unverified listener).
+        """
+        with urllib.request.urlopen(
+            f"http://localhost:{port}/api/0/info", timeout=timeout
+        ) as response:
+            info = json.loads(response.read().decode("utf-8"))
         device_id = info.get("device_id") if isinstance(info, dict) else None
         return device_id.strip() if isinstance(device_id, str) and device_id.strip() else None
 
@@ -496,21 +497,29 @@ class Module:
             port = self._get_server_port(testing)
             assert port is not None
             local_ids = _local_server_device_ids(profile_from_env(testing))
-            listener_id = (
-                self._external_server_device_id(port, timeout=1.0)
-                if local_ids
-                else None
-            )
-            if listener_id and listener_id not in local_ids:
+            listener_id: Optional[str] = None
+            unverified = False
+            if local_ids:
+                try:
+                    listener_id = self._external_server_device_id(port, timeout=1.0)
+                except (urllib.error.URLError, OSError, ValueError) as e:
+                    # Fail closed: this user has a datastore to protect.
+                    logger.error(
+                        f"{self.name}: could not read the identity of the server "
+                        f"on port {port} ({e}), not using it"
+                    )
+                    unverified = True
+            if unverified or (listener_id and listener_id not in local_ids):
                 # Another datastore (typically another OS user's server) owns
                 # this port. Adopting it would send this user's watchers'
                 # data into that datastore (ActivityWatch/activitywatch#75).
-                logger.error(
-                    f"{self.name}: port {port} is served by another ActivityWatch "
-                    f"datastore (device_id {listener_id}, this user's is "
-                    f"{', '.join(sorted(local_ids))}), possibly another user's. "
-                    "Not using it. Configure a distinct port for this user."
-                )
+                if not unverified:
+                    logger.error(
+                        f"{self.name}: port {port} is served by another ActivityWatch "
+                        f"datastore (device_id {listener_id}, this user's is "
+                        f"{', '.join(sorted(local_ids))}), possibly another user's. "
+                        "Not using it. Configure a distinct port for this user."
+                    )
                 self.foreign_server_port = port
                 return
             logger.info(
@@ -754,7 +763,28 @@ class Manager:
             self._pending_autostart.pop(module.name, None)
             if self._shutting_down:
                 return module.started
-            return module.toggle(self.testing)
+            started = module.toggle(self.testing)
+            self.halt_if_foreign_server()
+            return started
+
+    def halt_if_foreign_server(self) -> bool:
+        """Stop non-server modules if the server port belongs to another datastore.
+
+        A server (re)start can refuse adoption while watchers from an earlier
+        start are still running and sending to that port.
+        """
+        port = self.foreign_server_port
+        if port is None:
+            return False
+        with self._notify_lock:
+            self._pending_autostart.clear()
+            for m in self.modules:
+                if m.name not in ("aw-server", "aw-server-rust") and m.started:
+                    logger.error(
+                        f"Stopping {m.name}: port {port} belongs to another datastore"
+                    )
+                    m.stop()
+        return True
 
     def autostart(
         self, autostart_modules: List[str], port: Optional[int] = None
