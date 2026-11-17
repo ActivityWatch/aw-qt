@@ -16,6 +16,7 @@ import aw_core
 import aw_core.dirs
 import platformdirs
 
+from .profile import profile_from_env
 from .wayland import WAYLAND_WATCHER  # noqa: F401 - retained for existing imports
 from .wayland import (
     WAYLAND_WATCHERS,
@@ -368,6 +369,42 @@ def _discover_modules_system() -> List["Module"]:
     return modules
 
 
+def _server_data_roots(appname: str) -> Set[Path]:
+    """Every per-user data root an aw-server could use for ``appname``.
+
+    aw-core (Python aw-server) uses platformdirs with the default app author;
+    aw-server-rust uses ``%LOCALAPPDATA%\\<appname>`` on Windows, and v0.14.0
+    misplaced it under roaming ``%APPDATA%``. On Linux/macOS these coincide.
+    """
+    return {
+        Path(platformdirs.user_data_dir(appname)),
+        Path(platformdirs.user_data_dir(appname, appauthor=False)),
+        Path(platformdirs.user_data_dir(appname, appauthor=False, roaming=True)),
+    }
+
+
+def _local_server_device_ids(profile: str) -> Set[str]:
+    """``device_id``s of this user's own server datastores for ``profile``.
+
+    Read-only: unlike aw_core.dirs.get_data_dir() this never creates
+    directories, so probing does not leave empty datastores behind.
+    """
+    from .config import _with_profile_env
+
+    with _with_profile_env(profile):
+        appname = aw_core.dirs._get_appname()
+    ids: Set[str] = set()
+    for root in _server_data_roots(appname):
+        for server in ("aw-server-rust", "aw-server"):
+            try:
+                device_id = (root / server / "device_id").read_text().strip()
+            except (OSError, UnicodeDecodeError):
+                continue
+            if device_id:
+                ids.add(device_id)
+    return ids
+
+
 class Module:
     def __init__(self, name: str, path: Path, type: str) -> None:
         self.name = name
@@ -385,6 +422,8 @@ class Module:
         self._external_server_testing: bool = False
         self._external_server_probe_cache: Optional[bool] = None
         self._external_server_probe_cache_at: float = 0.0
+        # Set by start() when the datastore is foreign or could not be verified.
+        self.foreign_server_port: Optional[int] = None
 
     def __hash__(self) -> int:
         return hash((self.name, self.path))
@@ -421,6 +460,20 @@ class Module:
         except (urllib.error.URLError, OSError):
             return False
 
+    def _external_server_device_id(self, port: int, timeout: float) -> Optional[str]:
+        """Return a valid info response's ID; raise if identity cannot be checked.
+
+        A legacy response without an ID is distinct from a failed request.
+        """
+        with urllib.request.urlopen(
+            f"http://localhost:{port}/api/0/info", timeout=timeout
+        ) as response:
+            info = json.loads(response.read().decode("utf-8"))
+        if not isinstance(info, dict):
+            raise ValueError("Server info is not an object")
+        device_id = info.get("device_id")
+        return device_id.strip() if isinstance(device_id, str) and device_id.strip() else None
+
     def _probe_external_server_cached(self, testing: bool, max_age: float = 1.0) -> bool:
         now = monotonic()
         if (
@@ -442,10 +495,42 @@ class Module:
         # when aw-server is managed externally (e.g. via systemd or Docker).
         if self._probe_external_server(testing, timeout=1.0):
             port = self._get_server_port(testing)
+            assert port is not None
+            local_ids = _local_server_device_ids(profile_from_env(testing))
+            try:
+                listener_id = (
+                    self._external_server_device_id(port, timeout=1.0)
+                    if local_ids
+                    else None
+                )
+            except (urllib.error.URLError, OSError, ValueError) as exc:
+                logger.error(
+                    f"{self.name}: cannot verify datastore on port {port}: {exc}. "
+                    "Not using it; retry starting the server after checking it."
+                )
+                self.foreign_server_port = port
+                self.started = False
+                self._external_server = False
+                return
+            if listener_id and listener_id not in local_ids:
+                # Another datastore (typically another OS user's server) owns
+                # this port. Adopting it would send this user's watchers'
+                # data into that datastore (ActivityWatch/activitywatch#75).
+                logger.error(
+                    f"{self.name}: port {port} is served by another ActivityWatch "
+                    f"datastore (device_id {listener_id}, this user's is "
+                    f"{', '.join(sorted(local_ids))}), possibly another user's. "
+                    "Not using it. Configure a distinct port for this user."
+                )
+                self.foreign_server_port = port
+                self.started = False
+                self._external_server = False
+                return
             logger.info(
                 f"{self.name}: server already running on port {port}, "
                 "using existing instance instead of starting a new one"
             )
+            self._clear_refusal_for_port(port)
             self._external_server = True
             self._external_server_testing = testing
             self._external_server_probe_cache = True
@@ -475,7 +560,14 @@ class Module:
         self._process = subprocess.Popen(
             exec_cmd, universal_newlines=True, startupinfo=startupinfo
         )
+        self._clear_refusal_for_port(self._get_server_port(testing))
         self.started = True
+
+    def _clear_refusal_for_port(self, port: Optional[int]) -> None:
+        # Watchers post to their own aw-client port, not this module's. A
+        # healthy server on another port does not make the refused one safe.
+        if self.foreign_server_port == port:
+            self.foreign_server_port = None
 
     def stop(self) -> None:
         """
@@ -640,6 +732,14 @@ class Manager:
             if m not in self.modules:
                 self.modules.append(m)
 
+    @property
+    def foreign_server_port(self) -> Optional[int]:
+        """Port refused as foreign or unverifiable by start(), if any."""
+        for m in self.modules:
+            if m.foreign_server_port is not None:
+                return m.foreign_server_port
+        return None
+
     def get_unexpected_stops(self) -> List[Module]:
         return list(filter(lambda x: x.started and not x.is_alive(), self.modules))
 
@@ -664,18 +764,78 @@ class Manager:
                 return
             module = self.resolve(module_name)
             if module is not None:
-                if not module.is_alive():
-                    module.start(self.testing)
+                self.start_module(module)
             else:
                 logger.error(f"Manager tried to start nonexistent module {module_name}")
 
-    def toggle(self, module: Module) -> bool:
-        """Apply a tray choice to the selected copy, cancelling deferred startup."""
+    def _start_blocked(self, module: Module) -> bool:
+        if (
+            module.name not in ("aw-server", "aw-server-rust")
+            and self.foreign_server_port is not None
+        ):
+            logger.error(
+                f"Not starting {module.name}: datastore on port "
+                f"{self.foreign_server_port} was refused or could not be verified"
+            )
+            return True
+        return False
+
+    def _clear_superseded_refusals(self, module: Module) -> None:
+        # A successful start/adoption through another discovered server copy
+        # supersedes refusals on that same endpoint, not on other ports.
+        if module.name not in ("aw-server", "aw-server-rust") or not module.started:
+            return
+        if module.foreign_server_port is not None:
+            return
+        port = module._get_server_port(self.testing)
+        for other in self.modules:
+            if other.foreign_server_port == port:
+                other.foreign_server_port = None
+
+    def _stop_refused_dependents(self) -> None:
+        # Caller holds _notify_lock. Cancel pending workers too, otherwise an
+        # old server wait could start aw-sync after we refused the listener.
+        if self.foreign_server_port is None:
+            return
+        self._pending_autostart.clear()
+        for module in self.modules:
+            if module.name not in ("aw-server", "aw-server-rust") and module.started:
+                module.stop()
+
+    def start_module(self, module: Module) -> None:
+        """Start the selected copy, enforcing datastore refusal on every path."""
+        with self._notify_lock:
+            self._pending_autostart.pop(module.name, None)
+            if self._shutting_down or self._start_blocked(module):
+                return
+            if not module.is_alive():
+                # Clear a crashed process/external-server's previous state.
+                if module.started:
+                    module.stop()
+                module.start(self.testing)
+                self._clear_superseded_refusals(module)
+                self._stop_refused_dependents()
+
+    def toggle(self, module: Module) -> Optional[bool]:
+        """Apply a tray choice to the selected copy, cancelling deferred startup.
+
+        Returns the new started state, or None when a start was refused because
+        of a datastore refusal: the user did not choose to disable the module.
+        """
         with self._notify_lock:
             self._pending_autostart.pop(module.name, None)
             if self._shutting_down:
                 return module.started
-            return module.toggle(self.testing)
+            if self._start_blocked(module):
+                if module.started:
+                    # The click was a stop; honour it as an explicit choice.
+                    module.stop()
+                    return False
+                return None
+            started = module.toggle(self.testing)
+            self._clear_superseded_refusals(module)
+            self._stop_refused_dependents()
+            return started
 
     def autostart(
         self, autostart_modules: List[str], port: Optional[int] = None
@@ -703,6 +863,17 @@ class Manager:
             self.start("aw-server-rust")
         elif "aw-server" in autostart_modules:
             self.start("aw-server")
+
+        if self.foreign_server_port is not None:
+            # Watchers would send to the same port, i.e. into another
+            # datastore. Start nothing; the user must pick a distinct port.
+            skipped = sorted(set(autostart_modules) - {"aw-server", "aw-server-rust"})
+            logger.error(
+                f"Not starting {', '.join(skipped) or 'any modules'}: "
+                f"datastore on port {self.foreign_server_port} was refused or "
+                "could not be verified"
+            )
+            return None
 
         autostart_modules = list(
             set(autostart_modules) - {"aw-server", "aw-server-rust"}
@@ -762,6 +933,12 @@ class Manager:
                 return
             with self._notify_lock:
                 if self._shutting_down:
+                    return
+                if self.foreign_server_port is not None:
+                    logger.warning(
+                        f"Datastore on port {self.foreign_server_port} was refused "
+                        f"or could not be verified, not starting {NOTIFY_MODULE}"
+                    )
                     return
                 enabled = None
                 for _ in range(3):

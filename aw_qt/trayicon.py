@@ -396,7 +396,7 @@ class TrayIcon(QSystemTrayIcon):
 
             def on_manual_restart() -> None:
                 self._restart_timestamps.pop(module.name, None)
-                module.start(self.testing)
+                self.manager.start_module(module)
 
             restart_button.clicked.connect(on_manual_restart)
             box.addButton(restart_button, QMessageBox.ButtonRole.AcceptRole)
@@ -440,11 +440,21 @@ class TrayIcon(QSystemTrayIcon):
                         f" in {self.RESTART_WINDOW_SECONDS // 60}min window)"
                     )
                     module.stop()  # Clean up state
-                    module.start(self.testing)
-                    self._record_restart(module.name)
+                    blocked_dependent = (
+                        module.name not in ("aw-server", "aw-server-rust")
+                        and self.manager.foreign_server_port is not None
+                    )
+                    self.manager.start_module(module)
+                    if not blocked_dependent:
+                        self._record_restart(module.name)
                     self.showMessage(
                         "ActivityWatch",
-                        f"Module {module.name} crashed and was auto-restarted",
+                        (
+                            f"Server on port {self.manager.foreign_server_port} "
+                            "was refused or could not be verified; dependent modules stopped"
+                            if self.manager.foreign_server_port is not None
+                            else f"Module {module.name} crashed and was auto-restarted"
+                        ),
                         QSystemTrayIcon.MessageIcon.Warning,
                         5000,
                     )
@@ -469,6 +479,9 @@ class TrayIcon(QSystemTrayIcon):
         enabled = self.manager.toggle(module)
         # Reset auto-restart timestamps on manual toggle
         self._restart_timestamps.pop(module.name, None)
+        if enabled is None:
+            # Start refused by a datastore refusal: not a choice to disable it.
+            return
         if not self.persist_toggles:
             return
         if self.manager.resolve(module.name) is not module:
@@ -607,6 +620,16 @@ def run(
         persist_toggles=persist_toggles,
     )
     trayIcon.show()
+
+    if manager.foreign_server_port is not None:
+        trayIcon.showMessage(
+            "ActivityWatch",
+            f"Datastore on port {manager.foreign_server_port} was refused or "
+            "could not be verified. Modules were not started; check the server "
+            "and retry, or configure a distinct server port for this user.",
+            QSystemTrayIcon.MessageIcon.Warning,
+            15000,
+        )
 
     # Re-apply tooltip after show() to ensure it registers with the
     # platform's system tray backend.  On Windows 11 the tooltip can
