@@ -166,3 +166,18 @@ def test_server_restart_refusal_stops_running_watchers(manual):
     assert not watcher.started
     assert not server.started
     assert manager.foreign_server_port == 5600
+
+
+def test_blocked_watcher_restart_does_not_consume_restart_budget():
+    watcher, _process = make_module("aw-watcher-afk", 1)
+    server = Module("aw-server-rust", Path("/bundled/server"), "bundled")
+    server.foreign_server_port = 5600
+    manager = make_manager(watcher)
+    manager.modules.append(server)
+    tray = make_tray(watcher, manager)
+    with ExitStack() as stack:
+        single_shot = enter_tray_patches(stack, watcher)
+        TrayIcon._build_rootmenu(tray)
+        scheduled_status_callback(single_shot)()
+        watcher.start.assert_not_called()
+    assert tray._recent_restart_count(watcher.name) == 0

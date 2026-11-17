@@ -440,8 +440,13 @@ class TrayIcon(QSystemTrayIcon):
                         f" in {self.RESTART_WINDOW_SECONDS // 60}min window)"
                     )
                     module.stop()  # Clean up state
+                    blocked_dependent = (
+                        module.name not in ("aw-server", "aw-server-rust")
+                        and self.manager.foreign_server_port is not None
+                    )
                     self.manager.start_module(module)
-                    self._record_restart(module.name)
+                    if not blocked_dependent:
+                        self._record_restart(module.name)
                     self.showMessage(
                         "ActivityWatch",
                         (

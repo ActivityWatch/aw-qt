@@ -293,6 +293,24 @@ class TestManagerWithForeignServer:
             mgr.start(watcher.name)
             watcher_start.assert_called_once_with(False)
 
+    def test_starting_different_port_does_not_clear_refusal(self, info_server):
+        # Watchers use their own aw-client config, not the server module's
+        # config. A healthy server on another port does not make their original
+        # endpoint safe, so clearing all refusals would reintroduce the leak.
+        mgr, server, watcher, _notify = self._manager()
+        server.foreign_server_port = 5600
+        other = Module("aw-server", Path("/other/aw-server"), "bundled")
+        mgr.modules.append(other)
+        with (
+            patch.object(other, "_get_server_port", return_value=info_server.server_port),
+            patch.object(watcher, "start") as watcher_start,
+        ):
+            mgr.start_module(other)
+            assert other.started
+            assert mgr.foreign_server_port == 5600
+            mgr.start(watcher.name)
+            watcher_start.assert_not_called()
+
     def test_successful_retry_clears_refusal(self, info_server, _isolated_platform_dirs):
         _write_device_id(_isolated_platform_dirs, "activitywatch", "aw-server-rust", "mine")
         mgr, server, watcher, _notify = self._manager()
