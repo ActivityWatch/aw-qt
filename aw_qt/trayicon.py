@@ -479,6 +479,9 @@ class TrayIcon(QSystemTrayIcon):
         enabled = self.manager.toggle(module)
         # Reset auto-restart timestamps on manual toggle
         self._restart_timestamps.pop(module.name, None)
+        if enabled is None:
+            # Start refused by a datastore refusal: not a choice to disable it.
+            return
         if not self.persist_toggles:
             return
         if self.manager.resolve(module.name) is not module:

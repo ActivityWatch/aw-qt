@@ -265,7 +265,7 @@ class TestManagerWithForeignServer:
             assert mgr._pending_autostart == {}
             # Neither a menu click nor a stale deferred start may undo refusal.
             mgr.start(watcher.name)
-            assert mgr.toggle(watcher) is False
+            assert mgr.toggle(watcher) is None
             mgr.start_module(watcher)
             mgr.start_notify()
             popen.assert_not_called()

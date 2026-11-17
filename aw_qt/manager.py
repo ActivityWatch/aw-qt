@@ -810,16 +810,22 @@ class Manager:
                 self._clear_superseded_refusals(module)
                 self._stop_refused_dependents()
 
-    def toggle(self, module: Module) -> bool:
-        """Apply a tray choice to the selected copy, cancelling deferred startup."""
+    def toggle(self, module: Module) -> Optional[bool]:
+        """Apply a tray choice to the selected copy, cancelling deferred startup.
+
+        Returns the new started state, or None when a start was refused because
+        of a datastore refusal: the user did not choose to disable the module.
+        """
         with self._notify_lock:
             self._pending_autostart.pop(module.name, None)
             if self._shutting_down:
                 return module.started
             if self._start_blocked(module):
                 if module.started:
+                    # The click was a stop; honour it as an explicit choice.
                     module.stop()
-                return False
+                    return False
+                return None
             started = module.toggle(self.testing)
             self._clear_superseded_refusals(module)
             self._stop_refused_dependents()
