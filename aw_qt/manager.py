@@ -493,7 +493,6 @@ class Module:
         # For server modules, check if a server is already running before attempting
         # to start one. This avoids port conflicts and the confusing "Restart" requirement
         # when aw-server is managed externally (e.g. via systemd or Docker).
-        self.foreign_server_port = None
         if self._probe_external_server(testing, timeout=1.0):
             port = self._get_server_port(testing)
             assert port is not None
@@ -531,6 +530,7 @@ class Module:
                 f"{self.name}: server already running on port {port}, "
                 "using existing instance instead of starting a new one"
             )
+            self.foreign_server_port = None
             self._external_server = True
             self._external_server_testing = testing
             self._external_server_probe_cache = True
@@ -560,6 +560,7 @@ class Module:
         self._process = subprocess.Popen(
             exec_cmd, universal_newlines=True, startupinfo=startupinfo
         )
+        self.foreign_server_port = None
         self.started = True
 
     def stop(self) -> None:
@@ -816,7 +817,9 @@ class Manager:
             if self._shutting_down:
                 return module.started
             if self._start_blocked(module):
-                return module.started
+                if module.started:
+                    module.stop()
+                return False
             started = module.toggle(self.testing)
             self._clear_superseded_refusals(module)
             self._stop_refused_dependents()

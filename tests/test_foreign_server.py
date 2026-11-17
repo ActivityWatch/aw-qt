@@ -342,3 +342,30 @@ class TestManagerWithForeignServer:
 
         assert mgr.foreign_server_port is None
         watcher_start.assert_called_once_with(False)
+
+
+def test_failed_spawn_preserves_previous_refusal():
+    server = Module("aw-server-rust", Path("/missing/server"), "bundled")
+    server.foreign_server_port = 5600
+    with (
+        patch.object(server, "_probe_external_server", return_value=False),
+        patch("subprocess.Popen", side_effect=OSError("missing binary")),
+        pytest.raises(OSError),
+    ):
+        server.start(False)
+    assert server.foreign_server_port == 5600
+
+
+def test_toggle_can_stop_a_dependent_after_refusal():
+    with patch.object(Manager, "discover_modules"):
+        mgr = Manager()
+    server = Module("aw-server-rust", Path("/server"), "bundled")
+    watcher = Module("aw-watcher-afk", Path("/watcher"), "bundled")
+    mgr.modules = [server, watcher]
+    server.foreign_server_port = 5600
+    watcher.started = True
+    with patch.object(watcher, "is_alive", return_value=True), patch.object(
+        watcher, "stop"
+    ) as stop:
+        assert mgr.toggle(watcher) is False
+    stop.assert_called_once_with()
