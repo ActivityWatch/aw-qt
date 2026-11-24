@@ -141,6 +141,15 @@ class TestAwQtSettings:
         assert settings.autostart_modules == AwQtSettings().autostart_modules
         assert settings.autostart_on_first_run is True
 
+    @pytest.mark.parametrize("value", ['"false"', '"0"', '"no"', "false"])
+    def test_autostart_on_first_run_false_strings_stay_false(self, xdg_tmp, value):
+        # A quoted "false" must not register a login item the user declined.
+        config_dir = _module_config_dir(DEFAULT_PROFILE, "aw-qt")
+        (config_dir / "aw-qt.toml").write_text(
+            f"[aw-qt]\nautostart_on_first_run = {value}\n"
+        )
+        assert AwQtSettings().autostart_on_first_run is False
+
     def test_isolated_awqt_section_wins_over_shared_root(self, xdg_tmp):
         isolated = _module_config_dir("research", "aw-qt")
         (isolated / "aw-qt.toml").write_text(

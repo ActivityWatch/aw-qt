@@ -292,6 +292,13 @@ def _read_server_port(
     return default_port
 
 
+def _as_bool(value: Any) -> bool:
+    """Parse a TOML flag; bool("false") is True, which would enable a declined option."""
+    if isinstance(value, str):
+        return value.strip().lower() in ("1", "true", "yes", "on")
+    return bool(value)
+
+
 class AwQtSettings:
     def __init__(self, profile: str = DEFAULT_PROFILE):
         """
@@ -326,7 +333,7 @@ class AwQtSettings:
                 config_section = {**config_section, **shared_section}
 
         self.autostart_modules: List[str] = config_section["autostart_modules"]
-        self.autostart_on_first_run: bool = bool(
+        self.autostart_on_first_run: bool = _as_bool(
             config_section.get("autostart_on_first_run", False)
         )
         # Pass autostart_modules so port lookup targets the actual server type,
