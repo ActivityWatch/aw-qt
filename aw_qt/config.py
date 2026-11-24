@@ -2,6 +2,7 @@ import logging
 import os
 import tempfile
 import threading
+from collections.abc import Mapping
 from contextlib import contextmanager
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
@@ -149,10 +150,12 @@ def _raw_toml_section(path: str, section: str) -> Optional[Any]:
     data = parsed.get(section)
     if data is None:
         return None
-    try:
-        if len(data) == 0:
-            return None
-    except TypeError:
+    # `aw-qt-<profile> = "foo"` is a key, not a section. Ignore it rather than
+    # let a caller spread a string or array into the settings dict.
+    if not isinstance(data, Mapping):
+        logger.warning("Ignoring %s in %s: not a table", section, path)
+        return None
+    if len(data) == 0:
         return None
     return data
 

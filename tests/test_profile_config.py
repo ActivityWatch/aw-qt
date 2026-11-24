@@ -141,6 +141,17 @@ class TestAwQtSettings:
         assert settings.autostart_modules == AwQtSettings().autostart_modules
         assert settings.autostart_on_first_run is True
 
+    @pytest.mark.parametrize("value", ['"foo"', "1", "[1, 2]"])
+    def test_pre_isolation_shared_root_non_table_section_is_ignored(
+        self, xdg_tmp, value
+    ):
+        # A legacy `aw-qt-<profile> = <scalar or array>` is not a section. It
+        # must be ignored, not spread into the settings dict (TypeError).
+        shared = _module_config_dir(DEFAULT_PROFILE, "aw-qt")
+        (shared / "aw-qt.toml").write_text(f"aw-qt-research = {value}\n")
+        settings = AwQtSettings(profile="research")
+        assert settings.autostart_modules == AwQtSettings().autostart_modules
+
     @pytest.mark.parametrize("value", ['"false"', '"0"', '"no"', "false"])
     def test_autostart_on_first_run_false_strings_stay_false(self, xdg_tmp, value):
         # A quoted "false" must not register a login item the user declined.
