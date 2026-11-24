@@ -72,7 +72,20 @@ def get_env() -> Dict[str, str]:
 def _open_with_webbrowser(url: str) -> None:
     # Runs on a worker thread, where a Qt dialog is not safe: log the failure.
     try:
-        opened = webbrowser.open(url)
+        # webbrowser has no env argument. Isolate it in a child so browsers
+        # inherit get_env(), without racing other threads over os.environ.
+        # In a frozen build sys.executable is aw-qt, not a Python interpreter.
+        python = "python3" if getattr(sys, "frozen", False) else sys.executable
+        result = subprocess.run(
+            [
+                python,
+                "-c",
+                "import sys, webbrowser; sys.exit(0 if webbrowser.open(sys.argv[1]) else 1)",
+                url,
+            ],
+            env=get_env(),
+        )
+        opened = result.returncode == 0
     except Exception:
         logger.exception(f"Failed to open {url}")
         return
