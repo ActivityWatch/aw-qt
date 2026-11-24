@@ -118,6 +118,17 @@ class TestAwQtSettings:
         settings = AwQtSettings(profile="research")
         assert settings.autostart_modules == ["aw-server-rust"]
 
+    def test_pre_isolation_shared_root_section_without_module_list(self, xdg_tmp):
+        # A legacy [aw-qt-<profile>] section that only sets another key must
+        # fall back to the default module list instead of crashing startup.
+        shared = _module_config_dir(DEFAULT_PROFILE, "aw-qt")
+        (shared / "aw-qt.toml").write_text(
+            "[aw-qt-research]\nautostart_on_first_run = true\n"
+        )
+        settings = AwQtSettings(profile="research")
+        assert settings.autostart_modules == AwQtSettings().autostart_modules
+        assert settings.autostart_on_first_run is True
+
     def test_isolated_awqt_section_wins_over_shared_root(self, xdg_tmp):
         isolated = _module_config_dir("research", "aw-qt")
         (isolated / "aw-qt.toml").write_text(

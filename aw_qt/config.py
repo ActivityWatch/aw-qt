@@ -316,7 +316,9 @@ class AwQtSettings:
                 f"aw-qt-{profile}",
             )
             if shared_section is not None:
-                config_section = shared_section
+                # Layer the legacy section over the defaults: it may set only
+                # some keys (e.g. autostart_on_first_run without a module list).
+                config_section = {**config_section, **shared_section}
 
         self.autostart_modules: List[str] = config_section["autostart_modules"]
         self.autostart_on_first_run: bool = bool(
