@@ -125,9 +125,14 @@ def _read_section_port(path: str, section: str) -> Optional[int]:
     except Exception as e:
         logger.warning("Failed to read %s: %s", path, e)
         return None
-    section_data = config.get(section, {})
-    if "port" in section_data:
-        return int(str(section_data["port"]))
+    try:
+        section_data = config.get(section, {})
+        if "port" in section_data:
+            return int(str(section_data["port"]))
+    except (TypeError, ValueError) as e:
+        # A malformed port must not crash startup; fall back like
+        # _read_toml_port does for the Rust config.
+        logger.warning("Invalid port in [%s] of %s: %s", section, path, e)
     return None
 
 

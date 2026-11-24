@@ -105,6 +105,18 @@ class TestServerPort:
         )
 
 
+@pytest.mark.parametrize(
+    "contents",
+    ['[server]\nport = "abc"\n', "[server]\nport = 5600.5\n", "server = 1\n"],
+)
+def test_malformed_python_server_port_falls_back_to_default(xdg_tmp, contents):
+    # A malformed aw-server.toml must not crash aw-qt at startup; fall back to
+    # the default port like a malformed aw-server-rust config already does.
+    server_dir = _module_config_dir(DEFAULT_PROFILE, "aw-server")
+    (server_dir / "aw-server.toml").write_text(contents)
+    assert _read_server_port("default", ["aw-server"]) == 5600
+
+
 class TestAwQtSettings:
     def test_profile_without_section_inherits_default(self, xdg_tmp):
         settings = AwQtSettings(profile="research")
