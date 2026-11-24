@@ -5,6 +5,7 @@ directory or registry and run on any platform.
 """
 
 import plistlib
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -12,6 +13,9 @@ from unittest.mock import patch
 import pytest
 
 from aw_qt import autostart
+
+
+REAL_SUBPROCESS_RUN = subprocess.run
 
 
 @pytest.fixture
@@ -26,6 +30,11 @@ def fake_home(tmp_path, monkeypatch):
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
     monkeypatch.delenv("AW_PROFILE", raising=False)
     monkeypatch.delenv("APPIMAGE", raising=False)
+    # Never ask the host's systemd: a dev box with aw-qt.service enabled would
+    # otherwise make the Linux backend tests see "enabled". Tests that exercise
+    # the systemd probe patch subprocess.run themselves.
+    not_enabled = subprocess.CompletedProcess([], 1, stdout="disabled\n", stderr="")
+    monkeypatch.setattr(autostart.subprocess, "run", lambda *a, **k: not_enabled)
     with patch.object(autostart, "_home", return_value=home):
         yield home
 
@@ -683,3 +692,43 @@ class TestFirstRunEnable:
             autostart.ensure_enabled_on_first_run()
         mock_enable.assert_not_called()
         assert not (data_dir / autostart.FIRST_RUN_MARKER).exists()
+
+
+class _EnabledHostPopen:
+    """Popen stand-in for a host whose aw-qt.service is enabled.
+
+    It sits below subprocess.run, so the real run() reaches it unless the
+    fake_home fixture has replaced run(). No temp script is executed, so the
+    test does not depend on an executable temp dir or the host's systemctl.
+    """
+
+    def __init__(self, args, **kwargs):
+        self.args = args
+        self.returncode = 0
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def communicate(self, input=None, timeout=None):
+        return "enabled\n", ""
+
+    def poll(self):
+        return self.returncode
+
+    def wait(self, timeout=None):
+        return self.returncode
+
+    def kill(self):
+        pass
+
+
+def test_linux_detection_ignores_host_systemd(fake_home, monkeypatch):
+    """A host with aw-qt.service enabled must not leak into the tests."""
+    monkeypatch.setattr(subprocess, "Popen", _EnabledHostPopen)
+    # Prove this simulated host is enabled before testing fixture isolation.
+    with patch.object(autostart.subprocess, "run", REAL_SUBPROCESS_RUN):
+        assert autostart._linux_systemd_unit_is_enabled()
+    assert not autostart._linux_systemd_unit_is_enabled()

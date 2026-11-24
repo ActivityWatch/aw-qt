@@ -13,6 +13,8 @@ from time import monotonic, sleep
 from typing import Optional, List, Hashable, Set, Iterable, Dict
 
 import aw_core
+import aw_core.dirs
+import platformdirs
 
 from .wayland import WAYLAND_WATCHER  # noqa: F401 - retained for existing imports
 from .wayland import (
@@ -39,6 +41,12 @@ def _log_modules(modules: List["Module"]) -> None:
 # `aw-notify` has `enabled: true` (ActivityWatch/activitywatch#1435).
 NOTIFY_MODULE = "aw-notify"
 NOTIFY_SETTINGS_KEY = "aw-notify"
+
+# Honor-system flag set from the web UI Settings page ("I already support
+# ActivityWatch"). Stored in the server's generic settings store, so every
+# client reading /api/0/settings sees the same answer. Unset means "show the
+# support prompts", which is also what an unreachable server must mean.
+SUPPORTER_SETTINGS_KEY = "supporter"
 
 # Modules that talk to the server on startup. aw-sync's first sync cycle fails
 # if it starts before aw-server listens, so at login it is started only once
@@ -168,6 +176,18 @@ def read_notify_enabled(port: int, timeout: float = 2.0) -> bool:
     return read_notify_settings(port, timeout).get("enabled") is True
 
 
+def read_notify_enabled_or_none(port: int, timeout: float = 2.0) -> Optional[bool]:
+    """Like read_notify_enabled, but None when the server could not be read.
+
+    Lets the tray keep the last successfully read value instead of showing an
+    unreachable server as "notifications off".
+    """
+    try:
+        return _read_notify_enabled_or_raise(port, timeout)
+    except (urllib.error.URLError, OSError, ValueError):
+        return None
+
+
 def write_notify_enabled(port: int, enabled: bool, timeout: float = 2.0) -> bool:
     """Persist `enabled` in the shared `aw-notify` setting, keeping all other keys.
 
@@ -193,6 +213,25 @@ def write_notify_enabled(port: int, enabled: bool, timeout: float = 2.0) -> bool
             return True
     except (urllib.error.URLError, OSError):
         return False
+
+
+def read_supporter(port: int, timeout: float = 2.0) -> bool:
+    """Return True iff the server's `supporter` setting is boolean true.
+
+    The web UI stores this as a plain boolean (`/api/0/settings/supporter`), and
+    skips writing it while false, so a missing key (404), an unreachable server
+    or any non-boolean-true value all mean "not a supporter" — keep showing the
+    support prompts, which is today's behaviour.
+    """
+    try:
+        with urllib.request.urlopen(
+            f"http://localhost:{port}/api/0/settings/{SUPPORTER_SETTINGS_KEY}",
+            timeout=timeout,
+        ) as resp:
+            value = json.load(resp)
+    except (urllib.error.URLError, OSError, ValueError):
+        return False
+    return value is True
 
 
 def _read_notify_enabled_or_raise(port: int, timeout: float = 2.0) -> bool:
@@ -544,12 +583,37 @@ class Module:
 
     def read_log(self, testing: bool) -> str:
         """Useful if you want to retrieve the logs of a module"""
-        log_path = aw_core.log.get_latest_log_file(self.name, testing)
+        log_path = aw_core.log.get_latest_log_file(
+            self.name, testing
+        ) or _latest_rust_log_file(self.name, testing)
         if log_path:
             with open(log_path) as f:
                 return f.read()
         else:
             return "No log file found"
+
+
+def _latest_rust_log_file(name: str, testing: bool) -> Optional[str]:
+    """Newest log of a Rust module (aw-server-rust, aw-sync) on Windows.
+
+    aw-core's platformdirs log dir on Windows is
+    %LOCALAPPDATA%\\activitywatch\\activitywatch\\Logs (appauthor defaults to the
+    appname), but the Rust modules log to %LOCALAPPDATA%\\activitywatch\\Logs.
+    Linux and macOS layouts already agree.
+    """
+    if sys.platform != "win32":
+        return None
+    log_dir = os.path.join(
+        platformdirs.user_log_dir(aw_core.dirs._get_appname(), appauthor=False), name
+    )
+    try:
+        files = os.listdir(log_dir)
+    except OSError:
+        return None
+    files = [f for f in files if name in f and ("testing" in f) == testing]
+    if not files:
+        return None
+    return os.path.join(log_dir, max(files))
 
 
 class Manager:

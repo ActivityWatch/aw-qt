@@ -352,11 +352,18 @@ class _SettingsHandler(BaseHTTPRequestHandler):
     """Minimal aw-server stand-in serving /api/0/info and /api/0/settings/aw-notify."""
 
     notify_settings = None  # None => 404 (key missing)
+    supporter_value = None  # None => 404 (key missing)
     settings_get_error: Optional[int] = None  # set to an HTTP status code to force an error
 
     def do_GET(self):
         if self.path == "/api/0/info":
             body = b"{}"
+        elif self.path == "/api/0/settings/supporter":
+            if self.supporter_value is None:
+                self.send_response(404)
+                self.end_headers()
+                return
+            body = json.dumps(self.supporter_value).encode()
         elif self.path == "/api/0/settings/aw-notify":
             if self.settings_get_error is not None:
                 self.send_response(self.settings_get_error)
@@ -399,7 +406,38 @@ def settings_server():
     yield server, _SettingsHandler
     server.shutdown()
     _SettingsHandler.notify_settings = None
+    _SettingsHandler.supporter_value = None
     _SettingsHandler.settings_get_error = None
+
+
+class TestSupporterFlag:
+    """The honor-system supporter flag comes from the server's settings store."""
+
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            (True, True),
+            (False, False),
+            ("true", False),  # only a real boolean true counts
+            ({"supporter": True}, False),  # object is not the scalar the web UI writes
+            (None, False),  # key missing (404) => not a supporter
+        ],
+    )
+    def test_read_supporter(self, settings_server, value, expected):
+        server, handler = settings_server
+        handler.supporter_value = value
+        assert manager_module.read_supporter(server.server_port) is expected
+
+    def test_read_supporter_server_down(self, monkeypatch):
+        def unavailable(*args, **kwargs):
+            raise manager_module.urllib.error.URLError("server unavailable")
+
+        monkeypatch.setattr(manager_module.urllib.request, "urlopen", unavailable)
+        assert manager_module.read_supporter(5600, timeout=0.2) is False
+
+    def test_supporter_key_matches_the_web_ui(self):
+        # aw-webui writes POST /0/settings/supporter with a bare boolean.
+        assert manager_module.SUPPORTER_SETTINGS_KEY == "supporter"
 
 
 class TestNotifyOptIn:
@@ -736,3 +774,48 @@ class TestServerDependentAutostart:
         with patch.object(sync, "start") as sync_start:
             assert mgr.autostart(["aw-sync"]) is None
         sync_start.assert_called_once_with(True)
+
+
+class TestRustLogLookup:
+    """On Windows, Rust modules log outside aw-core's platformdirs log dir."""
+
+    def _fake_windows(self, monkeypatch, tmp_path):
+        calls = []
+
+        def user_log_dir(appname, appauthor=None):
+            calls.append((appname, appauthor))
+            # platformdirs' Windows layout: an appauthor level unless appauthor=False
+            parts = [appname] if appauthor is False else [appauthor or appname, appname]
+            return str(tmp_path.joinpath(*parts, "Logs"))
+
+        monkeypatch.setattr(manager_module.sys, "platform", "win32")
+        monkeypatch.setattr(manager_module.platformdirs, "user_log_dir", user_log_dir)
+        monkeypatch.setattr(manager_module.aw_core.dirs, "_get_appname", lambda: "activitywatch")
+        monkeypatch.setattr(
+            manager_module.aw_core.log, "get_latest_log_file", lambda name, testing=False: None
+        )
+        return calls
+
+    def test_reads_newest_rust_log(self, monkeypatch, tmp_path):
+        calls = self._fake_windows(monkeypatch, tmp_path)
+        log_dir = tmp_path / "activitywatch" / "Logs" / "aw-sync"
+        log_dir.mkdir(parents=True)
+        (log_dir / "aw-sync_2026-10-20T08-00-00+0200.log").write_text("old")
+        (log_dir / "aw-sync_2026-10-21T08-00-00+0200.log").write_text("Error during sync cycle")
+        (log_dir / "aw-sync-testing_2026-10-22T08-00-00+0200.log").write_text("testing")
+        module = Module("aw-sync", Path("/usr/bin/true"), "system")
+        assert module.read_log(testing=False) == "Error during sync cycle"
+        assert ("activitywatch", False) in calls
+
+    def test_no_log_anywhere(self, monkeypatch, tmp_path):
+        self._fake_windows(monkeypatch, tmp_path)
+        module = Module("aw-sync", Path("/usr/bin/true"), "system")
+        assert module.read_log(testing=False) == "No log file found"
+
+    def test_not_used_off_windows(self, monkeypatch, tmp_path):
+        self._fake_windows(monkeypatch, tmp_path)
+        monkeypatch.setattr(manager_module.sys, "platform", "linux")
+        log_dir = tmp_path / "activitywatch" / "Logs" / "aw-sync"
+        log_dir.mkdir(parents=True)
+        (log_dir / "aw-sync_2026-10-21T08-00-00+0200.log").write_text("x")
+        assert manager_module._latest_rust_log_file("aw-sync", False) is None
