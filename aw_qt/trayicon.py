@@ -5,6 +5,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import webbrowser
 from pathlib import Path
@@ -68,12 +69,34 @@ def get_env() -> Dict[str, str]:
     return env
 
 
+def _open_with_webbrowser(url: str) -> None:
+    # Runs on a worker thread, where a Qt dialog is not safe: log the failure.
+    try:
+        opened = webbrowser.open(url)
+    except Exception:
+        logger.exception(f"Failed to open {url}")
+        return
+    if not opened:
+        logger.warning(f"No browser found to open {url}")
+
+
 def open_url(url: str) -> None:
     if sys.platform == "linux":
         env = get_env()
-        subprocess.Popen(["xdg-open", url], env=env)
-    else:
-        webbrowser.open(url)
+        try:
+            subprocess.Popen(["xdg-open", url], env=env)
+            return
+        except OSError as exc:
+            # No xdg-utils (minimal WM, container). An exception escaping this
+            # Qt slot would abort aw-qt, so fall back to the stdlib launcher.
+            logger.warning(f"xdg-open failed ({exc}), falling back to webbrowser")
+            # webbrowser.open() can block until a foreground browser exits, and
+            # this runs on the Qt thread. Keep the tray responsive.
+            threading.Thread(
+                target=_open_with_webbrowser, args=(url,), name="open-url", daemon=True
+            ).start()
+            return
+    webbrowser.open(url)
 
 
 def open_webui(root_url: str) -> None:
