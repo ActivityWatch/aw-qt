@@ -13,15 +13,15 @@ def test_autostart_continues_past_module_that_fails_to_launch():
         manager = Manager(testing=True)
     manager.modules = [afk, window]
 
-    def popen(cmd, **kwargs):
-        if "afk" in cmd[0]:
-            raise FileNotFoundError(cmd[0])
-        return MagicMock(returncode=None)
-
+    # autostart iterates a set: fail the first launch regardless of its name.
     with patch.object(Module, "_probe_external_server", return_value=False), patch(
-        "aw_qt.manager.subprocess.Popen", side_effect=popen
-    ):
+        "aw_qt.manager.subprocess.Popen",
+        side_effect=[FileNotFoundError("missing interpreter"), MagicMock(returncode=None)],
+    ) as popen:
         manager.autostart(["aw-watcher-afk", "aw-watcher-window"])
 
-    assert window.started is True
-    assert afk.started is False
+    assert popen.call_count == 2
+    failed, started = [call.args[0][0] for call in popen.call_args_list]
+    assert failed != started
+    for module in manager.modules:
+        assert module.started is (str(module.path) == started)

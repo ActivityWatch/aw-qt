@@ -152,3 +152,45 @@ def test_failed_auto_restart_keeps_status_check_scheduled():
         check_status()
 
         single_shot.assert_called_with(5000, check_status)
+
+
+@pytest.mark.parametrize("failure", ["restart", "log", "dialog"])
+def test_failed_module_does_not_block_later_crash_recovery(failure):
+    first, _ = make_module("aw-watcher-afk", 1)
+    second, _ = make_module("aw-watcher-window", 1)
+    manager = make_manager(first)
+    manager.modules.append(second)
+    timestamps = (
+        {first.name: [time.monotonic()] * TrayIcon.MAX_AUTO_RESTARTS}
+        if failure != "restart"
+        else {}
+    )
+    tray = make_tray(first, manager, timestamps=timestamps)
+
+    with ExitStack() as stack:
+        single_shot = enter_tray_patches(stack, first)
+        stack.enter_context(patch.object(second, "start"))
+        box = stack.enter_context(patch("aw_qt.trayicon.QMessageBox"))
+        stack.enter_context(patch("aw_qt.trayicon.QPushButton"))
+        if failure == "restart":
+            first.start.side_effect = OSError("Exec format error")
+        elif failure == "log":
+            stack.enter_context(
+                patch.object(first, "read_log", side_effect=PermissionError("log denied"))
+            )
+        else:
+            box.side_effect = RuntimeError("dialog unavailable")
+        TrayIcon._build_rootmenu(tray)
+        check_status = scheduled_status_callback(single_shot)
+        check_status()
+
+        second.start.assert_called_once_with(True)
+        assert first.started is False
+        assert first._process is None
+        single_shot.assert_called_with(5000, check_status)
+        if failure == "log":
+            box.return_value.show.assert_called_once_with()
+            assert "log" in box.return_value.setDetailedText.call_args.args[0].lower()
+        # Neither failure may keep the first crash active and starve later polls.
+        check_status()
+        assert second.start.call_count == 1
