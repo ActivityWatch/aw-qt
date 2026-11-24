@@ -27,11 +27,11 @@ from . import autostart
 from .config import persist_module_autostart
 from .manager import (
     NOTIFY_MODULE,
+    NOTIFY_SETTINGS_KEY,
     SUPPORTER_SETTINGS_KEY,
     Manager,
     Module,
     read_notify_enabled,
-    read_notify_enabled_or_none,
     write_notify_enabled,
 )
 from .profile import DEFAULT_PROFILE, TESTING_PROFILE
@@ -192,6 +192,8 @@ class TrayIcon(QSystemTrayIcon):
         self._support_action: Optional[QAction] = None
         self._support_network = QNetworkAccessManager(self)
         self._support_reply: Optional[QNetworkReply] = None
+        self._notify_reply: Optional[QNetworkReply] = None
+        self._notify_generation = 0
 
         if port is None:
             port = 5666 if testing else 5600
@@ -224,13 +226,51 @@ class TrayIcon(QSystemTrayIcon):
             self._autostart_action.setChecked(autostart.is_enabled())
 
     def _refresh_notify_action(self) -> None:
-        """Sync the menu item with the shared `aw-notify.enabled` setting."""
-        if self._notify_action is not None:
-            enabled = read_notify_enabled_or_none(self.port, timeout=0.5)
-            # An unreachable server says nothing about the setting: keep the
-            # last value rather than showing notifications as off.
-            if enabled is not None:
+        """Sync the menu item with the shared `aw-notify.enabled` setting.
+
+        Reads asynchronously like the support item, so a slow server never
+        stalls the menu. An unreachable server or unreadable reply says nothing
+        about the setting: the last value stays rather than showing "off".
+        """
+        if self._notify_action is None or self._notify_reply is not None:
+            return
+        request = QNetworkRequest(
+            QtCore.QUrl(f"{self.root_url}/api/0/settings/{NOTIFY_SETTINGS_KEY}")
+        )
+        request.setTransferTimeout(500)
+        reply = self._support_network.get(request)
+        if reply is None:
+            return
+        self._notify_reply = reply
+        generation = self._notify_generation
+        deadline = QtCore.QTimer(reply)
+        deadline.setSingleShot(True)
+        deadline.timeout.connect(reply.abort)
+        deadline.start(500)
+
+        def finished() -> None:
+            deadline.stop()
+            enabled: Optional[bool] = None
+            error = reply.error()
+            if error == QNetworkReply.NetworkError.NoError:
+                try:
+                    data = json.loads(reply.readAll().data())
+                    enabled = isinstance(data, dict) and data.get("enabled") is True
+                except (ValueError, UnicodeDecodeError):
+                    pass
+            elif error == QNetworkReply.NetworkError.ContentNotFoundError:
+                enabled = False  # Key not created yet: notifications are off.
+            # A toggle while the read was in flight wins over the older answer.
+            if (
+                enabled is not None
+                and self._notify_action is not None
+                and generation == self._notify_generation
+            ):
                 self._notify_action.setChecked(enabled)
+            self._notify_reply = None
+            reply.deleteLater()
+
+        reply.finished.connect(finished)
 
     def _refresh_support_action(self) -> None:
         """Refresh asynchronously, leaving the last visibility in place meanwhile."""
@@ -272,6 +312,7 @@ class TrayIcon(QSystemTrayIcon):
         if self._notify_action is None:
             return
         checked = self._notify_action.isChecked()
+        self._notify_generation += 1
         # Hold _notify_lock so the autostart background thread cannot start a
         # second aw-notify instance between this write and the start/stop call.
         with self.manager._notify_lock:

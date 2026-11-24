@@ -161,3 +161,61 @@ def test_build_rootmenu_starts_read_and_rechecks_on_open(tray):
         refresh.assert_called_once_with()
         tray.contextMenu().aboutToShow.emit()
         assert refresh.call_count == 2
+
+
+@pytest.fixture
+def notify_tray(app, server):
+    with patch.object(TrayIcon, "_build_rootmenu"):
+        instance = TrayIcon(MagicMock(), QIcon(), port=server[0])
+    instance._notify_action = QAction("Enable notifications", instance)
+    instance._notify_action.setCheckable(True)
+    yield instance
+    instance.deleteLater()
+    app.processEvents()
+
+
+@pytest.mark.parametrize(
+    "status,body,before,after",
+    [
+        (200, {"enabled": True}, False, True),
+        (200, {"enabled": False}, True, False),
+        (404, {}, True, False),  # key not created yet: off
+        (500, {}, True, True),  # unreadable: keep last value (aw-qt#158)
+        (200, "not-a-dict", True, False),
+    ],
+)
+def test_notify_item_follows_server_and_keeps_last_on_error(
+    app, server, notify_tray, status, body, before, after
+):
+    server[1].update(status=status, body=body)
+    server[3].set()
+    notify_tray._notify_action.setChecked(before)
+    notify_tray._refresh_notify_action()
+    spin_until(app, lambda: notify_tray._notify_reply is None)
+    assert notify_tray._notify_action.isChecked() is after
+    assert server[1]["path"] == "/api/0/settings/aw-notify"
+
+
+def test_notify_read_does_not_block_and_timeout_keeps_last(app, server, notify_tray):
+    notify_tray._notify_action.setChecked(True)
+    started = time.monotonic()
+    notify_tray._refresh_notify_action()
+    assert time.monotonic() - started < 0.25
+    reply = notify_tray._notify_reply
+    notify_tray._refresh_notify_action()
+    assert notify_tray._notify_reply is reply
+    spin_until(app, lambda: notify_tray._notify_reply is None)
+    assert not server[3].is_set()
+    assert notify_tray._notify_action.isChecked()
+
+
+def test_toggle_during_read_wins_over_older_answer(app, server, notify_tray):
+    server[1]["body"] = {"enabled": False}
+    notify_tray._notify_action.setChecked(False)
+    notify_tray._refresh_notify_action()
+    spin_until(app, lambda: server[2].is_set())
+    notify_tray._notify_action.setChecked(True)
+    notify_tray._notify_generation += 1  # what _on_notify_toggled does
+    server[3].set()
+    spin_until(app, lambda: notify_tray._notify_reply is None)
+    assert notify_tray._notify_action.isChecked()
