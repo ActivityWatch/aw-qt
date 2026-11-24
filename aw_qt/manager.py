@@ -176,6 +176,18 @@ def read_notify_enabled(port: int, timeout: float = 2.0) -> bool:
     return read_notify_settings(port, timeout).get("enabled") is True
 
 
+def read_notify_enabled_or_none(port: int, timeout: float = 2.0) -> Optional[bool]:
+    """Like read_notify_enabled, but None when the server could not be read.
+
+    Lets the tray keep the last successfully read value instead of showing an
+    unreachable server as "notifications off".
+    """
+    try:
+        return _read_notify_enabled_or_raise(port, timeout)
+    except (urllib.error.URLError, OSError, ValueError):
+        return None
+
+
 def write_notify_enabled(port: int, enabled: bool, timeout: float = 2.0) -> bool:
     """Persist `enabled` in the shared `aw-notify` setting, keeping all other keys.
 

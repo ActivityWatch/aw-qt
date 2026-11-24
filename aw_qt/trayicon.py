@@ -31,6 +31,7 @@ from .manager import (
     Manager,
     Module,
     read_notify_enabled,
+    read_notify_enabled_or_none,
     write_notify_enabled,
 )
 from .profile import DEFAULT_PROFILE, TESTING_PROFILE
@@ -225,7 +226,11 @@ class TrayIcon(QSystemTrayIcon):
     def _refresh_notify_action(self) -> None:
         """Sync the menu item with the shared `aw-notify.enabled` setting."""
         if self._notify_action is not None:
-            self._notify_action.setChecked(read_notify_enabled(self.port, timeout=0.5))
+            enabled = read_notify_enabled_or_none(self.port, timeout=0.5)
+            # An unreachable server says nothing about the setting: keep the
+            # last value rather than showing notifications as off.
+            if enabled is not None:
+                self._notify_action.setChecked(enabled)
 
     def _refresh_support_action(self) -> None:
         """Refresh asynchronously, leaving the last visibility in place meanwhile."""
@@ -276,6 +281,9 @@ class TrayIcon(QSystemTrayIcon):
                 else:
                     self.manager.stop_notify()
             else:
+                # Qt toggles before emitting triggered: undo the unsaved change
+                # even if the refresh below cannot reach the server either.
+                self._notify_action.setChecked(not checked)
                 logger.error("Failed to save the aw-notify setting, is the server running?")
                 box = QMessageBox(self._parent)
                 box.setIcon(QMessageBox.Icon.Warning)
