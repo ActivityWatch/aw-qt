@@ -71,9 +71,14 @@ def get_env() -> Dict[str, str]:
 def open_url(url: str) -> None:
     if sys.platform == "linux":
         env = get_env()
-        subprocess.Popen(["xdg-open", url], env=env)
-    else:
-        webbrowser.open(url)
+        try:
+            subprocess.Popen(["xdg-open", url], env=env)
+            return
+        except OSError as exc:
+            # No xdg-utils (minimal WM, container). An exception escaping this
+            # Qt slot would abort aw-qt, so fall back to the stdlib launcher.
+            logger.warning(f"xdg-open failed ({exc}), falling back to webbrowser")
+    webbrowser.open(url)
 
 
 def open_webui(root_url: str) -> None:
