@@ -144,6 +144,39 @@ def test_notify_item_keeps_last_value_when_server_unreachable():
         TrayIcon._refresh_notify_action(tray)
     action.setChecked.assert_called_once_with(True)
     action.reset_mock()
-    with patch("aw_qt.trayicon.read_notify_enabled_or_none", return_value=None):
+    with patch(
+        "aw_qt.manager.urllib.request.urlopen", side_effect=ConnectionRefusedError
+    ):
         TrayIcon._refresh_notify_action(tray)
     action.setChecked.assert_not_called()
+
+
+@pytest.mark.parametrize("checked", [False, True])
+@pytest.mark.parametrize("saved", [False, True])
+def test_notify_toggle_retains_only_saved_state_when_refresh_fails(
+    checked, saved, monkeypatch
+):
+    from PyQt6.QtGui import QAction
+    from PyQt6.QtWidgets import QApplication
+
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    app = QApplication.instance() or QApplication([])
+    action = QAction("Enable notifications")
+    action.setCheckable(True)
+    action.setChecked(not checked)
+    tray = SimpleNamespace(
+        _notify_action=action, port=5600, manager=MagicMock(), _parent=None
+    )
+    tray._refresh_notify_action = partial(TrayIcon._refresh_notify_action, tray)
+    action.triggered.connect(lambda: TrayIcon._on_notify_toggled(tray))
+    with (
+        patch("aw_qt.trayicon.write_notify_enabled", return_value=saved) as write,
+        patch("aw_qt.manager.urllib.request.urlopen", side_effect=ConnectionRefusedError),
+        patch("aw_qt.trayicon.QMessageBox"),
+    ):
+        action.trigger()
+    write.assert_called_once_with(5600, checked)
+    assert action.isChecked() == (checked if saved else not checked)
+    assert tray.manager._start_notify_locked.call_count == int(saved and checked)
+    assert tray.manager.stop_notify.call_count == int(saved and not checked)
+    assert app is not None

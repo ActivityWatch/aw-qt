@@ -281,6 +281,9 @@ class TrayIcon(QSystemTrayIcon):
                 else:
                     self.manager.stop_notify()
             else:
+                # Qt toggles before emitting triggered: undo the unsaved change
+                # even if the refresh below cannot reach the server either.
+                self._notify_action.setChecked(not checked)
                 logger.error("Failed to save the aw-notify setting, is the server running?")
                 box = QMessageBox(self._parent)
                 box.setIcon(QMessageBox.Icon.Warning)

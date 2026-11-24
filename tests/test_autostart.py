@@ -16,6 +16,9 @@ import pytest
 from aw_qt import autostart
 
 
+REAL_SUBPROCESS_RUN = subprocess.run
+
+
 @pytest.fixture
 def fake_home(tmp_path, monkeypatch):
     """Point the autostart module at a throwaway home directory."""
@@ -692,6 +695,7 @@ class TestFirstRunEnable:
         assert not (data_dir / autostart.FIRST_RUN_MARKER).exists()
 
 
+@pytest.mark.skipif(os.name != "posix", reason="fake systemctl is a POSIX shell script")
 def test_linux_detection_ignores_host_systemd(fake_home, tmp_path, monkeypatch):
     """A host with aw-qt.service enabled must not leak into the tests."""
     fake_bin = tmp_path / "bin"
@@ -699,5 +703,8 @@ def test_linux_detection_ignores_host_systemd(fake_home, tmp_path, monkeypatch):
     systemctl = fake_bin / "systemctl"
     systemctl.write_text("#!/bin/sh\necho enabled\n")
     systemctl.chmod(0o755)
-    monkeypatch.setenv("PATH", f"{fake_bin}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setenv("PATH", str(fake_bin), prepend=os.pathsep)
+    # Prove this simulated host is enabled before testing fixture isolation.
+    with patch.object(autostart.subprocess, "run", REAL_SUBPROCESS_RUN):
+        assert autostart._linux_systemd_unit_is_enabled()
     assert not autostart._linux_systemd_unit_is_enabled()
