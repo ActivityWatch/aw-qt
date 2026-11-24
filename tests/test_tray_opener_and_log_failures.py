@@ -48,3 +48,19 @@ def test_read_log_tolerates_undecodable_bytes(monkeypatch, tmp_path):
     text = Module("aw-watcher-afk", Path("/b/aw-watcher-afk"), "bundled").read_log(False)
 
     assert text == "started\n\ufffd\ufffd broken\n"
+
+
+def test_webbrowser_fallback_failure_is_logged(monkeypatch, caplog):
+    # The fallback runs on a worker thread: its failure must reach the log
+    # rather than vanish as an unhandled thread exception.
+    def broken(url):
+        raise FileNotFoundError("xdg-open")
+
+    monkeypatch.setattr(trayicon.webbrowser, "open", broken)
+    trayicon._open_with_webbrowser("http://localhost:5600")
+    assert "Failed to open http://localhost:5600" in caplog.text
+
+    caplog.clear()
+    monkeypatch.setattr(trayicon.webbrowser, "open", lambda url: False)
+    trayicon._open_with_webbrowser("http://localhost:5600")
+    assert "No browser found to open http://localhost:5600" in caplog.text

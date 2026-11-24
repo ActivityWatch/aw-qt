@@ -202,3 +202,27 @@ def test_failed_module_does_not_block_later_crash_recovery(failure):
         # Neither failure may keep the first crash active and starve later polls.
         check_status()
         assert second.start.call_count == 1
+
+
+def test_manual_restart_of_unlaunchable_module_reports_instead_of_raising():
+    # The failure dialog's Restart button runs in a Qt slot: if the module
+    # still cannot launch, the error must be shown, not escape and abort aw-qt.
+    module, _ = make_module("aw-watcher-afk", 1)
+    manager = make_manager(module)
+    tray = make_tray(module, manager)
+
+    with ExitStack() as stack:
+        single_shot = enter_tray_patches(stack, module)
+        module.start.side_effect = OSError("Exec format error")
+        box = stack.enter_context(patch("aw_qt.trayicon.QMessageBox"))
+        button = stack.enter_context(patch("aw_qt.trayicon.QPushButton"))
+        stack.enter_context(patch.object(module, "read_log", return_value="log"))
+        TrayIcon._build_rootmenu(tray)
+        scheduled_status_callback(single_shot)()
+
+        on_restart = button.return_value.clicked.connect.call_args.args[0]
+        on_restart()
+
+        texts = [call.args[0] for call in box.return_value.setText.call_args_list]
+        assert any("Exec format error" in text for text in texts)
+        assert module.started is False

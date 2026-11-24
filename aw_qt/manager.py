@@ -676,12 +676,13 @@ class Manager:
         """Start one autostart module; a launch failure must not stop the rest.
 
         A module can be discovered yet fail to launch (e.g. a watcher on PATH
-        whose shebang interpreter was removed). Letting that OSError escape
-        would skip every later module and abort aw-qt before the tray appears.
+        whose shebang interpreter was removed, or `import AppKit` failing on
+        macOS). Letting that escape would skip every later module and abort
+        aw-qt before the tray appears.
         """
         try:
             self.start(module_name)
-        except OSError:
+        except Exception:
             logger.exception(f"Failed to launch module {module_name}")
 
     def toggle(self, module: Module) -> bool:

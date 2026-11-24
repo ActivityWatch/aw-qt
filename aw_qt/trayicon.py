@@ -69,6 +69,17 @@ def get_env() -> Dict[str, str]:
     return env
 
 
+def _open_with_webbrowser(url: str) -> None:
+    # Runs on a worker thread, where a Qt dialog is not safe: log the failure.
+    try:
+        opened = webbrowser.open(url)
+    except Exception:
+        logger.exception(f"Failed to open {url}")
+        return
+    if not opened:
+        logger.warning(f"No browser found to open {url}")
+
+
 def open_url(url: str) -> None:
     if sys.platform == "linux":
         env = get_env()
@@ -82,7 +93,7 @@ def open_url(url: str) -> None:
             # webbrowser.open() can block until a foreground browser exits, and
             # this runs on the Qt thread. Keep the tray responsive.
             threading.Thread(
-                target=webbrowser.open, args=(url,), name="open-url", daemon=True
+                target=_open_with_webbrowser, args=(url,), name="open-url", daemon=True
             ).start()
             return
     webbrowser.open(url)
@@ -413,7 +424,16 @@ class TrayIcon(QSystemTrayIcon):
 
             def on_manual_restart() -> None:
                 self._restart_timestamps.pop(module.name, None)
-                module.start(self.testing)
+                try:
+                    module.start(self.testing)
+                except Exception as exc:
+                    # Still unlaunchable: an exception escaping this Qt slot
+                    # would abort the tray. Say why instead.
+                    logger.exception(f"Failed to restart module {module.name}")
+                    error_box = QMessageBox(self._parent)
+                    error_box.setIcon(QMessageBox.Icon.Warning)
+                    error_box.setText(f"Could not start module {module.name}: {exc}")
+                    error_box.show()
 
             restart_button.clicked.connect(on_manual_restart)
             box.addButton(restart_button, QMessageBox.ButtonRole.AcceptRole)
@@ -469,10 +489,14 @@ class TrayIcon(QSystemTrayIcon):
                 self._record_restart(module.name)
                 try:
                     module.start(self.testing)
-                except OSError:
+                except Exception:
                     # stop() already cleared `started`, so later polls will not
                     # see this module again. Report it now instead of dropping it.
-                    logger.exception(f"Failed to auto-restart module {module.name}")
+                    logger.exception(
+                        f"Failed to auto-restart module {module.name}; it will "
+                        "not be retried automatically (use Restart or the "
+                        "Modules menu)"
+                    )
                     show_module_failed_dialog(module)
                     return
                 self.showMessage(

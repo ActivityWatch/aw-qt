@@ -3,10 +3,21 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from aw_qt.manager import Manager, Module
 
 
-def test_autostart_continues_past_module_that_fails_to_launch():
+@pytest.mark.parametrize(
+    "error",
+    [
+        FileNotFoundError("missing interpreter"),
+        # e.g. `import AppKit` failing on macOS, or a malformed command list
+        ImportError("No module named 'AppKit'"),
+        ValueError("embedded null byte"),
+    ],
+)
+def test_autostart_continues_past_module_that_fails_to_launch(error):
     afk = Module("aw-watcher-afk", Path("/bundled/aw-watcher-afk"), "bundled")
     window = Module("aw-watcher-window", Path("/bundled/aw-watcher-window"), "bundled")
     with patch.object(Manager, "discover_modules"):
@@ -16,7 +27,7 @@ def test_autostart_continues_past_module_that_fails_to_launch():
     # autostart iterates a set: fail the first launch regardless of its name.
     with patch.object(Module, "_probe_external_server", return_value=False), patch(
         "aw_qt.manager.subprocess.Popen",
-        side_effect=[FileNotFoundError("missing interpreter"), MagicMock(returncode=None)],
+        side_effect=[error, MagicMock(returncode=None)],
     ) as popen:
         manager.autostart(["aw-watcher-afk", "aw-watcher-window"])
 
