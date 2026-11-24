@@ -25,7 +25,11 @@ def test_autostart_continues_past_module_that_fails_to_launch(error):
     manager.modules = [afk, window]
 
     # autostart iterates a set: fail the first launch regardless of its name.
-    with patch.object(Module, "_probe_external_server", return_value=False), patch(
+    # Pin a non-macOS platform: on darwin, start() imports AppKit before Popen,
+    # so a host without it would fail both launches before the mock is reached.
+    with patch("aw_qt.manager.sys.platform", "linux"), patch.object(
+        Module, "_probe_external_server", return_value=False
+    ), patch(
         "aw_qt.manager.subprocess.Popen",
         side_effect=[error, MagicMock(returncode=None)],
     ) as popen:
