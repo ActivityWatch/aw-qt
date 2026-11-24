@@ -5,7 +5,6 @@ import signal
 import subprocess
 import sys
 import tempfile
-import threading
 import time
 import webbrowser
 from pathlib import Path
@@ -69,34 +68,12 @@ def get_env() -> Dict[str, str]:
     return env
 
 
-def _open_with_webbrowser(url: str) -> None:
-    # Runs on a worker thread, where a Qt dialog is not safe: log the failure.
-    try:
-        opened = webbrowser.open(url)
-    except Exception:
-        logger.exception(f"Failed to open {url}")
-        return
-    if not opened:
-        logger.warning(f"No browser found to open {url}")
-
-
 def open_url(url: str) -> None:
     if sys.platform == "linux":
         env = get_env()
-        try:
-            subprocess.Popen(["xdg-open", url], env=env)
-            return
-        except OSError as exc:
-            # No xdg-utils (minimal WM, container). An exception escaping this
-            # Qt slot would abort aw-qt, so fall back to the stdlib launcher.
-            logger.warning(f"xdg-open failed ({exc}), falling back to webbrowser")
-            # webbrowser.open() can block until a foreground browser exits, and
-            # this runs on the Qt thread. Keep the tray responsive.
-            threading.Thread(
-                target=_open_with_webbrowser, args=(url,), name="open-url", daemon=True
-            ).start()
-            return
-    webbrowser.open(url)
+        subprocess.Popen(["xdg-open", url], env=env)
+    else:
+        webbrowser.open(url)
 
 
 def open_webui(root_url: str) -> None:
@@ -413,27 +390,13 @@ class TrayIcon(QSystemTrayIcon):
                     else ""
                 )
             )
-            try:
-                log = module.read_log(self.testing)
-            except OSError:
-                logger.exception(f"Failed to read log for module {module.name}")
-                log = "Unable to read the module log. See the aw-qt log for details."
-            box.setDetailedText(log)
+            box.setDetailedText(module.read_log(self.testing))
 
             restart_button = QPushButton("Restart", box)
 
             def on_manual_restart() -> None:
                 self._restart_timestamps.pop(module.name, None)
-                try:
-                    module.start(self.testing)
-                except Exception as exc:
-                    # Still unlaunchable: an exception escaping this Qt slot
-                    # would abort the tray. Say why instead.
-                    logger.exception(f"Failed to restart module {module.name}")
-                    error_box = QMessageBox(self._parent)
-                    error_box.setIcon(QMessageBox.Icon.Warning)
-                    error_box.setText(f"Could not start module {module.name}: {exc}")
-                    error_box.show()
+                module.start(self.testing)
 
             restart_button.clicked.connect(on_manual_restart)
             box.addButton(restart_button, QMessageBox.ButtonRole.AcceptRole)
@@ -452,76 +415,47 @@ class TrayIcon(QSystemTrayIcon):
 
         QtCore.QTimer.singleShot(2000, rebuild_modules_menu)
 
-        def handle_unexpected_stops() -> None:
+        def check_module_status() -> None:
             unexpected_exits = self.manager.get_unexpected_stops()
             for module in unexpected_exits:
-                try:
-                    handle_unexpected_stop(module)
-                except Exception:
-                    # One broken module must not starve the rest of this poll.
-                    logger.exception(f"Failed to handle stopped module {module.name}")
-
-        def handle_unexpected_stop(module: Module) -> None:
-            if module.exited_cleanly():
-                # A clean exit (code 0) is intentional, not a crash — e.g.
-                # aw-notify exits 0 while notifications are disabled by its
-                # opt-in gate. Restarting it here would loop every interval.
-                logger.info(
-                    f"Module {module.name} exited cleanly (exit 0); "
-                    "not auto-restarting"
-                )
-                module.clear_exited_process()
-                # A clean exit ends the crash episode: drop the restart
-                # history so a later single crash is not mistaken for a
-                # repeated failure. Mirrors the manual toggle/restart paths.
-                self._restart_timestamps.pop(module.name, None)
-                return
-            recent = self._recent_restart_count(module.name)
-            if recent < self.MAX_AUTO_RESTARTS:
-                logger.info(
-                    f"Auto-restarting crashed module {module.name} "
-                    f"(attempt {recent + 1}/{self.MAX_AUTO_RESTARTS}"
-                    f" in {self.RESTART_WINDOW_SECONDS // 60}min window)"
-                )
-                module.stop()  # Clean up state
-                # Count the attempt before launching: a relaunch that raises
-                # still uses up the budget.
-                self._record_restart(module.name)
-                try:
+                if module.exited_cleanly():
+                    # A clean exit (code 0) is intentional, not a crash — e.g.
+                    # aw-notify exits 0 while notifications are disabled by its
+                    # opt-in gate. Restarting it here would loop every interval.
+                    logger.info(
+                        f"Module {module.name} exited cleanly (exit 0); "
+                        "not auto-restarting"
+                    )
+                    module.clear_exited_process()
+                    # A clean exit ends the crash episode: drop the restart
+                    # history so a later single crash is not mistaken for a
+                    # repeated failure. Mirrors the manual toggle/restart paths.
+                    self._restart_timestamps.pop(module.name, None)
+                    continue
+                recent = self._recent_restart_count(module.name)
+                if recent < self.MAX_AUTO_RESTARTS:
+                    logger.info(
+                        f"Auto-restarting crashed module {module.name} "
+                        f"(attempt {recent + 1}/{self.MAX_AUTO_RESTARTS}"
+                        f" in {self.RESTART_WINDOW_SECONDS // 60}min window)"
+                    )
+                    module.stop()  # Clean up state
                     module.start(self.testing)
-                except Exception:
-                    # stop() already cleared `started`, so later polls will not
-                    # see this module again. Report it now instead of dropping it.
-                    logger.exception(
-                        f"Failed to auto-restart module {module.name}; it will "
-                        "not be retried automatically (use Restart or the "
-                        "Modules menu)"
+                    self._record_restart(module.name)
+                    self.showMessage(
+                        "ActivityWatch",
+                        f"Module {module.name} crashed and was auto-restarted",
+                        QSystemTrayIcon.MessageIcon.Warning,
+                        5000,
+                    )
+                else:
+                    logger.warning(
+                        f"Module {module.name} exceeded max auto-restarts "
+                        f"({self.MAX_AUTO_RESTARTS})"
                     )
                     show_module_failed_dialog(module)
-                    return
-                self.showMessage(
-                    "ActivityWatch",
-                    f"Module {module.name} crashed and was auto-restarted",
-                    QSystemTrayIcon.MessageIcon.Warning,
-                    5000,
-                )
-            else:
-                logger.warning(
-                    f"Module {module.name} exceeded max auto-restarts "
-                    f"({self.MAX_AUTO_RESTARTS})"
-                )
-                try:
-                    show_module_failed_dialog(module)
-                finally:
-                    # Clear this crash even if the dialog cannot be shown.
                     module.stop()
 
-        def check_module_status() -> None:
-            try:
-                handle_unexpected_stops()
-            except Exception:
-                # Even failure to collect stopped modules must not end polling.
-                logger.exception("Failed to handle a module that stopped unexpectedly")
             QtCore.QTimer.singleShot(5000, check_module_status)
 
         QtCore.QTimer.singleShot(5000, check_module_status)

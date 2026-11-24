@@ -575,10 +575,7 @@ class Module:
             self.name, testing
         ) or _latest_rust_log_file(self.name, testing)
         if log_path:
-            # Logs are UTF-8 (aw-core and the Rust modules). The locale encoding
-            # (e.g. cp1252 on Windows) can fail on them, and this runs inside
-            # the crash dialog, so never let decoding raise.
-            with open(log_path, encoding="utf-8", errors="replace") as f:
+            with open(log_path) as f:
                 return f.read()
         else:
             return "No log file found"
