@@ -4,7 +4,6 @@ The OS layer is mocked throughout, so these tests never touch the real home
 directory or registry and run on any platform.
 """
 
-import os
 import plistlib
 import subprocess
 import sys
@@ -695,15 +694,40 @@ class TestFirstRunEnable:
         assert not (data_dir / autostart.FIRST_RUN_MARKER).exists()
 
 
-@pytest.mark.skipif(os.name != "posix", reason="fake systemctl is a POSIX shell script")
-def test_linux_detection_ignores_host_systemd(fake_home, tmp_path, monkeypatch):
+class _EnabledHostPopen:
+    """Popen stand-in for a host whose aw-qt.service is enabled.
+
+    It sits below subprocess.run, so the real run() reaches it unless the
+    fake_home fixture has replaced run(). No temp script is executed, so the
+    test does not depend on an executable temp dir or the host's systemctl.
+    """
+
+    def __init__(self, args, **kwargs):
+        self.args = args
+        self.returncode = 0
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def communicate(self, input=None, timeout=None):
+        return "enabled\n", ""
+
+    def poll(self):
+        return self.returncode
+
+    def wait(self, timeout=None):
+        return self.returncode
+
+    def kill(self):
+        pass
+
+
+def test_linux_detection_ignores_host_systemd(fake_home, monkeypatch):
     """A host with aw-qt.service enabled must not leak into the tests."""
-    fake_bin = tmp_path / "bin"
-    fake_bin.mkdir()
-    systemctl = fake_bin / "systemctl"
-    systemctl.write_text("#!/bin/sh\necho enabled\n")
-    systemctl.chmod(0o755)
-    monkeypatch.setenv("PATH", str(fake_bin), prepend=os.pathsep)
+    monkeypatch.setattr(subprocess, "Popen", _EnabledHostPopen)
     # Prove this simulated host is enabled before testing fixture isolation.
     with patch.object(autostart.subprocess, "run", REAL_SUBPROCESS_RUN):
         assert autostart._linux_systemd_unit_is_enabled()
