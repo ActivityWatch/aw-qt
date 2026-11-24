@@ -214,15 +214,19 @@ def test_manual_restart_of_unlaunchable_module_reports_instead_of_raising():
     with ExitStack() as stack:
         single_shot = enter_tray_patches(stack, module)
         module.start.side_effect = OSError("Exec format error")
-        box = stack.enter_context(patch("aw_qt.trayicon.QMessageBox"))
+        failed_dialog, warning = MagicMock(), MagicMock()
+        stack.enter_context(
+            patch("aw_qt.trayicon.QMessageBox", side_effect=[failed_dialog, warning])
+        )
         button = stack.enter_context(patch("aw_qt.trayicon.QPushButton"))
         stack.enter_context(patch.object(module, "read_log", return_value="log"))
         TrayIcon._build_rootmenu(tray)
         scheduled_status_callback(single_shot)()
+        failed_dialog.show.assert_called_once_with()
 
         on_restart = button.return_value.clicked.connect.call_args.args[0]
         on_restart()
 
-        texts = [call.args[0] for call in box.return_value.setText.call_args_list]
-        assert any("Exec format error" in text for text in texts)
+        warning.show.assert_called_once_with()
+        assert "Exec format error" in warning.setText.call_args.args[0]
         assert module.started is False
