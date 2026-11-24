@@ -134,3 +134,21 @@ def test_clean_exit_resets_restart_history():
         assert tray._restart_timestamps.get(module.name) is None
         module.start.assert_not_called()
     assert tray._recent_restart_count(module.name) == 0
+
+
+def test_failed_auto_restart_keeps_status_check_scheduled():
+    # A module whose binary can no longer be executed (e.g. its shebang
+    # interpreter was removed) raises from start(). That must not stop the
+    # 5 s status check, or no module is ever restarted or reported again.
+    module, _ = make_module("aw-watcher-afk", 1)
+    manager = make_manager(module)
+    tray = make_tray(module, manager)
+
+    with ExitStack() as stack:
+        single_shot = enter_tray_patches(stack, module)
+        module.start.side_effect = OSError("Exec format error")
+        TrayIcon._build_rootmenu(tray)
+        check_status = scheduled_status_callback(single_shot)
+        check_status()
+
+        single_shot.assert_called_with(5000, check_status)

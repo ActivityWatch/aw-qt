@@ -669,6 +669,18 @@ class Manager:
             else:
                 logger.error(f"Manager tried to start nonexistent module {module_name}")
 
+    def _autostart_one(self, module_name: str) -> None:
+        """Start one autostart module; a launch failure must not stop the rest.
+
+        A module can be discovered yet fail to launch (e.g. a watcher on PATH
+        whose shebang interpreter was removed). Letting that OSError escape
+        would skip every later module and abort aw-qt before the tray appears.
+        """
+        try:
+            self.start(module_name)
+        except OSError:
+            logger.exception(f"Failed to launch module {module_name}")
+
     def toggle(self, module: Module) -> bool:
         """Apply a tray choice to the selected copy, cancelling deferred startup."""
         with self._notify_lock:
@@ -700,9 +712,9 @@ class Manager:
 
         # Start aw-server-rust first
         if "aw-server-rust" in autostart_modules:
-            self.start("aw-server-rust")
+            self._autostart_one("aw-server-rust")
         elif "aw-server" in autostart_modules:
-            self.start("aw-server")
+            self._autostart_one("aw-server")
 
         autostart_modules = list(
             set(autostart_modules) - {"aw-server", "aw-server-rust"}
@@ -714,7 +726,7 @@ class Manager:
         )
         for name in autostart_modules:
             if name not in deferred:
-                self.start(name)
+                self._autostart_one(name)
 
         if port is None or not deferred:
             return None
@@ -734,7 +746,7 @@ class Manager:
                     return
                 for name in deferred:
                     if self._pending_autostart.get(name) is request:
-                        self.start(name)
+                        self._autostart_one(name)
 
         t = threading.Thread(target=_run, name="server-dependent-autostart", daemon=True)
         t.start()

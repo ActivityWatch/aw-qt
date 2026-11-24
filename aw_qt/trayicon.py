@@ -415,7 +415,7 @@ class TrayIcon(QSystemTrayIcon):
 
         QtCore.QTimer.singleShot(2000, rebuild_modules_menu)
 
-        def check_module_status() -> None:
+        def handle_unexpected_stops() -> None:
             unexpected_exits = self.manager.get_unexpected_stops()
             for module in unexpected_exits:
                 if module.exited_cleanly():
@@ -456,6 +456,14 @@ class TrayIcon(QSystemTrayIcon):
                     show_module_failed_dialog(module)
                     module.stop()
 
+        def check_module_status() -> None:
+            try:
+                handle_unexpected_stops()
+            except Exception:
+                # e.g. a crashed module's binary can no longer be executed, or
+                # its log can't be read. Any module left unhandled is retried
+                # on the next poll; never let one failure end crash monitoring.
+                logger.exception("Failed to handle a module that stopped unexpectedly")
             QtCore.QTimer.singleShot(5000, check_module_status)
 
         QtCore.QTimer.singleShot(5000, check_module_status)
