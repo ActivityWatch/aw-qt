@@ -4,7 +4,9 @@ The OS layer is mocked throughout, so these tests never touch the real home
 directory or registry and run on any platform.
 """
 
+import os
 import plistlib
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -26,6 +28,11 @@ def fake_home(tmp_path, monkeypatch):
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
     monkeypatch.delenv("AW_PROFILE", raising=False)
     monkeypatch.delenv("APPIMAGE", raising=False)
+    # Never ask the host's systemd: a dev box with aw-qt.service enabled would
+    # otherwise make the Linux backend tests see "enabled". Tests that exercise
+    # the systemd probe patch subprocess.run themselves.
+    not_enabled = subprocess.CompletedProcess([], 1, stdout="disabled\n", stderr="")
+    monkeypatch.setattr(autostart.subprocess, "run", lambda *a, **k: not_enabled)
     with patch.object(autostart, "_home", return_value=home):
         yield home
 
@@ -683,3 +690,14 @@ class TestFirstRunEnable:
             autostart.ensure_enabled_on_first_run()
         mock_enable.assert_not_called()
         assert not (data_dir / autostart.FIRST_RUN_MARKER).exists()
+
+
+def test_linux_detection_ignores_host_systemd(fake_home, tmp_path, monkeypatch):
+    """A host with aw-qt.service enabled must not leak into the tests."""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    systemctl = fake_bin / "systemctl"
+    systemctl.write_text("#!/bin/sh\necho enabled\n")
+    systemctl.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{fake_bin}{os.pathsep}{os.environ['PATH']}")
+    assert not autostart._linux_systemd_unit_is_enabled()

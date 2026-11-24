@@ -134,3 +134,16 @@ def test_clean_exit_resets_restart_history():
         assert tray._restart_timestamps.get(module.name) is None
         module.start.assert_not_called()
     assert tray._recent_restart_count(module.name) == 0
+
+
+def test_notify_item_keeps_last_value_when_server_unreachable():
+    """An unreachable server must not uncheck the notify item (aw-qt#158)."""
+    action = MagicMock()
+    tray = SimpleNamespace(_notify_action=action, port=5600)
+    with patch("aw_qt.trayicon.read_notify_enabled_or_none", return_value=True):
+        TrayIcon._refresh_notify_action(tray)
+    action.setChecked.assert_called_once_with(True)
+    action.reset_mock()
+    with patch("aw_qt.trayicon.read_notify_enabled_or_none", return_value=None):
+        TrayIcon._refresh_notify_action(tray)
+    action.setChecked.assert_not_called()
