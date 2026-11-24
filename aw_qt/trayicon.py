@@ -5,6 +5,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import webbrowser
 from pathlib import Path
@@ -78,6 +79,12 @@ def open_url(url: str) -> None:
             # No xdg-utils (minimal WM, container). An exception escaping this
             # Qt slot would abort aw-qt, so fall back to the stdlib launcher.
             logger.warning(f"xdg-open failed ({exc}), falling back to webbrowser")
+            # webbrowser.open() can block until a foreground browser exits, and
+            # this runs on the Qt thread. Keep the tray responsive.
+            threading.Thread(
+                target=webbrowser.open, args=(url,), name="open-url", daemon=True
+            ).start()
+            return
     webbrowser.open(url)
 
 
@@ -457,8 +464,17 @@ class TrayIcon(QSystemTrayIcon):
                     f" in {self.RESTART_WINDOW_SECONDS // 60}min window)"
                 )
                 module.stop()  # Clean up state
-                module.start(self.testing)
+                # Count the attempt before launching: a relaunch that raises
+                # still uses up the budget.
                 self._record_restart(module.name)
+                try:
+                    module.start(self.testing)
+                except OSError:
+                    # stop() already cleared `started`, so later polls will not
+                    # see this module again. Report it now instead of dropping it.
+                    logger.exception(f"Failed to auto-restart module {module.name}")
+                    show_module_failed_dialog(module)
+                    return
                 self.showMessage(
                     "ActivityWatch",
                     f"Module {module.name} crashed and was auto-restarted",

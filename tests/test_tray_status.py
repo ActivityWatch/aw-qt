@@ -147,11 +147,19 @@ def test_failed_auto_restart_keeps_status_check_scheduled():
     with ExitStack() as stack:
         single_shot = enter_tray_patches(stack, module)
         module.start.side_effect = OSError("Exec format error")
+        box = stack.enter_context(patch("aw_qt.trayicon.QMessageBox"))
+        stack.enter_context(patch("aw_qt.trayicon.QPushButton"))
+        stack.enter_context(patch.object(module, "read_log", return_value="log"))
         TrayIcon._build_rootmenu(tray)
         check_status = scheduled_status_callback(single_shot)
         check_status()
 
         single_shot.assert_called_with(5000, check_status)
+        # stop() cleared `started`, so no later poll sees this module: the
+        # failed relaunch must be reported now and still use up an attempt.
+        assert module.started is False
+        box.return_value.show.assert_called_once_with()
+        assert tray._recent_restart_count(module.name) == 1
 
 
 @pytest.mark.parametrize("failure", ["restart", "log", "dialog"])

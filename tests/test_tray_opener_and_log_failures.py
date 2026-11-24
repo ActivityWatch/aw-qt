@@ -19,8 +19,22 @@ def test_open_url_without_xdg_open_falls_back_to_webbrowser(monkeypatch):
     monkeypatch.setattr(subprocess, "Popen", missing)
     monkeypatch.setattr(trayicon.webbrowser, "open", opened.append)
 
+    started = []
+
+    class InlineThread:
+        def __init__(self, target, args, **kwargs):
+            self._run = lambda: target(*args)
+
+        def start(self):
+            started.append(True)
+            self._run()
+
+    monkeypatch.setattr(trayicon.threading, "Thread", InlineThread)
+
     trayicon.open_url("http://localhost:5600")
 
+    # The fallback runs off the Qt thread: webbrowser.open() may block.
+    assert started == [True]
     assert opened == ["http://localhost:5600"]
 
 
@@ -33,4 +47,4 @@ def test_read_log_tolerates_undecodable_bytes(monkeypatch, tmp_path):
 
     text = Module("aw-watcher-afk", Path("/b/aw-watcher-afk"), "bundled").read_log(False)
 
-    assert text.startswith("started\n")
+    assert text == "started\n\ufffd\ufffd broken\n"
