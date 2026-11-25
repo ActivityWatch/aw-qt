@@ -6,7 +6,7 @@ from contextlib import ExitStack
 from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 
@@ -44,7 +44,15 @@ def enter_tray_patches(stack, module):
     stack.enter_context(patch("aw_qt.trayicon.QIcon"))
     stack.enter_context(patch("aw_qt.trayicon.autostart.is_supported", return_value=False))
     stack.enter_context(patch("aw_qt.trayicon.read_notify_enabled", return_value=False))
-    stack.enter_context(patch.object(module, "start"))
+
+    def start(testing, launch_guard):
+        with launch_guard() as allowed:
+            if allowed:
+                module._process = MagicMock(spec=subprocess.Popen)
+                module._process.returncode = None
+                module.started = True
+
+    stack.enter_context(patch.object(module, "start", side_effect=start))
     stack.enter_context(patch.object(module, "stop", wraps=module.stop))
     single_shot = stack.enter_context(
         patch("aw_qt.trayicon.QtCore.QTimer.singleShot")
@@ -96,12 +104,15 @@ def test_status_check_only_restarts_crashes(returncode):
             assert tray._restart_timestamps == {}
         else:
             module.stop.assert_called_once_with()
-            module.start.assert_called_once_with(True)
+            module.start.assert_called_once_with(True, launch_guard=ANY)
             tray.showMessage.assert_called_once()
             assert tray._recent_restart_count(module.name) == 1
 
-        assert module.started is False
-        assert module._process is None
+        assert module.started is (returncode != 0)
+        if returncode == 0:
+            assert module._process is None
+        else:
+            assert module.is_alive()
         assert module._last_process is process
         single_shot.assert_called_with(5000, check_status)
         # The cleared process must not be handled again on the next poll.
@@ -170,3 +181,39 @@ def test_notify_toggle_retains_only_saved_state_when_refresh_fails(
     assert tray.manager.stop_notify.call_count == int(saved and not checked)
     assert tray._notify_generation == 1
     assert app is not None
+
+
+@pytest.mark.parametrize("manual", [False, True])
+def test_restart_callback_does_not_start_after_shutdown(manual):
+    module, _ = make_module("aw-watcher-afk", 1)
+    manager = make_manager(module)
+    now = time.monotonic()
+    tray = make_tray(
+        module, manager,
+        timestamps={module.name: [now] * TrayIcon.MAX_AUTO_RESTARTS} if manual else None,
+    )
+    with ExitStack() as stack:
+        single_shot = enter_tray_patches(stack, module)
+        stack.enter_context(patch("aw_qt.trayicon.QMessageBox"))
+        button = stack.enter_context(patch("aw_qt.trayicon.QPushButton"))
+        TrayIcon._build_rootmenu(tray)
+        check_status = scheduled_status_callback(single_shot)
+        if manual:
+            check_status()
+            restart = button.return_value.clicked.connect.call_args.args[0]
+            manager.stop_all()
+            restart()
+        else:
+            original = manager.get_unexpected_stops
+
+            def shutdown_after_snapshot():
+                modules = original()
+                manager.stop_all()  # Signal handler interrupted the callback.
+                return modules
+
+            stack.enter_context(patch.object(
+                manager, "get_unexpected_stops", side_effect=shutdown_after_snapshot
+            ))
+            check_status()
+        module.start.assert_not_called()
+        assert not manager._starting

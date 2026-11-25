@@ -563,7 +563,7 @@ class TrayIcon(QSystemTrayIcon):
 
             def on_manual_restart() -> None:
                 self._restart_timestamps.pop(module.name, None)
-                module.start(self.testing)
+                self.manager.restart(module)
 
             restart_button.clicked.connect(on_manual_restart)
             box.addButton(restart_button, QMessageBox.ButtonRole.AcceptRole)
@@ -606,8 +606,8 @@ class TrayIcon(QSystemTrayIcon):
                         f"(attempt {recent + 1}/{self.MAX_AUTO_RESTARTS}"
                         f" in {self.RESTART_WINDOW_SECONDS // 60}min window)"
                     )
-                    module.stop()  # Clean up state
-                    module.start(self.testing)
+                    if not self.manager.restart(module):
+                        continue  # Shutdown cancelled this restart.
                     self._record_restart(module.name)
                     self.showMessage(
                         "ActivityWatch",

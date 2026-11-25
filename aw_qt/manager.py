@@ -903,16 +903,29 @@ class Manager:
         except Exception:
             logger.exception(f"Failed to launch module {module_name}")
 
-    def _autostart_claimed(self, module: Module) -> None:
+    def _autostart_claimed(self, claim: Tuple[Module, object]) -> None:
         """``_autostart_one`` for an already-claimed deferred start.
 
         Every claim must reach ``_spawn_claimed``, which releases it, so one
         failed launch must not leave the later modules claimed forever.
         """
         try:
-            self._spawn_claimed(module)
+            self._spawn_claimed(claim)
         except Exception:
-            logger.exception(f"Failed to launch module {module.name}")
+            logger.exception(f"Failed to launch module {claim[0].name}")
+
+    def restart(self, module: Module) -> bool:
+        """Restart the selected copy through the same shutdown-safe launch guard."""
+        with self._notify_lock:
+            if self._shutting_down:
+                return False
+            self._pending_autostart.pop(module.name, None)
+            self._starting.pop(module.name, None)
+            module.stop()
+            request = (module, object())
+            self._starting[module.name] = request
+        self._spawn_claimed((module, request))
+        return module.started
 
     def toggle(self, module: Module) -> bool:
         """Apply a tray choice to the selected copy, cancelling deferred startup."""
@@ -997,8 +1010,8 @@ class Manager:
                         module = self._take_start_locked(name)
                         if module is not None:
                             claimed.append(module)
-            for module in claimed:
-                self._autostart_claimed(module)
+            for claim in claimed:
+                self._autostart_claimed(claim)
 
         t = threading.Thread(target=_run, name="server-dependent-autostart", daemon=True)
         t.start()
