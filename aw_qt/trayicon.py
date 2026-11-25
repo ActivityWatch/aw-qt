@@ -202,6 +202,9 @@ class TrayIcon(QSystemTrayIcon):
     MAX_AUTO_RESTARTS = 3
     RESTART_WINDOW_SECONDS = 600  # 10 minutes
 
+    # (probe sequence number, enabled), emitted from the autostart probe thread
+    _autostart_probed = QtCore.pyqtSignal(int, bool)
+
     def __init__(
         self,
         manager: Manager,
@@ -226,6 +229,9 @@ class TrayIcon(QSystemTrayIcon):
         self.persist_toggles = persist_toggles
         self._restart_timestamps: Dict[str, List[float]] = {}
         self._autostart_action: Optional[QAction] = None
+        self._autostart_probe_seq = 0
+        self._autostart_probe_running = False
+        self._autostart_probed.connect(self._apply_autostart_probe)
         self._notify_action: Optional[QAction] = None
         self._support_action: Optional[QAction] = None
         self._support_network = QNetworkAccessManager(self)
@@ -258,10 +264,43 @@ class TrayIcon(QSystemTrayIcon):
             t for t in timestamps if t > cutoff
         ] + [now]
 
-    def _refresh_autostart_action(self) -> None:
-        """Sync the menu item with the actual OS-level autostart state."""
+    def _refresh_autostart_action(self, force: bool = False) -> None:
+        """Sync the menu item with the actual OS-level autostart state.
+
+        The probe runs on a worker thread: on Linux it can fall through to
+        `systemctl --user is-enabled`, which may take seconds. The last value
+        stays in place meanwhile. Only the newest probe's result is applied,
+        and a probe already in flight is reused unless `force` is set (after
+        a toggle, an older probe may report the state from before it).
+        """
+        if self._autostart_action is None:
+            return
+        if self._autostart_probe_running and not force:
+            return
+        if self._autostart_probe_seq == 0:
+            self._autostart_action.setEnabled(False)
+            self._autostart_action.setText("Start at login (checking…)")
+        self._autostart_probe_seq += 1
+        seq = self._autostart_probe_seq
+        self._autostart_probe_running = True
+
+        def probe() -> None:
+            enabled = autostart.is_enabled()
+            try:
+                self._autostart_probed.emit(seq, enabled)
+            except RuntimeError:
+                pass  # The tray icon was deleted while the probe ran.
+
+        threading.Thread(target=probe, name="autostart-probe", daemon=True).start()
+
+    def _apply_autostart_probe(self, seq: int, enabled: bool) -> None:
+        if seq != self._autostart_probe_seq:
+            return  # Superseded by a newer probe.
+        self._autostart_probe_running = False
         if self._autostart_action is not None:
-            self._autostart_action.setChecked(autostart.is_enabled())
+            self._autostart_action.setChecked(enabled)
+            self._autostart_action.setText("Start at login")
+            self._autostart_action.setEnabled(True)
 
     def _refresh_notify_action(self) -> None:
         """Sync the menu item with the shared `aw-notify.enabled` setting.
@@ -396,7 +435,7 @@ class TrayIcon(QSystemTrayIcon):
             box.setDetailedText(str(e))
             box.show()
         # Always reflect the real state, the toggle may have failed
-        self._refresh_autostart_action()
+        self._refresh_autostart_action(force=True)
 
     def on_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
         if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
@@ -449,7 +488,7 @@ class TrayIcon(QSystemTrayIcon):
                 "Start at login", self._on_autostart_toggled
             )
             self._autostart_action.setCheckable(True)
-            self._autostart_action.setChecked(autostart.is_enabled())
+            self._refresh_autostart_action()
             # Autostart can also be changed outside of aw-qt, so re-read the
             # actual state every time the menu is opened
             menu.aboutToShow.connect(self._refresh_autostart_action)
