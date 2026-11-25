@@ -1,6 +1,7 @@
 """Dashboard token handoff is scoped to the selected Rust instance."""
 
 import json
+import socket
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from threading import Thread
@@ -154,6 +155,21 @@ def test_named_profile_legacy_fallback_is_profile_specific():
     assert parse_qs(urlsplit(open_dashboard("research")).query) == {
         "token": ["legacy-research"]
     }
+
+
+def test_isolated_profile_key_takes_precedence_over_legacy_rotation():
+    path = write_config(
+        "research", 'port = 5601\n[auth]\napi_key = "isolated-secret"'
+    )
+    legacy = write_config(
+        "default",
+        'port = 5601\n[auth]\napi_key = "legacy-secret"',
+        "config-research.toml",
+    )
+    legacy.write_text('port = 5601\n[auth]\napi_key = "legacy-rotated"')
+    assert dashboard_auth("research", 5601) == ("127.0.0.1", "isolated-secret")
+    path.write_text('port = 5601\n[auth]\napi_key = "isolated-rotated"')
+    assert dashboard_auth("research", 5601) == ("127.0.0.1", "isolated-rotated")
 
 
 def test_isolated_profile_config_disables_legacy_key_fallback():
@@ -310,7 +326,7 @@ def test_crashed_owned_server_does_not_receive_key():
     assert open_dashboard(modules=[module]) == "http://localhost:5601"
 
 
-def _serve_info(status=200, body=None):
+def _serve_info(status=200, body=None, address="127.0.0.1"):
     captured = {"authorization": None, "path": None}
 
     class Handler(BaseHTTPRequestHandler):
@@ -331,7 +347,11 @@ def _serve_info(status=200, body=None):
         def log_message(self, format, *args):
             return
 
-    server = HTTPServer(("127.0.0.1", 0), Handler)
+    class IPv6HTTPServer(HTTPServer):
+        address_family = socket.AF_INET6
+
+    server_cls = IPv6HTTPServer if address == "::1" else HTTPServer
+    server = server_cls((address, 0), Handler)
     thread = Thread(target=server.serve_forever, daemon=True)
     thread.start()
     return server, captured
@@ -439,12 +459,27 @@ def test_truncated_info_response_does_not_abort_dashboard():
         server.server_close()
 
 
-def test_ipv6_probe_uses_bracketed_numeric_address():
-    module = Module("aw-server-rust", Path("/synthetic/aw-server-rust"), "bundled")
-    with patch("aw_qt.manager.http.client.HTTPConnection") as conn_cls:
-        conn_cls.side_effect = OSError("refused")
-        assert module._probe_dashboard_listener("::1", 5601) is False
-    conn_cls.assert_called_once_with("[::1]", 5601, timeout=0.2)
+def test_ipv6_listener_authorizes_key_without_mocking_connection():
+    # Skip only hosts without IPv6 loopback support, not probe failures.
+    try:
+        server, captured = _serve_info(address="::1")
+    except OSError as exc:
+        pytest.skip(f"IPv6 loopback unavailable: {exc}")
+    try:
+        port = server.server_address[1]
+        write_config(
+            "default", f'port = {port}\naddress = "::1"\n[auth]\napi_key = "secret"'
+        )
+        module = _started_owned_child()
+        assert module._probe_dashboard_listener("::1", port) is True
+        url = urlsplit(open_dashboard(port=port, modules=[module]))
+        assert url.netloc == f"[::1]:{port}"
+        assert parse_qs(url.query) == {"token": ["secret"]}
+        assert captured["authorization"] is None
+        assert captured["path"] == "/api/0/info"
+    finally:
+        server.shutdown()
+        server.server_close()
 
 
 def test_json_recursion_error_fails_closed_without_aborting():
