@@ -499,7 +499,8 @@ class Module:
         the API key. HTTP errors (including 404 occupants) fail closed. Body size
         and wall-clock duration are bounded so a slow listener cannot freeze Qt.
         """
-        host = f"[{address}]" if ":" in address else address
+        # Pass socket-form IPv6: Python 3.9 retains brackets with an explicit port.
+        host = address
         deadline = monotonic() + timeout
         conn = None
         try:
