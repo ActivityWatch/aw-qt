@@ -294,6 +294,22 @@ class TestProfileLocation:
 
 
 class TestTrayClick:
+    @pytest.fixture(autouse=True)
+    def _spawn(self):
+        # Exercise the real tray -> Manager -> Module path, replacing only
+        # OS process creation so no installed watchers are launched.
+        with patch("aw_qt.manager.subprocess.Popen") as spawned:
+            spawned.return_value = self._process()
+            self.spawned = spawned
+            yield
+
+    @staticmethod
+    def _process():
+        process = MagicMock()
+        process.returncode = None
+        process.wait.side_effect = lambda: setattr(process, "returncode", 0)
+        return process
+
     def _tray(self, persist_toggles: bool, modules=()):
         from aw_qt.manager import Manager
         from aw_qt.trayicon import TrayIcon
@@ -301,9 +317,7 @@ class TestTrayClick:
         with patch.object(Manager, "discover_modules"):
             manager = Manager()
         manager.modules = list(modules)
-        # These slot/persistence tests stub the lifecycle boundary, not the
-        # Module implementation now used by Manager's guarded launch path.
-        manager.toggle = lambda module: module.toggle(False)
+
         fake = SimpleNamespace(
             manager=manager,
             testing=False,
@@ -313,13 +327,15 @@ class TestTrayClick:
         )
         return fake, lambda module: TrayIcon._on_module_clicked(fake, module)
 
-    def _module(self, type="bundled", **toggle):
+    def _module(self, type="bundled", running=False):
         module = Module("aw-watcher-afk", Path(f"/{type}/aw-watcher-afk"), type)
-        module.toggle = MagicMock(**toggle)
+        if running:
+            module._process = self._process()
+            module.started = True
         return module
 
     def test_click_persists_new_state(self):
-        module = self._module(return_value=False)
+        module = self._module(running=True)
         fake, click = self._tray(True, [module])
         with patch("aw_qt.trayicon.persist_module_autostart") as persist:
             click(module)
@@ -335,7 +351,8 @@ class TestTrayClick:
         path = _config_path(DEFAULT_PROFILE)
         path.write_text(USER_CONFIG)
         module = Module(watcher, Path(f"/bundled/{watcher}"), "bundled")
-        module.toggle = MagicMock(return_value=False)
+        module._process = self._process()
+        module.started = True
         _, click = self._tray(True, [module])
         with patch("aw_qt.manager._is_wayland", return_value=True):
             click(module)
@@ -361,7 +378,8 @@ class TestTrayClick:
             '"aw-watcher-afk", "aw-watcher-window"]\n'
         )
         module = Module(watcher, Path(f"/bundled/{watcher}"), "bundled")
-        module.toggle = MagicMock(return_value=False)
+        module._process = self._process()
+        module.started = True
         _, click = self._tray(True, [module])
         with patch("aw_qt.manager._is_wayland", return_value=True):
             click(module)
@@ -377,7 +395,8 @@ class TestTrayClick:
 
         AwQtSettings(profile)  # commented-out first-run defaults
         module = Module("aw-awatcher", Path("/bundled/aw-awatcher"), "bundled")
-        module.toggle = MagicMock(return_value=False)
+        module._process = self._process()
+        module.started = True
         fake, click = self._tray(True, [module])
         fake.profile = profile
         with patch("aw_qt.manager._is_wayland", return_value=True):
@@ -396,24 +415,44 @@ class TestTrayClick:
         assert path.read_text() == USER_CONFIG
 
     def test_cli_override_only_changes_running_state(self):
-        module = self._module(return_value=True)
+        module = self._module()
         _, click = self._tray(False, [module])
         with patch("aw_qt.trayicon.persist_module_autostart") as persist:
             click(module)
-        module.toggle.assert_called_once_with(False)
+        self.spawned.assert_called_once()
+        assert module.started and module.is_alive()
         persist.assert_not_called()
 
     def test_failed_start_is_not_persisted(self):
-        module = self._module(side_effect=OSError("exec failed"))
+        module = self._module()
+        self.spawned.side_effect = OSError("exec failed")
         _, click = self._tray(True, [module])
         with patch("aw_qt.trayicon.persist_module_autostart") as persist:
             with pytest.raises(OSError):
                 click(module)
         persist.assert_not_called()
 
+    @pytest.mark.parametrize("name", ["aw-sync", "aw-notify"])
+    def test_click_starts_preparing_background_module_and_persists_enabled(self, name):
+        module = Module(name, Path("/bundled") / name, "bundled")
+        fake, click = self._tray(True, [module])
+        with fake.manager._notify_lock:
+            # A background autostart has claimed the module but has not yet
+            # reached its launch guard (e.g. it is waiting for the env lock).
+            old_claim = fake.manager._take_start_locked(name)
+        assert old_claim is not None
+        assert not module.started
+        with patch("aw_qt.trayicon.persist_module_autostart") as persist:
+            click(module)
+            assert module.started and module.is_alive()
+            persist.assert_called_once_with(name, True, DEFAULT_PROFILE)
+        fake.manager._spawn_claimed(old_claim)
+        self.spawned.assert_called_once()
+        assert not fake.manager._starting
+
     def test_system_copy_shadowed_by_bundled_is_not_persisted(self):
-        bundled = self._module("bundled", return_value=True)
-        system = self._module("system", return_value=True)
+        bundled = self._module("bundled")
+        system = self._module("system")
         _, click = self._tray(True, [system, bundled])
         with patch("aw_qt.trayicon.persist_module_autostart") as persist:
             click(system)
@@ -422,14 +461,14 @@ class TestTrayClick:
         persist.assert_called_once_with("aw-watcher-afk", True, DEFAULT_PROFILE)
 
     def test_system_module_without_bundled_copy_is_persisted(self):
-        system = self._module("system", return_value=True)
+        system = self._module("system")
         _, click = self._tray(True, [system])
         with patch("aw_qt.trayicon.persist_module_autostart") as persist:
             click(system)
         persist.assert_called_once_with("aw-watcher-afk", True, DEFAULT_PROFILE)
 
     def test_persist_error_does_not_escape_the_slot(self, caplog):
-        module = self._module(return_value=True)
+        module = self._module()
         _, click = self._tray(True, [module])
         with patch(
             "aw_qt.trayicon.persist_module_autostart", side_effect=RuntimeError("boom")

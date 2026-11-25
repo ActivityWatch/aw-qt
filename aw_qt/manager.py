@@ -925,9 +925,10 @@ class Manager:
                 # external-listener cache and enter Start under this lock.
                 module.stop()
                 return False
-            pending = self._starting.pop(module.name, None)
-            if pending is not None and pending[0] is module:
-                return False  # Second click on the preparing copy cancels it.
+            # Tray starts run synchronously, so a preparing claim belongs to
+            # background startup, not a previous click. Replace it with this
+            # explicit Start choice; the stale worker's guard will reject it.
+            self._starting.pop(module.name, None)
             if module.started:
                 module.stop()  # Clean up an exited process before restarting.
             request = (module, object())
