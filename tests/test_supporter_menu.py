@@ -31,14 +31,14 @@ def server():
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             state["path"] = self.path
+            state["reads"] = state.get("reads", 0) + 1
+            body = state.get("raw", json.dumps(state["body"]).encode())
             entered.set()
             release.wait(5)
             self.send_response(state["status"])
             self.end_headers()
             try:
-                self.wfile.write(
-                    state.get("raw", json.dumps(state["body"]).encode())
-                )
+                self.wfile.write(body)
             except BrokenPipeError:
                 pass  # A timeout may have closed the client connection.
 
@@ -161,3 +161,93 @@ def test_build_rootmenu_starts_read_and_rechecks_on_open(tray):
         refresh.assert_called_once_with()
         tray.contextMenu().aboutToShow.emit()
         assert refresh.call_count == 2
+
+
+@pytest.fixture
+def notify_tray(app, server):
+    with patch.object(TrayIcon, "_build_rootmenu"):
+        instance = TrayIcon(MagicMock(), QIcon(), port=server[0])
+    instance._notify_action = QAction("Enable notifications", instance)
+    instance._notify_action.setCheckable(True)
+    instance._notify_action.triggered.connect(instance._on_notify_toggled)
+    yield instance
+    instance.deleteLater()
+    app.processEvents()
+
+
+@pytest.mark.parametrize(
+    "status,body,before,after",
+    [
+        (200, {"enabled": True}, False, True),
+        (200, {"enabled": False}, True, False),
+        (404, {}, True, False),  # key not created yet: off
+        (500, {}, True, True),  # unreadable: keep last value (aw-qt#158)
+        (200, "not-a-dict", True, False),
+    ],
+)
+def test_notify_item_follows_server_and_keeps_last_on_error(
+    app, server, notify_tray, status, body, before, after
+):
+    server[1].update(status=status, body=body)
+    server[3].set()
+    notify_tray._notify_action.setChecked(before)
+    notify_tray._refresh_notify_action()
+    spin_until(app, lambda: notify_tray._notify_reply is None)
+    assert notify_tray._notify_action.isChecked() is after
+    assert server[1]["path"] == "/api/0/settings/aw-notify"
+
+
+def test_notify_read_does_not_block_and_timeout_keeps_last(app, server, notify_tray):
+    notify_tray._notify_action.setChecked(True)
+    started = time.monotonic()
+    notify_tray._refresh_notify_action()
+    assert time.monotonic() - started < 0.25
+    reply = notify_tray._notify_reply
+    notify_tray._refresh_notify_action()
+    assert notify_tray._notify_reply is reply
+    spin_until(app, lambda: notify_tray._notify_reply is None)
+    assert not server[3].is_set()
+    assert notify_tray._notify_action.isChecked()
+
+
+@pytest.mark.parametrize("write_succeeded", [True, False])
+def test_toggle_during_read_rechecks_saved_state(
+    app, server, notify_tray, write_succeeded
+):
+    server[1]["body"] = {"enabled": False}
+    notify_tray._notify_action.setChecked(False)
+    notify_tray._refresh_notify_action()
+    spin_until(app, lambda: server[2].is_set())
+
+    def write(port, enabled):
+        assert port == server[0]
+        assert enabled is True
+        server[1]["body"] = {"enabled": True}
+        # A write may reach the server even if its response times out.
+        return write_succeeded
+
+    with patch("aw_qt.trayicon.write_notify_enabled", side_effect=write), patch(
+        "aw_qt.trayicon.QMessageBox"
+    ):
+        notify_tray._notify_action.trigger()
+    assert notify_tray._notify_action.isChecked() is write_succeeded
+    checked_changes = []
+    notify_tray._notify_action.toggled.connect(checked_changes.append)
+    server[3].set()
+    spin_until(app, lambda: notify_tray._notify_reply is None)
+    assert server[1]["reads"] == 2
+    assert notify_tray._notify_action.isChecked()
+    if write_succeeded:
+        assert not checked_changes
+    else:
+        assert checked_changes == [True]
+
+
+@pytest.mark.parametrize("raw", [b"not-json", b"\xff"])
+def test_notify_malformed_response_keeps_last_value(app, server, notify_tray, raw):
+    server[1]["raw"] = raw
+    server[3].set()
+    notify_tray._notify_action.setChecked(True)
+    notify_tray._refresh_notify_action()
+    spin_until(app, lambda: notify_tray._notify_reply is None)
+    assert notify_tray._notify_action.isChecked()
