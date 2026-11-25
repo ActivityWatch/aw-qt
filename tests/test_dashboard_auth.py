@@ -145,21 +145,32 @@ def test_legacy_testing_uses_suffixed_file(tmp_path):
     data.mkdir(parents=True)
     (data / "sqlite-testing.db").touch()
     write_config("default", 'port = 5666\n[auth]\napi_key = "default-secret"')
-    write_config(
+    with _with_profile_env("testing"):
+        assert dirs.using_legacy_testing_root()
+        assert Path(dirs.get_config_dir("aw-server-rust")) == (
+            tmp_path / "config" / "activitywatch" / "aw-server-rust"
+        )
+    legacy = write_config(
         "testing", 'port = 5666\n[auth]\napi_key = "legacy-test"', "config-testing.toml"
     )
+    assert legacy.parent == tmp_path / "config" / "activitywatch" / "aw-server-rust"
     assert parse_qs(urlsplit(open_dashboard("testing", 5666)).query) == {
         "token": ["legacy-test"]
     }
 
 
-def test_named_profile_legacy_fallback_is_profile_specific():
+def test_named_profile_legacy_fallback_is_profile_specific(tmp_path):
     write_config("default", 'port = 5601\n[auth]\napi_key = "default-secret"')
-    write_config(
+    legacy = write_config(
         "default",
         'port = 5601\n[auth]\napi_key = "legacy-research"',
         "config-research.toml",
     )
+    assert legacy.parent == tmp_path / "config" / "activitywatch" / "aw-server-rust"
+    with _with_profile_env("research"):
+        isolated = Path(dirs.get_config_dir("aw-server-rust"))
+        assert isolated == tmp_path / "config" / "activitywatch-research" / "aw-server-rust"
+        assert not (isolated / "config.toml").exists()
     assert parse_qs(urlsplit(open_dashboard("research")).query) == {
         "token": ["legacy-research"]
     }
