@@ -444,13 +444,19 @@ class TrayIcon(QSystemTrayIcon):
     def _open_dashboard(self) -> None:
         # Resolve at click time so rotating the key does not require a tray restart.
         # Never hand a Rust credential to a Python or ambiguously selected server.
-        servers = [
-            module for module in self.manager.modules
-            if module.started and module.name in ("aw-server", "aw-server-rust")
-        ]
+        with self.manager._notify_lock:
+            servers = [
+                module for module in self.manager.modules
+                if module.started and module.name in ("aw-server", "aw-server-rust")
+            ]
+            preparing = any(
+                name in self.manager._starting
+                for name in ("aw-server", "aw-server-rust")
+            )
         auth = None
         if (
-            len(servers) == 1
+            not preparing
+            and len(servers) == 1
             and servers[0].name == "aw-server-rust"
             # The public /info probe cannot establish an adopted listener's identity.
             and not getattr(servers[0], "_external_server", False)

@@ -4,7 +4,7 @@ import json
 import socket
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from threading import Thread
+from threading import RLock, Thread
 from time import monotonic, sleep
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
@@ -30,12 +30,14 @@ def write_config(profile, text, filename="config.toml"):
     return path
 
 
-def open_dashboard(profile="default", port=5601, modules=None):
+def open_dashboard(profile="default", port=5601, modules=None, starting=None):
     tray = SimpleNamespace(
         root_url=f"http://localhost:{port}",
         port=port,
         profile=profile,
         manager=SimpleNamespace(
+            _notify_lock=RLock(),
+            _starting=starting or {},
             modules=modules
             if modules is not None
             else [SimpleNamespace(
@@ -93,6 +95,12 @@ def test_ambiguous_backends_do_not_disclose_key():
         for name in ("aw-server", "aw-server-rust")
     ]
     assert open_dashboard(modules=modules) == "http://localhost:5601"
+
+
+@pytest.mark.parametrize("preparing", ["aw-server", "aw-server-rust"])
+def test_preparing_backend_does_not_authorize_handoff(preparing):
+    write_config("default", 'port = 5601\n[auth]\napi_key = "rust-secret"')
+    assert open_dashboard(starting={preparing: object()}) == "http://localhost:5601"
 
 
 def test_stopped_rust_server_does_not_authorize_handoff():
