@@ -269,6 +269,10 @@ class TrayIcon(QSystemTrayIcon):
                 self._notify_action.setChecked(enabled)
             self._notify_reply = None
             reply.deleteLater()
+            if generation != self._notify_generation:
+                # The toggle's post-write refresh met this in-flight read.
+                # Re-read now rather than losing confirmation of the saved state.
+                self._refresh_notify_action()
 
         reply.finished.connect(finished)
 

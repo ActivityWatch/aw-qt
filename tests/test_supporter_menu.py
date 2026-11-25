@@ -31,14 +31,14 @@ def server():
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             state["path"] = self.path
+            state["reads"] = state.get("reads", 0) + 1
+            body = state.get("raw", json.dumps(state["body"]).encode())
             entered.set()
             release.wait(5)
             self.send_response(state["status"])
             self.end_headers()
             try:
-                self.wfile.write(
-                    state.get("raw", json.dumps(state["body"]).encode())
-                )
+                self.wfile.write(body)
             except BrokenPipeError:
                 pass  # A timeout may have closed the client connection.
 
@@ -169,6 +169,7 @@ def notify_tray(app, server):
         instance = TrayIcon(MagicMock(), QIcon(), port=server[0])
     instance._notify_action = QAction("Enable notifications", instance)
     instance._notify_action.setCheckable(True)
+    instance._notify_action.triggered.connect(instance._on_notify_toggled)
     yield instance
     instance.deleteLater()
     app.processEvents()
@@ -209,13 +210,38 @@ def test_notify_read_does_not_block_and_timeout_keeps_last(app, server, notify_t
     assert notify_tray._notify_action.isChecked()
 
 
-def test_toggle_during_read_wins_over_older_answer(app, server, notify_tray):
+@pytest.mark.parametrize("write_succeeded", [True, False])
+def test_toggle_during_read_rechecks_saved_state(
+    app, server, notify_tray, write_succeeded
+):
     server[1]["body"] = {"enabled": False}
     notify_tray._notify_action.setChecked(False)
     notify_tray._refresh_notify_action()
     spin_until(app, lambda: server[2].is_set())
-    notify_tray._notify_action.setChecked(True)
-    notify_tray._notify_generation += 1  # what _on_notify_toggled does
+
+    def write(port, enabled):
+        assert port == server[0]
+        assert enabled is True
+        server[1]["body"] = {"enabled": True}
+        # A write may reach the server even if its response times out.
+        return write_succeeded
+
+    with patch("aw_qt.trayicon.write_notify_enabled", side_effect=write), patch(
+        "aw_qt.trayicon.QMessageBox"
+    ):
+        notify_tray._notify_action.trigger()
+    assert notify_tray._notify_action.isChecked() is write_succeeded
     server[3].set()
+    spin_until(app, lambda: notify_tray._notify_reply is None)
+    assert server[1]["reads"] == 2
+    assert notify_tray._notify_action.isChecked()
+
+
+@pytest.mark.parametrize("raw", [b"not-json", b"\xff"])
+def test_notify_malformed_response_keeps_last_value(app, server, notify_tray, raw):
+    server[1]["raw"] = raw
+    server[3].set()
+    notify_tray._notify_action.setChecked(True)
+    notify_tray._refresh_notify_action()
     spin_until(app, lambda: notify_tray._notify_reply is None)
     assert notify_tray._notify_action.isChecked()
