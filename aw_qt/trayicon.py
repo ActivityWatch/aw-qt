@@ -257,6 +257,7 @@ class TrayIcon(QSystemTrayIcon):
                     data = json.loads(reply.readAll().data())
                     enabled = isinstance(data, dict) and data.get("enabled") is True
                 except (ValueError, UnicodeDecodeError):
+                    # An unreadable response says nothing about the saved setting.
                     pass
             elif error == QNetworkReply.NetworkError.ContentNotFoundError:
                 enabled = False  # Key not created yet: notifications are off.

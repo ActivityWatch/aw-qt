@@ -231,10 +231,16 @@ def test_toggle_during_read_rechecks_saved_state(
     ):
         notify_tray._notify_action.trigger()
     assert notify_tray._notify_action.isChecked() is write_succeeded
+    checked_changes = []
+    notify_tray._notify_action.toggled.connect(checked_changes.append)
     server[3].set()
     spin_until(app, lambda: notify_tray._notify_reply is None)
     assert server[1]["reads"] == 2
     assert notify_tray._notify_action.isChecked()
+    if write_succeeded:
+        assert not checked_changes
+    else:
+        assert checked_changes == [True]
 
 
 @pytest.mark.parametrize("raw", [b"not-json", b"\xff"])
