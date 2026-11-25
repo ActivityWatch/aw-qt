@@ -124,3 +124,18 @@ def test_webbrowser_helper_failure_is_not_a_missing_browser(
         assert "No browser found" not in caplog.text
     else:
         assert "No browser found to open http://localhost:5600" in caplog.text
+
+
+@pytest.mark.parametrize("outcome", ["raises", 3, 1])
+def test_webbrowser_fallback_does_not_log_dashboard_token(monkeypatch, caplog, outcome):
+    # The authenticated dashboard URL carries the API key in its query string.
+    def run(command, **kwargs):
+        if outcome == "raises":
+            raise FileNotFoundError("python3")
+        return subprocess.CompletedProcess(command, outcome)
+
+    monkeypatch.setattr(subprocess, "run", run)
+    trayicon._open_with_webbrowser("http://127.0.0.1:5600?token=sekrit-key")
+
+    assert "http://127.0.0.1:5600" in caplog.text
+    assert "sekrit-key" not in caplog.text

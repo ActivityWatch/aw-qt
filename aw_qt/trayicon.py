@@ -73,6 +73,8 @@ def get_env() -> Dict[str, str]:
 
 def _open_with_webbrowser(url: str) -> None:
     # Runs on a worker thread, where a Qt dialog is not safe: log the failure.
+    # The query string can carry the dashboard API key: keep it out of the log.
+    safe_url = url.split("?", 1)[0]
     try:
         # webbrowser has no env argument. Isolate it in a child so browsers
         # inherit get_env(), without racing other threads over os.environ.
@@ -89,12 +91,14 @@ def _open_with_webbrowser(url: str) -> None:
             env=get_env(),
         )
     except Exception:
-        logger.exception(f"Failed to open {url}")
+        logger.exception(f"Failed to open {safe_url}")
         return
     if result.returncode == 3:
-        logger.warning(f"No browser found to open {url}")
+        logger.warning(f"No browser found to open {safe_url}")
     elif result.returncode != 0:
-        logger.warning(f"Browser helper exited with status {result.returncode} opening {url}")
+        logger.warning(
+            f"Browser helper exited with status {result.returncode} opening {safe_url}"
+        )
 
 
 def open_url(url: str) -> None:
