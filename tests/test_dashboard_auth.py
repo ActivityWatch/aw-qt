@@ -465,6 +465,7 @@ def test_ipv6_listener_authorizes_key_without_mocking_connection():
         server, captured = _serve_info(address="::1")
     except OSError as exc:
         pytest.skip(f"IPv6 loopback unavailable: {exc}")
+        return  # Explicit control flow for static analyzers that do not know skip exits.
     try:
         port = server.server_address[1]
         write_config(
