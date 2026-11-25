@@ -60,16 +60,38 @@ def tray(app):
     app.processEvents()
 
 
-def test_slow_probe_does_not_block_menu_open(app, tray):
-    probe = SlowProbe(True)
+@pytest.mark.parametrize("enabled", [False, True])
+def test_slow_probe_does_not_block_menu_open(app, tray, enabled):
+    probe = SlowProbe(enabled)
     with patch("aw_qt.trayicon.autostart.is_enabled", probe):
         started = time.monotonic()
         tray._refresh_autostart_action()
         assert time.monotonic() - started < 0.5
-        # The last known value stays in place while the probe runs.
+        # Unknown must not look like an actionable "off" state.
+        assert not tray._autostart_action.isEnabled()
+        assert tray._autostart_action.text() == "Start at login (checking…)"
         assert not tray._autostart_action.isChecked()
         probe.release.set()
-        spin_until(app, tray._autostart_action.isChecked)
+        spin_until(app, lambda: not tray._autostart_probe_running)
+        assert tray._autostart_action.isChecked() == enabled
+        assert tray._autostart_action.isEnabled()
+        assert tray._autostart_action.text() == "Start at login"
+
+
+def test_later_probe_keeps_known_state_actionable(app, tray):
+    with patch("aw_qt.trayicon.autostart.is_enabled", return_value=True):
+        tray._refresh_autostart_action()
+        spin_until(app, lambda: not tray._autostart_probe_running)
+
+    probe = SlowProbe(False)
+    with patch("aw_qt.trayicon.autostart.is_enabled", probe):
+        tray._refresh_autostart_action()
+        assert tray._autostart_action.isEnabled()
+        assert tray._autostart_action.isChecked()
+        assert tray._autostart_action.text() == "Start at login"
+        probe.release.set()
+        spin_until(app, lambda: not tray._autostart_probe_running)
+        assert not tray._autostart_action.isChecked()
 
 
 def test_reopening_menu_during_probe_does_not_pile_up_probes(app, tray):
@@ -85,6 +107,11 @@ def test_reopening_menu_during_probe_does_not_pile_up_probes(app, tray):
 
 
 def test_toggle_during_probe_wins_over_stale_result(app, tray):
+    received = []
+    tray._autostart_probed.connect(
+        lambda seq, enabled: received.append(seq),
+        QtCore.Qt.ConnectionType.QueuedConnection,
+    )
     # A probe started before the toggle reports the old state (disabled).
     stale = SlowProbe(False)
     with patch("aw_qt.trayicon.autostart.is_enabled", stale):
@@ -99,11 +126,10 @@ def test_toggle_during_probe_wins_over_stale_result(app, tray):
     ) as enable:
         tray._on_autostart_toggled()
         enable.assert_called_once()
-        spin_until(app, lambda: fresh.calls == 1)
-        app.processEvents()
-        # Let the stale probe finish after the fresh one was applied.
+        spin_until(app, lambda: not tray._autostart_probe_running)
+        assert tray._autostart_action.isChecked()
+        # Let the stale probe finish after the fresh one was applied, and
+        # wait for its queued delivery before checking it was discarded.
         stale.release.set()
-        for _ in range(50):
-            app.processEvents()
-            threading.Event().wait(0.002)
+        spin_until(app, lambda: 1 in received)
     assert tray._autostart_action.isChecked()

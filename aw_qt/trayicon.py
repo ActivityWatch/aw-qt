@@ -238,6 +238,9 @@ class TrayIcon(QSystemTrayIcon):
             return
         if self._autostart_probe_running and not force:
             return
+        if self._autostart_probe_seq == 0:
+            self._autostart_action.setEnabled(False)
+            self._autostart_action.setText("Start at login (checking…)")
         self._autostart_probe_seq += 1
         seq = self._autostart_probe_seq
         self._autostart_probe_running = True
@@ -257,6 +260,8 @@ class TrayIcon(QSystemTrayIcon):
         self._autostart_probe_running = False
         if self._autostart_action is not None:
             self._autostart_action.setChecked(enabled)
+            self._autostart_action.setText("Start at login")
+            self._autostart_action.setEnabled(True)
 
     def _refresh_notify_action(self) -> None:
         """Sync the menu item with the shared `aw-notify.enabled` setting."""
