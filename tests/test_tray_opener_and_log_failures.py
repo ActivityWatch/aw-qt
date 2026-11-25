@@ -99,7 +99,28 @@ def test_webbrowser_fallback_failure_is_logged(monkeypatch, caplog):
 
     caplog.clear()
     monkeypatch.setattr(
-        subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a[0], 1)
+        subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a[0], 3)
     )
     trayicon._open_with_webbrowser("http://localhost:5600")
     assert "No browser found to open http://localhost:5600" in caplog.text
+
+
+@pytest.mark.parametrize("helper_fails", [False, True])
+def test_webbrowser_helper_failure_is_not_a_missing_browser(
+    monkeypatch, tmp_path, caplog, helper_fails
+):
+    # Exercise the child protocol too: a Python exception must not use the
+    # exit code reserved for browser discovery returning False.
+    (tmp_path / "webbrowser.py").write_text(
+        "def open(url):\n"
+        + ("    raise RuntimeError('helper failed')\n" if helper_fails else "    return False\n")
+    )
+    monkeypatch.setenv("PYTHONPATH", str(tmp_path))
+    monkeypatch.setattr(sys, "frozen", False, raising=False)
+    trayicon._open_with_webbrowser("http://localhost:5600")
+
+    if helper_fails:
+        assert "Browser helper exited with status 1" in caplog.text
+        assert "No browser found" not in caplog.text
+    else:
+        assert "No browser found to open http://localhost:5600" in caplog.text

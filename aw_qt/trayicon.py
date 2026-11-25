@@ -80,17 +80,19 @@ def _open_with_webbrowser(url: str) -> None:
             [
                 python,
                 "-c",
-                "import sys, webbrowser; sys.exit(0 if webbrowser.open(sys.argv[1]) else 1)",
+                # Reserve 3 for no browser; Python startup/runtime errors use 1/2.
+                "import sys, webbrowser; sys.exit(0 if webbrowser.open(sys.argv[1]) else 3)",
                 url,
             ],
             env=get_env(),
         )
-        opened = result.returncode == 0
     except Exception:
         logger.exception(f"Failed to open {url}")
         return
-    if not opened:
+    if result.returncode == 3:
         logger.warning(f"No browser found to open {url}")
+    elif result.returncode != 0:
+        logger.warning(f"Browser helper exited with status {result.returncode} opening {url}")
 
 
 def open_url(url: str) -> None:
