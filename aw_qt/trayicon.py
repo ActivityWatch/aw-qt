@@ -409,6 +409,12 @@ class TrayIcon(QSystemTrayIcon):
         if self._notify_action is None:
             return
         checked = self._notify_action.isChecked()
+        if self.manager.foreign_server_port is not None:
+            # The server was refused as another user's: writing this choice
+            # would change their aw-notify settings, and aw-notify is blocked.
+            self._notify_action.setChecked(not checked)
+            self._show_refusal()
+            return
         self._notify_generation += 1
         # Hold _notify_lock so the autostart background thread cannot claim a
         # second aw-notify instance between this write and the start/stop

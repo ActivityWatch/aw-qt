@@ -419,6 +419,25 @@ class _DashboardInfoSocket:
         return io.BufferedReader(_DashboardInfoReader(self.sock, self.deadline))
 
 
+def _read_info_body(response, deadline: float) -> bytes:
+    """Read at most DASHBOARD_INFO_MAX_BYTES of an info response before *deadline*.
+
+    urlopen's timeout applies per socket read, so a listener that trickles
+    bytes could otherwise hold the caller (the Qt thread) indefinitely. The
+    check runs between reads, so the total is bounded by deadline + timeout.
+    """
+    body = b""
+    while True:
+        if monotonic() > deadline:
+            raise TimeoutError("server info read timed out")
+        chunk = response.read1(DASHBOARD_INFO_MAX_BYTES + 1 - len(body))
+        if not chunk:
+            return body
+        body += chunk
+        if len(body) > DASHBOARD_INFO_MAX_BYTES:
+            raise ValueError("server info response is too large")
+
+
 SERVER_MODULES = ("aw-server", "aw-server-rust")
 
 
@@ -558,10 +577,11 @@ class Module:
 
         Raises if the info response cannot be fetched or parsed.
         """
+        deadline = monotonic() + timeout
         with urllib.request.urlopen(
             f"http://localhost:{port}/api/0/info", timeout=timeout
         ) as response:
-            info = json.loads(response.read().decode("utf-8"))
+            info = json.loads(_read_info_body(response, deadline).decode("utf-8"))
         if not isinstance(info, dict):
             raise ValueError("Server info is not an object")
         device_id = info.get("device_id")

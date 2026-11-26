@@ -10,6 +10,7 @@ import json
 import subprocess
 import sys
 import threading
+import time
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -123,7 +124,7 @@ class TestAdoption:
         from unittest.mock import MagicMock
 
         response = MagicMock()
-        response.__enter__.return_value.read.return_value = body
+        response.__enter__.return_value.read1.side_effect = [body, b""]
         with patch.object(urllib.request, "urlopen", return_value=response):
             mod, popen = _start_server_module(5600)
 
@@ -446,3 +447,44 @@ class TestSpawnedListenerVerification:
 
         child.kill.assert_called_once_with()
         assert server._process is None
+
+
+class _TrickleHandler(BaseHTTPRequestHandler):
+    """Answers /api/0/info one byte at a time, never finishing quickly."""
+
+    oversize = False
+
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        try:
+            if self.oversize:
+                self.wfile.write(b" " * 10_000 + b"{}")
+                return
+            for _ in range(100):
+                self.wfile.write(b" ")
+                self.wfile.flush()
+                time.sleep(0.05)
+        except OSError:
+            pass
+
+    def log_message(self, *args):
+        pass
+
+
+@pytest.mark.parametrize("oversize", [False, True])
+def test_identity_read_is_bounded(oversize):
+    # The probed listener may be another user's: a slow or huge response must
+    # not hold the Qt thread past the timeout.
+    _TrickleHandler.oversize = oversize
+    server = HTTPServer(("127.0.0.1", 0), _TrickleHandler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        mod = Module("aw-server-rust", Path("/nonexistent/aw-server-rust"), "system")
+        started = time.monotonic()
+        with pytest.raises((TimeoutError, ValueError)):
+            mod._external_server_device_id(server.server_port, timeout=0.3)
+        assert time.monotonic() - started < 2
+    finally:
+        server.shutdown()
