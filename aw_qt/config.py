@@ -2,6 +2,7 @@ import logging
 import os
 import tempfile
 import threading
+from collections.abc import Mapping
 from contextlib import contextmanager
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
@@ -125,9 +126,16 @@ def _read_section_port(path: str, section: str) -> Optional[int]:
     except Exception as e:
         logger.warning("Failed to read %s: %s", path, e)
         return None
-    section_data = config.get(section, {})
-    if "port" in section_data:
-        return int(str(section_data["port"]))
+    try:
+        section_data = config.get(section, {})
+        if not isinstance(section_data, Mapping):
+            raise TypeError("expected a table")
+        if "port" in section_data:
+            return int(str(section_data["port"]))
+    except (TypeError, ValueError) as e:
+        # A malformed port must not crash startup; fall back like
+        # _read_toml_port does for the Rust config.
+        logger.warning("Invalid port in [%s] of %s: %s", section, path, e)
     return None
 
 
@@ -144,10 +152,12 @@ def _raw_toml_section(path: str, section: str) -> Optional[Any]:
     data = parsed.get(section)
     if data is None:
         return None
-    try:
-        if len(data) == 0:
-            return None
-    except TypeError:
+    # `aw-qt-<profile> = "foo"` is a key, not a section. Ignore it rather than
+    # let a caller spread a string or array into the settings dict.
+    if not isinstance(data, Mapping):
+        logger.warning("Ignoring %s in %s: not a table", section, path)
+        return None
+    if len(data) == 0:
         return None
     return data
 
@@ -287,6 +297,13 @@ def _read_server_port(
     return default_port
 
 
+def _as_bool(value: Any) -> bool:
+    """Parse a TOML flag; bool("false") is True, which would enable a declined option."""
+    if isinstance(value, str):
+        return value.strip().lower() in ("1", "true", "yes", "on")
+    return bool(value)
+
+
 class AwQtSettings:
     def __init__(self, profile: str = DEFAULT_PROFILE):
         """
@@ -316,10 +333,12 @@ class AwQtSettings:
                 f"aw-qt-{profile}",
             )
             if shared_section is not None:
-                config_section = shared_section
+                # Layer the legacy section over the defaults: it may set only
+                # some keys (e.g. autostart_on_first_run without a module list).
+                config_section = {**config_section, **shared_section}
 
         self.autostart_modules: List[str] = config_section["autostart_modules"]
-        self.autostart_on_first_run: bool = bool(
+        self.autostart_on_first_run: bool = _as_bool(
             config_section.get("autostart_on_first_run", False)
         )
         # Pass autostart_modules so port lookup targets the actual server type,

@@ -105,6 +105,26 @@ class TestServerPort:
         )
 
 
+@pytest.mark.parametrize(
+    "contents",
+    [
+        '[server]\nport = "abc"\n',
+        "[server]\nport = 5600.5\n",
+        "server = 1\n",
+        'server = "disabled"\n',
+        "server = []\n",
+    ],
+)
+def test_malformed_python_server_port_falls_back_to_default(xdg_tmp, contents, caplog):
+    # A malformed aw-server.toml must not crash aw-qt at startup; fall back to
+    # the default port like a malformed aw-server-rust config already does.
+    server_dir = _module_config_dir(DEFAULT_PROFILE, "aw-server")
+    config_path = server_dir / "aw-server.toml"
+    config_path.write_text(contents)
+    assert _read_server_port("default", ["aw-server"]) == 5600
+    assert f"Invalid port in [server] of {config_path}" in caplog.text
+
+
 class TestAwQtSettings:
     def test_profile_without_section_inherits_default(self, xdg_tmp):
         settings = AwQtSettings(profile="research")
@@ -117,6 +137,37 @@ class TestAwQtSettings:
         )
         settings = AwQtSettings(profile="research")
         assert settings.autostart_modules == ["aw-server-rust"]
+
+    def test_pre_isolation_shared_root_section_without_module_list(self, xdg_tmp):
+        # A legacy [aw-qt-<profile>] section that only sets another key must
+        # fall back to the default module list instead of crashing startup.
+        shared = _module_config_dir(DEFAULT_PROFILE, "aw-qt")
+        (shared / "aw-qt.toml").write_text(
+            "[aw-qt-research]\nautostart_on_first_run = true\n"
+        )
+        settings = AwQtSettings(profile="research")
+        assert settings.autostart_modules == AwQtSettings().autostart_modules
+        assert settings.autostart_on_first_run is True
+
+    @pytest.mark.parametrize("value", ['"foo"', "1", "[1, 2]"])
+    def test_pre_isolation_shared_root_non_table_section_is_ignored(
+        self, xdg_tmp, value
+    ):
+        # A legacy `aw-qt-<profile> = <scalar or array>` is not a section. It
+        # must be ignored, not spread into the settings dict (TypeError).
+        shared = _module_config_dir(DEFAULT_PROFILE, "aw-qt")
+        (shared / "aw-qt.toml").write_text(f"aw-qt-research = {value}\n")
+        settings = AwQtSettings(profile="research")
+        assert settings.autostart_modules == AwQtSettings().autostart_modules
+
+    @pytest.mark.parametrize("value", ['"false"', '"0"', '"no"', "false"])
+    def test_autostart_on_first_run_false_strings_stay_false(self, xdg_tmp, value):
+        # A quoted "false" must not register a login item the user declined.
+        config_dir = _module_config_dir(DEFAULT_PROFILE, "aw-qt")
+        (config_dir / "aw-qt.toml").write_text(
+            f"[aw-qt]\nautostart_on_first_run = {value}\n"
+        )
+        assert AwQtSettings().autostart_on_first_run is False
 
     def test_isolated_awqt_section_wins_over_shared_root(self, xdg_tmp):
         isolated = _module_config_dir("research", "aw-qt")
