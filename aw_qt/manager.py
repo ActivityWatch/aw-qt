@@ -419,25 +419,6 @@ class _DashboardInfoSocket:
         return io.BufferedReader(_DashboardInfoReader(self.sock, self.deadline))
 
 
-def _read_info_body(response, deadline: float) -> bytes:
-    """Read at most DASHBOARD_INFO_MAX_BYTES of an info response before *deadline*.
-
-    urlopen's timeout applies per socket read, so a listener that trickles
-    bytes could otherwise hold the caller (the Qt thread) indefinitely. The
-    check runs between reads, so the total is bounded by deadline + timeout.
-    """
-    body = b""
-    while True:
-        if monotonic() > deadline:
-            raise TimeoutError("server info read timed out")
-        chunk = response.read1(DASHBOARD_INFO_MAX_BYTES + 1 - len(body))
-        if not chunk:
-            return body
-        body += chunk
-        if len(body) > DASHBOARD_INFO_MAX_BYTES:
-            raise ValueError("server info response is too large")
-
-
 SERVER_MODULES = ("aw-server", "aw-server-rust")
 
 
@@ -584,12 +565,35 @@ class Module:
 
         Raises if the info response cannot be fetched or parsed.
         """
-        netloc = "localhost" if host is None else (f"[{host}]" if ":" in host else host)
         deadline = monotonic() + timeout
-        with urllib.request.urlopen(
-            f"http://{netloc}:{port}/api/0/info", timeout=timeout
-        ) as response:
-            info = json.loads(_read_info_body(response, deadline).decode("utf-8"))
+        # HTTPConnection takes socket-form IPv6 (without URL brackets). Reuse
+        # the dashboard reader so status, headers and body share one deadline;
+        # urllib's timeout alone can be kept alive by trickling header bytes.
+        conn = http.client.HTTPConnection(host or "localhost", port, timeout=timeout)
+        try:
+            conn.connect()
+            remaining = deadline - monotonic()
+            if remaining <= 0:
+                raise TimeoutError("server info probe timed out")
+            conn.sock.settimeout(remaining)
+            conn.request("GET", "/api/0/info")
+            with http.client.HTTPResponse(
+                _DashboardInfoSocket(conn.sock, deadline)  # type: ignore[arg-type]
+            ) as response:
+                response.begin()
+                if response.status != 200:
+                    raise ValueError(f"Server info returned HTTP {response.status}")
+                length = response.getheader("Content-Length")
+                if length is not None and not 0 <= int(length) <= DASHBOARD_INFO_MAX_BYTES:
+                    raise ValueError("server info response is too large")
+                payload = response.read(DASHBOARD_INFO_MAX_BYTES + 1)
+                if len(payload) > DASHBOARD_INFO_MAX_BYTES or response.length not in (None, 0):
+                    raise ValueError("server info response is too large")
+                info = json.loads(payload.decode("utf-8"))
+        except (http.client.HTTPException, RecursionError) as exc:
+            raise ValueError(f"Invalid server info response: {exc}") from exc
+        finally:
+            conn.close()
         if not isinstance(info, dict):
             raise ValueError("Server info is not an object")
         device_id = info.get("device_id")

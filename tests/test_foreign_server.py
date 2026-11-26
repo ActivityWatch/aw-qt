@@ -12,7 +12,6 @@ import sys
 import threading
 import time
 import urllib.error
-import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Optional
@@ -99,20 +98,9 @@ class TestAdoption:
         self, error, info_server, _isolated_platform_dirs
     ):
         _write_device_id(_isolated_platform_dirs, "activitywatch", "aw-server-rust", "mine")
-        real_urlopen = urllib.request.urlopen
-        requests = 0
-
-        def urlopen(*args, **kwargs):
-            nonlocal requests
-            requests += 1
-            if requests == 2:
-                raise error
-            return real_urlopen(*args, **kwargs)
-
-        with patch.object(urllib.request, "urlopen", side_effect=urlopen):
+        with patch.object(Module, "_external_server_device_id", side_effect=error):
             mod, popen = _start_server_module(info_server.server_port)
 
-        assert requests == 2
         assert mod.started is False
         assert mod._external_server is False
         assert mod.foreign_server_port == info_server.server_port
@@ -124,9 +112,20 @@ class TestAdoption:
         from unittest.mock import MagicMock
 
         response = MagicMock()
-        response.__enter__.return_value.read1.side_effect = [body, b""]
-        with patch.object(urllib.request, "urlopen", return_value=response):
-            mod, popen = _start_server_module(5600)
+        response.__enter__.return_value.status = 200
+        response.__enter__.return_value.getheader.return_value = None
+        response.__enter__.return_value.read.return_value = body
+        response.__enter__.return_value.length = None
+        with (
+            patch.object(Module, "_probe_external_server", return_value=True),
+            patch("aw_qt.manager.http.client.HTTPConnection"),
+            patch("aw_qt.manager.http.client.HTTPResponse", return_value=response),
+        ):
+            # The adoption probe normally records the port on the module.
+            mod = Module("aw-server-rust", Path("/server"), "system")
+            mod._external_server_port = 5600
+            with patch("subprocess.Popen") as popen:
+                mod.start(False)
 
         assert not mod.started
         assert mod.foreign_server_port == 5600
@@ -471,12 +470,14 @@ class TestSpawnedListenerVerification:
         assert read_identity.call_args.kwargs["host"] == "::1"
         assert server.foreign_server_port is None
 
-    def test_identity_url_brackets_ipv6(self):
+    def test_identity_connection_uses_socket_form_ipv6(self):
         server = Module("aw-server-rust", Path("/server"), "system")
-        with patch("urllib.request.urlopen", side_effect=OSError("down")) as urlopen:
+        with patch("aw_qt.manager.http.client.HTTPConnection") as connection:
+            connection.return_value.connect.side_effect = OSError("down")
             with pytest.raises(OSError):
                 server._external_server_device_id(5600, timeout=0.1, host="::1")
-        assert urlopen.call_args.args[0] == "http://[::1]:5600/api/0/info"
+        connection.assert_called_once_with("::1", 5600, timeout=0.1)
+        connection.return_value.close.assert_called_once_with()
 
     def test_refusal_terminates_spawned_child(self, own_datastore):
         server = Module("aw-server-rust", Path("/server"), "system")
@@ -517,8 +518,20 @@ class _TrickleHandler(BaseHTTPRequestHandler):
     """Answers /api/0/info one byte at a time, never finishing quickly."""
 
     oversize = False
+    slow_headers = False
 
     def do_GET(self):
+        if self.slow_headers:
+            try:
+                self.wfile.write(b"HTTP/1.0 200 OK\r\nX-Slow: ")
+                self.wfile.flush()
+                for byte in b"x" * 55:
+                    self.wfile.write(bytes([byte]))
+                    self.wfile.flush()
+                    time.sleep(0.05)
+            except OSError:
+                pass  # The deadline-aware client has closed the connection.
+            return
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
@@ -537,11 +550,12 @@ class _TrickleHandler(BaseHTTPRequestHandler):
         pass
 
 
-@pytest.mark.parametrize("oversize", [False, True])
-def test_identity_read_is_bounded(oversize):
+@pytest.mark.parametrize("oversize,slow_headers", [(False, False), (True, False), (False, True)])
+def test_identity_read_is_bounded(oversize, slow_headers):
     # The probed listener may be another user's: a slow or huge response must
     # not hold the Qt thread past the timeout.
     _TrickleHandler.oversize = oversize
+    _TrickleHandler.slow_headers = slow_headers
     server = HTTPServer(("127.0.0.1", 0), _TrickleHandler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     try:
