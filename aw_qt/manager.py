@@ -786,6 +786,7 @@ class Manager:
         # Names claimed for spawn so two callers cannot both Popen after
         # releasing _notify_lock.
         self._starting: Dict[str, Tuple[Module, object]] = {}
+        self._status_errors: Set[Module] = set()
 
         self.discover_modules()
 
@@ -808,8 +809,24 @@ class Manager:
             if m not in self.modules:
                 self.modules.append(m)
 
+    def get_module_status(self, module: Module) -> Optional[bool]:
+        """Poll liveness, logging only once until either status poll succeeds."""
+        try:
+            alive = module.is_alive()
+        except Exception:
+            if module not in self._status_errors:
+                logger.exception(f"Failed to check status of module {module.name}")
+                self._status_errors.add(module)
+            # Unknown status is not a crash, nor a reason to skip others.
+            return None
+        self._status_errors.discard(module)
+        return alive
+
     def get_unexpected_stops(self) -> List[Module]:
-        return list(filter(lambda x: x.started and not x.is_alive(), self.modules))
+        return [
+            module for module in self.modules
+            if module.started and self.get_module_status(module) is False
+        ]
 
     def resolve(self, module_name: str) -> Optional[Module]:
         """The module that ``start``/``autostart`` runs for ``module_name``.

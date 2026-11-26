@@ -232,7 +232,7 @@ class TrayIcon(QSystemTrayIcon):
         # Whether a module start/stop from the menu is saved to
         # autostart_modules (off when --autostart-modules overrides the config).
         self.persist_toggles = persist_toggles
-        self._restart_timestamps: Dict[str, List[float]] = {}
+        self._restart_timestamps: Dict[Module, List[float]] = {}
         self._autostart_action: Optional[QAction] = None
         self._autostart_probe_seq = 0
         self._autostart_probe_running = False
@@ -252,20 +252,20 @@ class TrayIcon(QSystemTrayIcon):
 
         self._build_rootmenu()
 
-    def _recent_restart_count(self, module_name: str) -> int:
-        """Count restarts within the sliding time window."""
+    def _recent_restart_count(self, module: Module) -> int:
+        """Count restarts for this copy within the sliding time window."""
         now = time.monotonic()
-        timestamps = self._restart_timestamps.get(module_name, [])
+        timestamps = self._restart_timestamps.get(module, [])
         cutoff = now - self.RESTART_WINDOW_SECONDS
         return sum(1 for t in timestamps if t > cutoff)
 
-    def _record_restart(self, module_name: str) -> None:
-        """Record a restart timestamp and prune old entries."""
+    def _record_restart(self, module: Module) -> None:
+        """Record a restart timestamp for this copy and prune old entries."""
         now = time.monotonic()
         cutoff = now - self.RESTART_WINDOW_SECONDS
-        timestamps = self._restart_timestamps.get(module_name, [])
+        timestamps = self._restart_timestamps.get(module, [])
         # Prune old timestamps and add current
-        self._restart_timestamps[module_name] = [
+        self._restart_timestamps[module] = [
             t for t in timestamps if t > cutoff
         ] + [now]
 
@@ -554,10 +554,14 @@ class TrayIcon(QSystemTrayIcon):
 
         self.setContextMenu(menu)
 
-        def show_module_failed_dialog(module: Module) -> None:
+        def show_module_failed_dialog(
+            module: Module, launch_error: Optional[Exception] = None
+        ) -> None:
             box = QMessageBox(self._parent)
+            box.setAttribute(QtCore.Qt.WidgetAttribute.WA_DeleteOnClose)
+            box.setTextFormat(QtCore.Qt.TextFormat.PlainText)
             box.setIcon(QMessageBox.Icon.Warning)
-            recent = self._recent_restart_count(module.name)
+            recent = self._recent_restart_count(module)
             box.setText(
                 f"Module {module.name} quit unexpectedly"
                 + (
@@ -567,13 +571,45 @@ class TrayIcon(QSystemTrayIcon):
                     else ""
                 )
             )
-            box.setDetailedText(module.read_log(self.testing))
+            if launch_error is not None:
+                box.setInformativeText(f"Could not restart module: {launch_error}")
+            try:
+                log = module.read_log(self.testing)
+            except (OSError, UnicodeError):
+                logger.exception(f"Failed to read log for module {module.name}")
+                log = "Unable to read the module log. See the aw-qt log for details."
+            box.setDetailedText(log)
 
             restart_button = QPushButton("Restart", box)
 
+            def show_restart_warning(text: str) -> None:
+                error_box = QMessageBox(self._parent)
+                error_box.setAttribute(QtCore.Qt.WidgetAttribute.WA_DeleteOnClose)
+                error_box.setTextFormat(QtCore.Qt.TextFormat.PlainText)
+                error_box.setIcon(QMessageBox.Icon.Warning)
+                error_box.setText(text)
+                error_box.show()
+
             def on_manual_restart() -> None:
-                self._restart_timestamps.pop(module.name, None)
-                self.manager.restart(module)
+                self._restart_timestamps.pop(module, None)
+                # Unknown status (None) must not replace the only process
+                # handle, nor be reported as a failed launch.
+                status = self.manager.get_module_status(module)
+                if status is None:
+                    show_restart_warning(
+                        f"Could not check whether module {module.name} is running,"
+                        " so it was not restarted. See the aw-qt log for details."
+                    )
+                    return
+                if status:
+                    return
+                try:
+                    self.manager.restart(module)
+                except Exception as exc:
+                    # Still unlaunchable: an exception escaping this Qt slot
+                    # would abort the tray. Say why instead.
+                    logger.exception(f"Failed to restart module {module.name}")
+                    show_restart_warning(f"Could not start module {module.name}: {exc}")
 
             restart_button.clicked.connect(on_manual_restart)
             box.addButton(restart_button, QMessageBox.ButtonRole.AcceptRole)
@@ -585,54 +621,85 @@ class TrayIcon(QSystemTrayIcon):
             for action in modulesMenu.actions():
                 if action.isEnabled():
                     module: Module = action.data()
-                    alive = module.is_alive()
-                    action.setChecked(alive)
+                    alive = self.manager.get_module_status(module)
+                    # Preserve the last menu state when liveness is unknown.
+                    if alive is not None:
+                        action.setChecked(alive)
 
             QtCore.QTimer.singleShot(2000, rebuild_modules_menu)
 
         QtCore.QTimer.singleShot(2000, rebuild_modules_menu)
 
-        def check_module_status() -> None:
+        def handle_unexpected_stops() -> None:
             unexpected_exits = self.manager.get_unexpected_stops()
             for module in unexpected_exits:
-                if module.exited_cleanly():
-                    # A clean exit (code 0) is intentional, not a crash — e.g.
-                    # aw-notify exits 0 while notifications are disabled by its
-                    # opt-in gate. Restarting it here would loop every interval.
-                    logger.info(
-                        f"Module {module.name} exited cleanly (exit 0); "
-                        "not auto-restarting"
-                    )
-                    module.clear_exited_process()
-                    # A clean exit ends the crash episode: drop the restart
-                    # history so a later single crash is not mistaken for a
-                    # repeated failure. Mirrors the manual toggle/restart paths.
-                    self._restart_timestamps.pop(module.name, None)
-                    continue
-                recent = self._recent_restart_count(module.name)
-                if recent < self.MAX_AUTO_RESTARTS:
-                    logger.info(
-                        f"Auto-restarting crashed module {module.name} "
-                        f"(attempt {recent + 1}/{self.MAX_AUTO_RESTARTS}"
-                        f" in {self.RESTART_WINDOW_SECONDS // 60}min window)"
-                    )
+                try:
+                    handle_unexpected_stop(module)
+                except Exception:
+                    # One broken module must not starve the rest of this poll.
+                    logger.exception(f"Failed to handle stopped module {module.name}")
+
+        def handle_unexpected_stop(module: Module) -> None:
+            if module.exited_cleanly():
+                # A clean exit (code 0) is intentional, not a crash — e.g.
+                # aw-notify exits 0 while notifications are disabled by its
+                # opt-in gate. Restarting it here would loop every interval.
+                logger.info(
+                    f"Module {module.name} exited cleanly (exit 0); "
+                    "not auto-restarting"
+                )
+                module.clear_exited_process()
+                # A clean exit ends the crash episode: drop the restart
+                # history so a later single crash is not mistaken for a
+                # repeated failure. Mirrors the manual toggle/restart paths.
+                self._restart_timestamps.pop(module, None)
+                return
+            recent = self._recent_restart_count(module)
+            if recent < self.MAX_AUTO_RESTARTS:
+                logger.info(
+                    f"Auto-restarting crashed module {module.name} "
+                    f"(attempt {recent + 1}/{self.MAX_AUTO_RESTARTS}"
+                    f" in {self.RESTART_WINDOW_SECONDS // 60}min window)"
+                )
+                # Count the attempt before launching: a relaunch that raises
+                # still uses up the budget.
+                self._record_restart(module)
+                try:
                     if not self.manager.restart(module):
-                        continue  # Shutdown cancelled this restart.
-                    self._record_restart(module.name)
-                    self.showMessage(
-                        "ActivityWatch",
-                        f"Module {module.name} crashed and was auto-restarted",
-                        QSystemTrayIcon.MessageIcon.Warning,
-                        5000,
+                        return  # Shutdown cancelled this restart.
+                except Exception as exc:
+                    # restart() already cleared `started`, so later polls will
+                    # not see this module again. Report it now, don't drop it.
+                    logger.exception(
+                        f"Failed to auto-restart module {module.name}; it will "
+                        "not be retried automatically (use Restart or the "
+                        "Modules menu)"
                     )
-                else:
-                    logger.warning(
-                        f"Module {module.name} exceeded max auto-restarts "
-                        f"({self.MAX_AUTO_RESTARTS})"
-                    )
+                    show_module_failed_dialog(module, launch_error=exc)
+                    return
+                self.showMessage(
+                    "ActivityWatch",
+                    f"Module {module.name} crashed and was auto-restarted",
+                    QSystemTrayIcon.MessageIcon.Warning,
+                    5000,
+                )
+            else:
+                logger.warning(
+                    f"Module {module.name} exceeded max auto-restarts "
+                    f"({self.MAX_AUTO_RESTARTS})"
+                )
+                try:
                     show_module_failed_dialog(module)
+                finally:
+                    # Clear this crash even if the dialog cannot be shown.
                     module.stop()
 
+        def check_module_status() -> None:
+            try:
+                handle_unexpected_stops()
+            except Exception:
+                # Even failure to collect stopped modules must not end polling.
+                logger.exception("Failed to handle a module that stopped unexpectedly")
             QtCore.QTimer.singleShot(5000, check_module_status)
 
         QtCore.QTimer.singleShot(5000, check_module_status)
@@ -644,8 +711,8 @@ class TrayIcon(QSystemTrayIcon):
         through ``Module.start``/``stop`` directly and never touch the config.
         """
         enabled = self.manager.toggle(module)
-        # Reset auto-restart timestamps on manual toggle
-        self._restart_timestamps.pop(module.name, None)
+        # Reset auto-restart timestamps for only the manually toggled copy.
+        self._restart_timestamps.pop(module, None)
         if not self.persist_toggles:
             return
         if self.manager.resolve(module.name) is not module:

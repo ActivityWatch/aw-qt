@@ -323,7 +323,7 @@ class TestTrayClick:
             testing=False,
             profile=DEFAULT_PROFILE,
             persist_toggles=persist_toggles,
-            _restart_timestamps={"aw-watcher-afk": [1.0]},
+            _restart_timestamps={module: [1.0] for module in modules},
         )
         return fake, lambda module: TrayIcon._on_module_clicked(fake, module)
 
@@ -340,7 +340,7 @@ class TestTrayClick:
         with patch("aw_qt.trayicon.persist_module_autostart") as persist:
             click(module)
         persist.assert_called_once_with("aw-watcher-afk", False, DEFAULT_PROFILE)
-        assert "aw-watcher-afk" not in fake._restart_timestamps
+        assert module not in fake._restart_timestamps
 
     @pytest.mark.parametrize("watcher", ["aw-watcher-window-wayland", "aw-awatcher"])
     def test_wayland_stop_stays_disabled_after_reload(self, watcher, monkeypatch):
