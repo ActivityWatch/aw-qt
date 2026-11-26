@@ -40,3 +40,26 @@ def test_autostart_continues_past_module_that_fails_to_launch(error):
     assert failed != started
     for module in manager.modules:
         assert module.started is (str(module.path) == started)
+
+
+def test_deferred_launch_failure_releases_claims_and_starts_the_rest():
+    names = ["aw-watcher-afk", "aw-watcher-window"]
+    modules = [Module(name, Path(f"/bundled/{name}"), "bundled") for name in names]
+    with patch.object(Manager, "discover_modules"):
+        manager = Manager(testing=True)
+    manager.modules = modules
+
+    with patch("aw_qt.manager.sys.platform", "linux"), patch(
+        "aw_qt.manager.SERVER_DEPENDENT_MODULES", set(names)
+    ), patch("aw_qt.manager.wait_for_server", return_value=True), patch(
+        "aw_qt.manager.subprocess.Popen",
+        side_effect=[FileNotFoundError("missing"), MagicMock(returncode=None)],
+    ) as popen:
+        worker = manager.autostart(names, port=5600)
+        assert worker is not None
+        worker.join(timeout=5)
+
+    assert popen.call_count == 2
+    # A leaked claim would make every later start of that module a no-op.
+    assert not manager._starting
+    assert [module.started for module in modules] == [False, True]
