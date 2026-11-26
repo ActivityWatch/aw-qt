@@ -40,9 +40,53 @@ from .profile import DEFAULT_PROFILE, TESTING_PROFILE
 logger = logging.getLogger(__name__)
 
 
+_BUNDLED_QT_ENV_KEYS = (
+    "QT_PLUGIN_PATH",
+    "QT_QPA_PLATFORM_PLUGIN_PATH",
+)
+
+
+def _bundle_root() -> Optional[Path]:
+    if not getattr(sys, "frozen", False):
+        return None
+    meipass = getattr(sys, "_MEIPASS", None)
+    try:
+        if meipass:
+            return Path(meipass).resolve()
+        return Path(sys.executable).resolve().parent
+    except OSError:
+        return None
+
+
+def _is_within(path_str: str, root: Path) -> bool:
+    try:
+        resolved = Path(path_str).resolve()
+    except OSError:
+        return False
+    return resolved == root or root in resolved.parents
+
+
+def _strip_bundled_qt_env(env: Dict[str, str], bundle_root: Path) -> None:
+    """Remove Qt plugin paths pointing into a frozen PyInstaller bundle."""
+    for key in _BUNDLED_QT_ENV_KEYS:
+        raw = env.get(key)
+        if raw is None:
+            continue
+        kept = [
+            entry
+            for entry in raw.split(os.pathsep)
+            if entry and not _is_within(entry, bundle_root)
+        ]
+        if kept:
+            env[key] = os.pathsep.join(kept)
+        else:
+            env.pop(key, None)
+
+
 def get_env() -> Dict[str, str]:
     """
     Necessary for xdg-open to work properly when PyInstaller overrides LD_LIBRARY_PATH
+    and Qt plugin paths.
 
     https://github.com/ActivityWatch/activitywatch/issues/208#issuecomment-417346407
     """
@@ -54,8 +98,7 @@ def get_env() -> Dict[str, str]:
         for key in (
             "LD_LIBRARY_PATH",
             "LD_LIBRARY_PATH_ORIG",
-            "QT_PLUGIN_PATH",
-            "QT_QPA_PLATFORM_PLUGIN_PATH",
+            *_BUNDLED_QT_ENV_KEYS,
         ):
             env.pop(key, None)
         return env
@@ -67,6 +110,13 @@ def get_env() -> Dict[str, str]:
         # This happens when LD_LIBRARY_PATH was not set.
         # Remove the env var as a last resort:
         env.pop(lp_key, None)
+    # Non-AppImage PyInstaller bundles (e.g. .zip, .deb, AUR) also point
+    # QT_PLUGIN_PATH into the bundle via PyInstaller's PyQt6 runtime hook.
+    # System Qt6 openers like KDE Plasma 6's kde-open crash (SIGSEGV) if they
+    # load the bundle's older Qt6 plugins against the host's newer Qt6 libraries.
+    bundle_root = _bundle_root()
+    if bundle_root is not None:
+        _strip_bundled_qt_env(env, bundle_root)
     return env
 
 
