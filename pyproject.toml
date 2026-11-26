@@ -39,6 +39,7 @@ PyQt6-Qt6 = [
 ]
 
 [tool.poetry.dev-dependencies]
+pytest = "^8.3.5"
 mypy = "*"
 PyQt6-stubs = { git = "https://github.com/TilmanK/PyQt6-stubs", rev = "main" }
 flake8 = "*"
