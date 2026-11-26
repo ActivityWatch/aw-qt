@@ -128,6 +128,8 @@ def _read_section_port(path: str, section: str) -> Optional[int]:
         return None
     try:
         section_data = config.get(section, {})
+        if not isinstance(section_data, Mapping):
+            raise TypeError("expected a table")
         if "port" in section_data:
             return int(str(section_data["port"]))
     except (TypeError, ValueError) as e:
