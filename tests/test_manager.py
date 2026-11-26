@@ -241,6 +241,22 @@ class TestGetUnexpectedStops:
         assert len(unexpected) == 1
         assert unexpected[0].name == "aw-test"
 
+    def test_failed_status_check_does_not_hide_later_crashes(self, caplog):
+        from aw_qt.manager import Manager
+
+        with patch.object(Manager, "discover_modules"):
+            mgr = Manager(testing=True)
+        server = Module("aw-server", Path("/system/aw-server"), "system")
+        watcher = Module("aw-watcher-afk", Path("/bundled/aw-watcher-afk"), "bundled")
+        server.started = watcher.started = True
+        mgr.modules = [server, watcher]
+        with patch.object(server, "is_alive", side_effect=ValueError("invalid port")):
+            assert mgr.get_unexpected_stops() == [watcher]
+            assert mgr.get_unexpected_stops() == [watcher]
+        assert server.started is True  # Unknown status is not a confirmed crash.
+        assert "aw-server" in caplog.text
+        assert "invalid port" in caplog.text
+
     def test_ignores_intentionally_stopped(self):
         from aw_qt.manager import Manager
 

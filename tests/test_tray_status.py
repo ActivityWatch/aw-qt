@@ -10,6 +10,8 @@ from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 
+from PyQt6 import QtCore
+
 from aw_qt.manager import Manager, Module
 from aw_qt.trayicon import TrayIcon
 
@@ -106,7 +108,7 @@ def test_status_check_only_restarts_crashes(returncode):
             module.stop.assert_called_once_with()
             module.start.assert_called_once_with(True, launch_guard=ANY)
             tray.showMessage.assert_called_once()
-            assert tray._recent_restart_count(module.name) == 1
+            assert tray._recent_restart_count(module) == 1
 
         assert module.started is (returncode != 0)
         if returncode == 0:
@@ -133,18 +135,18 @@ def test_clean_exit_resets_restart_history():
     tray = make_tray(
         module,
         manager,
-        timestamps={module.name: [now] * TrayIcon.MAX_AUTO_RESTARTS},
+        timestamps={module: [now] * TrayIcon.MAX_AUTO_RESTARTS},
     )
-    assert tray._recent_restart_count(module.name) == TrayIcon.MAX_AUTO_RESTARTS
+    assert tray._recent_restart_count(module) == TrayIcon.MAX_AUTO_RESTARTS
 
     with ExitStack() as stack:
         single_shot = enter_tray_patches(stack, module)
         TrayIcon._build_rootmenu(tray)
         scheduled_status_callback(single_shot)()
 
-        assert tray._restart_timestamps.get(module.name) is None
+        assert tray._restart_timestamps.get(module) is None
         module.start.assert_not_called()
-    assert tray._recent_restart_count(module.name) == 0
+    assert tray._recent_restart_count(module) == 0
 
 
 @pytest.mark.parametrize("checked", [False, True])
@@ -190,7 +192,7 @@ def test_restart_callback_does_not_start_after_shutdown(manual):
     now = time.monotonic()
     tray = make_tray(
         module, manager,
-        timestamps={module.name: [now] * TrayIcon.MAX_AUTO_RESTARTS} if manual else None,
+        timestamps={module: [now] * TrayIcon.MAX_AUTO_RESTARTS} if manual else None,
     )
     with ExitStack() as stack:
         single_shot = enter_tray_patches(stack, module)
@@ -217,3 +219,236 @@ def test_restart_callback_does_not_start_after_shutdown(manual):
             check_status()
         module.start.assert_not_called()
         assert not manager._starting
+def test_failed_auto_restart_keeps_status_check_scheduled():
+    # A module whose binary can no longer be executed (e.g. its shebang
+    # interpreter was removed) raises from start(). That must not stop the
+    # 5 s status check, or no module is ever restarted or reported again.
+    module, _ = make_module("aw-watcher-afk", 1)
+    manager = make_manager(module)
+    tray = make_tray(module, manager)
+
+    with ExitStack() as stack:
+        single_shot = enter_tray_patches(stack, module)
+        module.start.side_effect = OSError("Exec format error")
+        box = stack.enter_context(patch("aw_qt.trayicon.QMessageBox"))
+        stack.enter_context(patch("aw_qt.trayicon.QPushButton"))
+        stack.enter_context(patch.object(module, "read_log", return_value="log"))
+        TrayIcon._build_rootmenu(tray)
+        check_status = scheduled_status_callback(single_shot)
+        single_shot.reset_mock()
+        check_status()
+
+        single_shot.assert_called_once_with(5000, check_status)
+        # stop() cleared `started`, so no later poll sees this module: the
+        # failed relaunch must be reported now and still use up an attempt.
+        assert module.started is False
+        box.return_value.show.assert_called_once_with()
+        assert "Exec format error" in box.return_value.setInformativeText.call_args.args[0]
+        box.return_value.setAttribute.assert_called_once_with(
+            QtCore.Qt.WidgetAttribute.WA_DeleteOnClose
+        )
+        assert tray._recent_restart_count(module) == 1
+
+
+@pytest.mark.parametrize("failure", ["restart", "log", "decode", "dialog"])
+def test_failed_module_does_not_block_later_crash_recovery(failure):
+    first, _ = make_module("aw-watcher-afk", 1)
+    second, _ = make_module("aw-watcher-window", 1)
+    manager = make_manager(first)
+    manager.modules.append(second)
+    timestamps = (
+        {first: [time.monotonic()] * TrayIcon.MAX_AUTO_RESTARTS}
+        if failure != "restart"
+        else {}
+    )
+    tray = make_tray(first, manager, timestamps=timestamps)
+
+    with ExitStack() as stack:
+        single_shot = enter_tray_patches(stack, first)
+        stack.enter_context(patch.object(second, "start"))
+        box = stack.enter_context(patch("aw_qt.trayicon.QMessageBox"))
+        stack.enter_context(patch("aw_qt.trayicon.QPushButton"))
+        if failure == "restart":
+            first.start.side_effect = OSError("Exec format error")
+            stack.enter_context(patch.object(first, "read_log", return_value="log"))
+        elif failure in ("log", "decode"):
+            error = (
+                PermissionError("log denied")
+                if failure == "log"
+                else UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid byte")
+            )
+            stack.enter_context(patch.object(first, "read_log", side_effect=error))
+        else:
+            box.side_effect = RuntimeError("dialog unavailable")
+        TrayIcon._build_rootmenu(tray)
+        check_status = scheduled_status_callback(single_shot)
+        single_shot.reset_mock()
+        check_status()
+
+        second.start.assert_called_once_with(True, launch_guard=ANY)
+        assert first.started is False
+        assert first._process is None
+        single_shot.assert_called_once_with(5000, check_status)
+        if failure in ("log", "decode"):
+            box.return_value.show.assert_called_once_with()
+            assert "log" in box.return_value.setDetailedText.call_args.args[0].lower()
+        # Neither failure may keep the first crash active and starve later polls.
+        check_status()
+        assert second.start.call_count == 1
+
+
+def test_manual_restart_of_unlaunchable_module_reports_instead_of_raising():
+    # The failure dialog's Restart button runs in a Qt slot: if the module
+    # still cannot launch, the error must be shown, not escape and abort aw-qt.
+    module, _ = make_module("aw-watcher-afk", 1)
+    manager = make_manager(module)
+    tray = make_tray(module, manager)
+
+    with ExitStack() as stack:
+        single_shot = enter_tray_patches(stack, module)
+        module.start.side_effect = OSError("Exec format error")
+        failed_dialog, warning = MagicMock(), MagicMock()
+        stack.enter_context(
+            patch("aw_qt.trayicon.QMessageBox", side_effect=[failed_dialog, warning])
+        )
+        button = stack.enter_context(patch("aw_qt.trayicon.QPushButton"))
+        stack.enter_context(patch.object(module, "read_log", return_value="log"))
+        TrayIcon._build_rootmenu(tray)
+        scheduled_status_callback(single_shot)()
+        failed_dialog.show.assert_called_once_with()
+
+        on_restart = button.return_value.clicked.connect.call_args.args[0]
+        on_restart()
+
+        warning.show.assert_called_once_with()
+        warning.setAttribute.assert_called_once_with(
+            QtCore.Qt.WidgetAttribute.WA_DeleteOnClose
+        )
+        assert "Exec format error" in warning.setText.call_args.args[0]
+        assert module.started is False
+
+
+@pytest.mark.parametrize("first_exit", [0, 1])
+def test_same_name_copies_have_independent_restart_budgets(first_exit):
+    first, _ = make_module("aw-watcher-afk", first_exit)
+    second, _ = make_module("aw-watcher-afk", 1)
+    second.path = Path("/system/aw-watcher-afk")
+    second.type = "system"
+    manager = make_manager(first)
+    manager.modules.append(second)
+    tray = make_tray(first, manager)
+    # The working copy has one attempt left. A failed restart (or clean exit)
+    # of the other copy must neither spend nor reset that budget.
+    tray._record_restart(second)
+    tray._record_restart(second)
+    tray._record_restart(first)
+    with ExitStack() as stack:
+        single_shot = enter_tray_patches(stack, first)
+        first.start.side_effect = OSError("missing executable")
+        stack.enter_context(patch.object(first, "read_log", return_value="log"))
+        stack.enter_context(patch.object(second, "start"))
+        stack.enter_context(patch("aw_qt.trayicon.QMessageBox"))
+        stack.enter_context(patch("aw_qt.trayicon.QPushButton"))
+        TrayIcon._build_rootmenu(tray)
+        scheduled_status_callback(single_shot)()
+        second.start.assert_called_once_with(True, launch_guard=ANY)
+        assert tray._recent_restart_count(second) == 3
+        assert tray._recent_restart_count(first) == (0 if first_exit == 0 else 2)
+
+
+def test_menu_refresh_isolates_status_errors_and_keeps_polling():
+    first, _ = make_module("aw-server", 1)
+    second, _ = make_module("aw-watcher-afk", 1)
+    manager = make_manager(first)
+    manager.modules.append(second)
+    tray = make_tray(first, manager)
+
+    with ExitStack() as stack:
+        single_shot = enter_tray_patches(stack, first)
+        menu = stack.enter_context(patch("aw_qt.trayicon.QMenu"))
+        first_action, second_action = MagicMock(), MagicMock()
+        first_action.data.return_value = first
+        second_action.data.return_value = second
+        menu.return_value.addMenu.return_value.actions.return_value = [
+            first_action,
+            second_action,
+        ]
+        stack.enter_context(
+            patch.object(first, "is_alive", side_effect=ValueError("bad port"))
+        )
+        stack.enter_context(patch.object(second, "is_alive", return_value=False))
+        TrayIcon._build_rootmenu(tray)
+        refresh = next(
+            call.args[1] for call in single_shot.call_args_list if call.args[0] == 2000
+        )
+        single_shot.reset_mock()
+
+        refresh()
+
+        first_action.setChecked.assert_not_called()
+        second_action.setChecked.assert_called_once_with(False)
+        single_shot.assert_called_once_with(2000, refresh)
+
+
+@pytest.mark.parametrize("alive", [True, ValueError("bad port")])
+def test_stale_restart_dialog_does_not_launch_another_copy(alive):
+    module, _ = make_module("aw-watcher-afk", 1)
+    manager = make_manager(module)
+    tray = make_tray(module, manager)
+    with ExitStack() as stack:
+        single_shot = enter_tray_patches(stack, module)
+        module.start.side_effect = OSError("missing executable")
+        stack.enter_context(patch("aw_qt.trayicon.QMessageBox"))
+        button = stack.enter_context(patch("aw_qt.trayicon.QPushButton"))
+        stack.enter_context(patch.object(module, "read_log", return_value="log"))
+        TrayIcon._build_rootmenu(tray)
+        scheduled_status_callback(single_shot)()
+        on_restart = button.return_value.clicked.connect.call_args.args[0]
+        module.start.reset_mock(side_effect=True)
+        # The watcher was started from Modules, or its current status cannot
+        # be determined. Neither permits replacing its only process handle.
+        stack.enter_context(
+            patch.object(
+                module, "is_alive",
+                side_effect=alive if isinstance(alive, Exception) else None,
+                return_value=alive,
+            )
+        )
+        on_restart()
+        module.start.assert_not_called()
+
+
+@pytest.mark.parametrize("recover_from_menu", [False, True])
+def test_status_polls_log_once_per_failure_episode(recover_from_menu):
+    module, _ = make_module("aw-server", 1)
+    manager = make_manager(module)
+    tray = make_tray(module, manager)
+    with ExitStack() as stack:
+        single_shot = enter_tray_patches(stack, module)
+        menu = stack.enter_context(patch("aw_qt.trayicon.QMenu"))
+        action = MagicMock()
+        action.data.return_value = module
+        menu.return_value.addMenu.return_value.actions.return_value = [action]
+        alive = stack.enter_context(
+            patch.object(module, "is_alive", side_effect=ValueError("bad port"))
+        )
+        TrayIcon._build_rootmenu(tray)
+        refresh = next(
+            call.args[1] for call in single_shot.call_args_list if call.args[0] == 2000
+        )
+        check_status = scheduled_status_callback(single_shot)
+        manager_log = stack.enter_context(patch("aw_qt.manager.logger.exception"))
+        tray_log = stack.enter_context(patch("aw_qt.trayicon.logger.exception"))
+        for _ in range(3):
+            refresh()
+            check_status()
+        assert manager_log.call_count + tray_log.call_count == 1
+        action.setChecked.assert_not_called()
+        # Either poll observing success ends the shared failure episode.
+        alive.side_effect = None
+        alive.return_value = True
+        (refresh if recover_from_menu else check_status)()
+        alive.side_effect = ValueError("bad port again")
+        check_status()
+        refresh()
+        assert manager_log.call_count + tray_log.call_count == 2
