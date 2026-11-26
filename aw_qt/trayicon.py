@@ -582,21 +582,34 @@ class TrayIcon(QSystemTrayIcon):
 
             restart_button = QPushButton("Restart", box)
 
+            def show_restart_warning(text: str) -> None:
+                error_box = QMessageBox(self._parent)
+                error_box.setAttribute(QtCore.Qt.WidgetAttribute.WA_DeleteOnClose)
+                error_box.setTextFormat(QtCore.Qt.TextFormat.PlainText)
+                error_box.setIcon(QMessageBox.Icon.Warning)
+                error_box.setText(text)
+                error_box.show()
+
             def on_manual_restart() -> None:
                 self._restart_timestamps.pop(module, None)
+                # Unknown status (None) must not replace the only process
+                # handle, nor be reported as a failed launch.
+                status = self.manager.get_module_status(module)
+                if status is None:
+                    show_restart_warning(
+                        f"Could not check whether module {module.name} is running,"
+                        " so it was not restarted. See the aw-qt log for details."
+                    )
+                    return
+                if status:
+                    return
                 try:
-                    if not module.is_alive():
-                        self.manager.restart(module)
+                    self.manager.restart(module)
                 except Exception as exc:
                     # Still unlaunchable: an exception escaping this Qt slot
                     # would abort the tray. Say why instead.
                     logger.exception(f"Failed to restart module {module.name}")
-                    error_box = QMessageBox(self._parent)
-                    error_box.setAttribute(QtCore.Qt.WidgetAttribute.WA_DeleteOnClose)
-                    error_box.setTextFormat(QtCore.Qt.TextFormat.PlainText)
-                    error_box.setIcon(QMessageBox.Icon.Warning)
-                    error_box.setText(f"Could not start module {module.name}: {exc}")
-                    error_box.show()
+                    show_restart_warning(f"Could not start module {module.name}: {exc}")
 
             restart_button.clicked.connect(on_manual_restart)
             box.addButton(restart_button, QMessageBox.ButtonRole.AcceptRole)

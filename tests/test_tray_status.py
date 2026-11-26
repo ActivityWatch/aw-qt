@@ -398,13 +398,14 @@ def test_stale_restart_dialog_does_not_launch_another_copy(alive):
     with ExitStack() as stack:
         single_shot = enter_tray_patches(stack, module)
         module.start.side_effect = OSError("missing executable")
-        stack.enter_context(patch("aw_qt.trayicon.QMessageBox"))
+        message_box = stack.enter_context(patch("aw_qt.trayicon.QMessageBox"))
         button = stack.enter_context(patch("aw_qt.trayicon.QPushButton"))
         stack.enter_context(patch.object(module, "read_log", return_value="log"))
         TrayIcon._build_rootmenu(tray)
         scheduled_status_callback(single_shot)()
         on_restart = button.return_value.clicked.connect.call_args.args[0]
         module.start.reset_mock(side_effect=True)
+        message_box.reset_mock()
         # The watcher was started from Modules, or its current status cannot
         # be determined. Neither permits replacing its only process handle.
         stack.enter_context(
@@ -416,6 +417,14 @@ def test_stale_restart_dialog_does_not_launch_another_copy(alive):
         )
         on_restart()
         module.start.assert_not_called()
+        texts = [c.args[0] for c in message_box.return_value.setText.call_args_list]
+        if isinstance(alive, Exception):
+            # An unreadable status is reported as such, never as a failed launch.
+            assert len(texts) == 1
+            assert "Could not check whether" in texts[0]
+            assert "Could not start" not in texts[0]
+        else:
+            assert texts == []
 
 
 @pytest.mark.parametrize("recover_from_menu", [False, True])
