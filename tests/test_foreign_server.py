@@ -7,7 +7,6 @@ identifies its datastore, so a mismatch with B's own datastore is refused.
 """
 
 import json
-import socket
 import subprocess
 import sys
 import threading
