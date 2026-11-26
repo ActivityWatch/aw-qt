@@ -259,6 +259,16 @@ class TrayIcon(QSystemTrayIcon):
         cutoff = now - self.RESTART_WINDOW_SECONDS
         return sum(1 for t in timestamps if t > cutoff)
 
+    def _show_refusal(self) -> None:
+        self.showMessage(
+            "ActivityWatch",
+            f"Server on port {self.manager.foreign_server_port} was refused or "
+            "could not be verified, so dependent modules are stopped. Fix the "
+            "server or its port, then restart ActivityWatch.",
+            QSystemTrayIcon.MessageIcon.Warning,
+            15000,
+        )
+
     def _record_restart(self, module_name: str) -> None:
         """Record a restart timestamp and prune old entries."""
         now = time.monotonic()
@@ -617,7 +627,10 @@ class TrayIcon(QSystemTrayIcon):
                         f" in {self.RESTART_WINDOW_SECONDS // 60}min window)"
                     )
                     if not self.manager.restart(module):
-                        continue  # Shutdown cancelled this restart.
+                        # Shutdown cancelled this restart, or it was refused.
+                        if self.manager.foreign_server_port is not None:
+                            self._show_refusal()
+                        continue
                     self._record_restart(module.name)
                     self.showMessage(
                         "ActivityWatch",
@@ -646,6 +659,9 @@ class TrayIcon(QSystemTrayIcon):
         enabled = self.manager.toggle(module)
         # Reset auto-restart timestamps on manual toggle
         self._restart_timestamps.pop(module.name, None)
+        if enabled is None:
+            self._show_refusal()
+            return
         if not self.persist_toggles:
             return
         if self.manager.resolve(module.name) is not module:
@@ -784,6 +800,8 @@ def run(
         persist_toggles=persist_toggles,
     )
     trayIcon.show()
+    if manager.foreign_server_port is not None:
+        trayIcon._show_refusal()
 
     # Re-apply tooltip after show() to ensure it registers with the
     # platform's system tray backend.  On Windows 11 the tooltip can

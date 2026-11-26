@@ -5,6 +5,7 @@ import logging
 import threading
 import subprocess
 import platform
+import socket
 import http.client
 import io
 import urllib.error
@@ -418,6 +419,78 @@ class _DashboardInfoSocket:
         return io.BufferedReader(_DashboardInfoReader(self.sock, self.deadline))
 
 
+SERVER_MODULES = ("aw-server", "aw-server-rust")
+
+
+def _server_data_roots(appname: str) -> Set[Path]:
+    """Every per-user data root an aw-server could use for ``appname``.
+
+    aw-core (Python aw-server) uses platformdirs with the default app author;
+    aw-server-rust uses ``%LOCALAPPDATA%\\<appname>`` on Windows, and v0.14.0
+    misplaced it under roaming ``%APPDATA%``. On Linux/macOS these coincide.
+    """
+    return {
+        Path(platformdirs.user_data_dir(appname)),
+        Path(platformdirs.user_data_dir(appname, appauthor=False)),
+        Path(platformdirs.user_data_dir(appname, appauthor=False, roaming=True)),
+    }
+
+
+def _local_server_device_ids(profile: str) -> Set[str]:
+    """``device_id``s of this user's own server datastores for ``profile``.
+
+    Read-only: unlike aw_core.dirs.get_data_dir() this never creates
+    directories, so probing does not leave empty datastores behind.
+    """
+    from .config import _with_profile_env
+
+    with _with_profile_env(profile):
+        appname = aw_core.dirs._get_appname()
+    ids: Set[str] = set()
+    for root in _server_data_roots(appname):
+        for server in ("aw-server-rust", "aw-server"):
+            try:
+                device_id = (root / server / "device_id").read_text().strip()
+            except (OSError, UnicodeDecodeError):
+                continue
+            if device_id:
+                ids.add(device_id)
+    return ids
+
+
+def _own_device_ids(testing: bool) -> Set[str]:
+    from .config import _spawn_env_lock
+    from .profile import profile_from_env
+
+    with _spawn_env_lock:
+        return _local_server_device_ids(profile_from_env(testing))
+
+
+def _port_accepts_connections(port: int, timeout: float = 0.2) -> bool:
+    """Whether something listens on ``port``, independent of its HTTP health."""
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def _identity_mismatch(listener_id: Optional[str], local_ids: Set[str]) -> Optional[str]:
+    """Why an answering listener is not this user's server, or None if it is.
+
+    Shared by the adoption and post-spawn paths so both treat a missing
+    ``device_id`` the same way: it proves nothing, so it is refused.
+    """
+    if listener_id is None:
+        return "the server reports no device_id, so its datastore cannot be verified"
+    if listener_id not in local_ids:
+        return (
+            f"it serves another datastore (device_id {listener_id}, this user's "
+            f"is {', '.join(sorted(local_ids))}), possibly another user's"
+        )
+    return None
+
+
 class Module:
     def __init__(self, name: str, path: Path, type: str) -> None:
         self.name = name
@@ -437,6 +510,9 @@ class Module:
         self._external_server_port: Optional[int] = None
         self._external_server_probe_cache: Optional[bool] = None
         self._external_server_probe_cache_at: float = 0.0
+        # Port refused as foreign or unverifiable. Never cleared: the refusal
+        # lasts until aw-qt restarts.
+        self.foreign_server_port: Optional[int] = None
 
     def __hash__(self) -> int:
         return hash((self.name, self.path))
@@ -476,6 +552,102 @@ class Module:
                 return True
         except (urllib.error.URLError, OSError):
             return False
+
+    def _external_server_device_id(self, port: int, timeout: float) -> Optional[str]:
+        """The listener's ``device_id``, or None if its info response has none.
+
+        Raises if the info response cannot be fetched or parsed.
+        """
+        with urllib.request.urlopen(
+            f"http://localhost:{port}/api/0/info", timeout=timeout
+        ) as response:
+            info = json.loads(response.read().decode("utf-8"))
+        if not isinstance(info, dict):
+            raise ValueError("Server info is not an object")
+        device_id = info.get("device_id")
+        if isinstance(device_id, str) and device_id.strip():
+            return device_id.strip()
+        return None
+
+    def _process_exited(self) -> bool:
+        # Popen.poll() returns None while the child runs. Tests patch Popen
+        # with a mock whose poll() is not an int, so require an int.
+        if self._process is None:
+            return False
+        return isinstance(self._process.poll(), int)
+
+    def _refuse_port(self, port: int, reason: str) -> None:
+        logger.error(
+            f"{self.name}: not using port {port}: {reason}. Dependent modules stay "
+            "stopped until aw-qt restarts. If another server owns the port, "
+            "configure a distinct server port for this user."
+        )
+        self.foreign_server_port = port
+        # Do not leave a spawned child hidden behind started=False: stop()
+        # would then refuse to manage it.
+        process = self._process
+        if process is not None:
+            if not self._process_exited():
+                process.terminate()
+                try:
+                    process.wait(timeout=3.0)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
+            self._last_process = process
+            self._process = None
+        self.dashboard_endpoint = None
+        self.started = False
+
+    def _verify_spawned_listener(
+        self, port: Optional[int], testing: bool, wait: float = 1.0
+    ) -> None:
+        """Refuse the port unless its listener proves to be this user's server.
+
+        The pre-spawn probe can miss a listener that answers slowly. The child
+        then exits with AddrInUse while that listener keeps the port.
+        """
+        process = self._process
+        if port is None or process is None:
+            return
+        local_ids = _own_device_ids(testing)
+        if not local_ids:
+            # First run or an externally managed datastore: nothing to compare.
+            return
+        deadline = monotonic() + wait
+        while monotonic() < deadline and self._process is process:
+            exited = self._process_exited()
+            try:
+                listener_id = self._external_server_device_id(port, timeout=0.2)
+            except (urllib.error.URLError, OSError, ValueError):
+                if exited:
+                    break
+                sleep(0.05)
+                continue
+            reason = _identity_mismatch(listener_id, local_ids)
+            if reason:
+                self._refuse_port(port, reason)
+            return
+        # Nothing identified itself. A free port is a slow or broken child; a
+        # held one may belong to someone else.
+        if self._process is process and _port_accepts_connections(port):
+            self._refuse_port(port, "its listener could not be identified")
+
+    def _refuse_unverified_listener(self, port: Optional[int], testing: bool) -> None:
+        """Refuse a port someone else holds when our server failed to launch."""
+        if port is None:
+            return
+        local_ids = _own_device_ids(testing)
+        if not local_ids or not _port_accepts_connections(port):
+            return
+        try:
+            listener_id = self._external_server_device_id(port, timeout=0.5)
+        except (urllib.error.URLError, OSError, ValueError) as exc:
+            reason: Optional[str] = f"its identity cannot be read ({exc})"
+        else:
+            reason = _identity_mismatch(listener_id, local_ids)
+        if reason:
+            self._refuse_port(port, reason)
 
     def _probe_external_server_cached(self, testing: bool, max_age: float = 1.0) -> bool:
         now = monotonic()
@@ -563,6 +735,12 @@ class Module:
         self, testing: bool,
         launch_guard: Optional[Callable[[], ContextManager[bool]]] = None,
     ) -> None:
+        if self.foreign_server_port is not None:
+            logger.error(
+                f"Not starting {self.name}: port {self.foreign_server_port} was "
+                "refused. Restart aw-qt after fixing the server."
+            )
+            return
         logger.info(f"Starting module {self.name}")
 
         # For server modules, check if a server is already running before attempting
@@ -570,6 +748,19 @@ class Module:
         # when aw-server is managed externally (e.g. via systemd or Docker).
         if self._probe_external_server(testing, timeout=1.0):
             port = self._external_server_port
+            local_ids = _own_device_ids(testing) if port is not None else set()
+            if port is not None and local_ids:
+                # Adopting another datastore's server would send this user's
+                # watcher data into it (ActivityWatch/activitywatch#75).
+                try:
+                    listener_id = self._external_server_device_id(port, timeout=1.0)
+                except (urllib.error.URLError, OSError, ValueError) as exc:
+                    self._refuse_port(port, f"its identity cannot be read ({exc})")
+                    return
+                reason = _identity_mismatch(listener_id, local_ids)
+                if reason:
+                    self._refuse_port(port, reason)
+                    return
             logger.info(
                 f"{self.name}: server already running on port {port}, "
                 "using existing instance instead of starting a new one"
@@ -596,9 +787,10 @@ class Module:
         # the manager launch guard until this environment lock is released.
         with _spawn_env_lock:
             env = child_environment()
+            listen_port = self._get_server_port(testing)
             if self.name == "aw-server-rust":
                 profile = profile_from_env(testing)
-                port = self._get_server_port(testing)
+                port = listen_port
                 auth = dashboard_auth(profile, port) if port is not None else None
                 if auth is not None and port is not None:
                     address, _ = auth
@@ -624,17 +816,26 @@ class Module:
         # See: https://github.com/ActivityWatch/aw-server/issues/27
         # Stop/shutdown may cancel preparation. Once admitted, publish the
         # handle before releasing the guard so shutdown cannot miss the child.
-        with launch_guard() if launch_guard else nullcontext(True) as allowed:
-            if not allowed:
-                return
-            self._process = subprocess.Popen(
-                exec_cmd,
-                universal_newlines=True,
-                startupinfo=startupinfo,
-                env=env,
-            )
-            self.dashboard_endpoint = endpoint
-            self.started = True
+        try:
+            with launch_guard() if launch_guard else nullcontext(True) as allowed:
+                if not allowed:
+                    return
+                self._process = subprocess.Popen(
+                    exec_cmd,
+                    universal_newlines=True,
+                    startupinfo=startupinfo,
+                    env=env,
+                )
+                self.dashboard_endpoint = endpoint
+                self.started = True
+        except Exception:
+            # The probe can miss a slow listener, and autostart carries on past
+            # a launch failure.
+            self._refuse_unverified_listener(listen_port, testing)
+            raise
+        # Popen only confirms that a child was created. Verify outside the launch
+        # guard: it waits on the network.
+        self._verify_spawned_listener(listen_port, testing)
 
     def stop(self) -> None:
         """
@@ -825,6 +1026,37 @@ class Manager:
             return system[0]
         return None
 
+    @property
+    def foreign_server_port(self) -> Optional[int]:
+        """A refused server port, if any. Set until aw-qt restarts."""
+        return next(
+            (
+                m.foreign_server_port
+                for m in self.modules
+                if m.foreign_server_port is not None
+            ),
+            None,
+        )
+
+    def _start_blocked(self, module: Module) -> bool:
+        # Watchers post to their own aw-client port, which aw-qt does not know,
+        # so any refusal blocks every dependent and the refused server itself.
+        if self.foreign_server_port is None:
+            return False
+        return (
+            module.name not in SERVER_MODULES
+            or module.foreign_server_port is not None
+        )
+
+    def _stop_refused_dependents(self) -> None:
+        # Caller holds _notify_lock.
+        if self.foreign_server_port is None:
+            return
+        self._pending_autostart.clear()
+        for module in self.modules:
+            if module.name not in SERVER_MODULES and module.started:
+                module.stop()
+
     def _take_start_locked(self, module_name: str) -> Optional[Tuple[Module, object]]:
         """Claim ``module_name`` for spawn. Caller holds ``_notify_lock``.
 
@@ -856,6 +1088,13 @@ class Manager:
         with self._notify_lock:
             if self._starting.get(module.name) is not request or self._shutting_down:
                 return
+            if self._start_blocked(module):
+                logger.error(
+                    f"Not starting {module.name}: server port "
+                    f"{self.foreign_server_port} was refused"
+                )
+                self._starting.pop(module.name, None)
+                return
 
         @contextmanager
         def launch_guard():
@@ -866,6 +1105,7 @@ class Manager:
                 allowed = (
                     not self._shutting_down
                     and self._starting.get(module.name) is request
+                    and not self._start_blocked(module)
                 )
                 try:
                     yield allowed
@@ -884,6 +1124,8 @@ class Manager:
             with self._notify_lock:
                 if self._starting.get(module.name) is request:
                     self._starting.pop(module.name, None)
+                # A failed launch can also record a refusal.
+                self._stop_refused_dependents()
 
     def start(self, module_name: str) -> None:
         with self._notify_lock:
@@ -927,8 +1169,12 @@ class Manager:
         self._spawn_claimed((module, request))
         return module.started
 
-    def toggle(self, module: Module) -> bool:
-        """Apply a tray choice to the selected copy, cancelling deferred startup."""
+    def toggle(self, module: Module) -> Optional[bool]:
+        """Apply a tray choice to the selected copy, cancelling deferred startup.
+
+        Returns the new started state, or None when a start was refused because
+        of a datastore refusal: the user did not choose to disable the module.
+        """
         with self._notify_lock:
             self._pending_autostart.pop(module.name, None)
             if self._shutting_down:
@@ -938,6 +1184,11 @@ class Manager:
                 # external-listener cache and enter Start under this lock.
                 module.stop()
                 return False
+            if self._start_blocked(module):
+                if module.started:
+                    module.stop()  # Unticking a crashed module is a choice.
+                    return False
+                return None
             # Tray starts run synchronously, so a preparing claim belongs to
             # background startup, not a previous click. Replace it with this
             # explicit Start choice; the stale worker's guard will reject it.
@@ -947,6 +1198,8 @@ class Manager:
             request = (module, object())
             self._starting[module.name] = request
         self._spawn_claimed((module, request))
+        if not module.started and self._start_blocked(module):
+            return None
         return module.started
 
     def autostart(
