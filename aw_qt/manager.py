@@ -806,11 +806,13 @@ class Module:
                 try:
                     listener_id = self._external_server_device_id(port, timeout=1.0)
                 except (urllib.error.URLError, OSError, ValueError) as exc:
-                    self._refuse_port(port, f"its identity cannot be read ({exc})")
-                    return
-                reason = _identity_mismatch(listener_id, local_ids)
+                    reason: Optional[str] = f"its identity cannot be read ({exc})"
+                else:
+                    reason = _identity_mismatch(listener_id, local_ids)
                 if reason:
-                    self._refuse_port(port, reason)
+                    with launch_guard() if launch_guard else nullcontext(True) as allowed:
+                        if allowed:
+                            self._refuse_port(port, reason)
                     return
             logger.info(
                 f"{self.name}: server already running on port {port}, "

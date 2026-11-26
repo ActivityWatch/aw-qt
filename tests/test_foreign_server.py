@@ -131,6 +131,39 @@ class TestAdoption:
         assert mod.foreign_server_port == 5600
         popen.assert_not_called()
 
+    @pytest.mark.parametrize("error", [False, True])
+    def test_cancelled_adoption_cannot_refuse_new_start(self, error, own_datastore):
+        from contextlib import contextmanager
+        from unittest.mock import MagicMock
+
+        mod = Module("aw-server-rust", Path("/server"), "system")
+        allowed = True
+        replacement = MagicMock()
+        replacement.poll.return_value = None
+
+        @contextmanager
+        def guard():
+            yield allowed
+
+        def old_probe(*args, **kwargs):
+            nonlocal allowed
+            allowed = False  # Stop cancelled this request; Start replaced it.
+            mod._process = replacement
+            mod.started = True
+            if error:
+                raise TimeoutError("old request timed out")
+            return "theirs"
+
+        mod._external_server_port = 5600
+        with (
+            patch.object(mod, "_probe_external_server", return_value=True),
+            patch.object(mod, "_external_server_device_id", side_effect=old_probe),
+        ):
+            mod.start(False, launch_guard=guard)
+        assert mod.foreign_server_port is None
+        assert mod.started
+        replacement.terminate.assert_not_called()
+
     def test_adopts_listener_with_own_datastore(self, info_server, _isolated_platform_dirs):
         _write_device_id(_isolated_platform_dirs, "activitywatch", "aw-server-rust", "mine")
         _InfoHandler.device_id = "mine\n"
@@ -440,10 +473,16 @@ class TestSpawnedListenerVerification:
                 pytest.skip("IPv6 loopback unavailable")
             listener.listen()
             port = listener.getsockname()[1]
+            # Isolate name resolution from the host's /etc/hosts policy.
+            real_getaddrinfo = socket.getaddrinfo
+
+            def loopback_addresses(host, service, *args, **kwargs):
+                return real_getaddrinfo("::1" if host == "localhost" else host, service, *args, **kwargs)
             server = Module("aw-server-rust", Path("/server"), "system")
             with (
                 patch("subprocess.Popen") as popen,
                 patch.object(server, "_external_server_device_id", side_effect=TimeoutError),
+                patch.object(socket, "getaddrinfo", side_effect=loopback_addresses),
             ):
                 server._process = popen.return_value
                 popen.return_value.poll.return_value = 1
