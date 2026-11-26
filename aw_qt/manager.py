@@ -644,7 +644,9 @@ class Module:
                     break
                 sleep(0.05)
                 continue
-            reason = _identity_mismatch(listener_id, local_ids)
+            # Re-read: a first run of the other server implementation writes
+            # its device_id after the snapshot above, then reports it.
+            reason = _identity_mismatch(listener_id, _own_device_ids(testing))
             if reason:
                 self._refuse_port(port, reason)
             return

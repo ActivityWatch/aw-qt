@@ -224,6 +224,34 @@ def test_missing_device_id_is_refused(spawned, info_server, own_datastore):
         popen.return_value.terminate.assert_called_once_with()
 
 
+def test_first_run_of_other_server_implementation_is_accepted(
+    info_server, _isolated_platform_dirs
+):
+    # Switching from aw-server to aw-server-rust: the child writes its new
+    # device_id after aw-qt snapshots the user's ids, then reports it.
+    _write_device_id(_isolated_platform_dirs, "activitywatch", "aw-server", "python")
+    _InfoHandler.device_id = "rust"
+    server = Module("aw-server-rust", Path("/server"), "system")
+    read_identity = server._external_server_device_id
+
+    def child_initialises(*args, **kwargs):
+        _write_device_id(_isolated_platform_dirs, "activitywatch", "aw-server-rust", "rust")
+        return read_identity(*args, **kwargs)
+
+    with (
+        patch.object(server, "_get_server_port", return_value=info_server.server_port),
+        patch.object(server, "_probe_external_server", return_value=False),
+        patch.object(server, "_external_server_device_id", side_effect=child_initialises),
+        patch("subprocess.Popen") as popen,
+    ):
+        popen.return_value.poll.return_value = None
+        server.start(False)
+
+    assert server.started
+    assert server.foreign_server_port is None
+    popen.return_value.terminate.assert_not_called()
+
+
 @pytest.mark.parametrize("spawned", [False, True], ids=["adoption", "post-spawn"])
 def test_missing_device_id_without_local_datastore_is_accepted(spawned, info_server):
     # Nothing to compare against (first run): behaviour is unchanged.
