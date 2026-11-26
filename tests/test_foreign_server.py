@@ -407,6 +407,49 @@ class TestSpawnedListenerVerification:
         assert server.foreign_server_port == (5600 if refused else None)
         assert server.started is not refused
 
+    def test_stale_identity_result_does_not_refuse_replacement(self, own_datastore):
+        server = Module("aw-server-rust", Path("/server"), "system")
+        with patch("subprocess.Popen") as popen:
+            old = popen.return_value
+            replacement = type(old)()
+            old.poll.return_value = replacement.poll.return_value = None
+            server._process = old
+            server.started = True
+
+            def replaced_during_probe(*args, **kwargs):
+                server._process = replacement
+                return "theirs"
+
+            with patch.object(server, "_external_server_device_id", side_effect=replaced_during_probe):
+                server._verify_spawned_listener(5600, False)
+
+        assert server.foreign_server_port is None
+        assert server._process is replacement
+        replacement.terminate.assert_not_called()
+
+    def test_tcp_fallback_detects_ipv6_listener(self, own_datastore):
+        import socket
+
+        if not socket.has_ipv6:
+            pytest.skip("IPv6 unavailable")
+        with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as listener:
+            listener.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
+            try:
+                listener.bind(("::1", 0))
+            except OSError:
+                pytest.skip("IPv6 loopback unavailable")
+            listener.listen()
+            port = listener.getsockname()[1]
+            server = Module("aw-server-rust", Path("/server"), "system")
+            with (
+                patch("subprocess.Popen") as popen,
+                patch.object(server, "_external_server_device_id", side_effect=TimeoutError),
+            ):
+                server._process = popen.return_value
+                popen.return_value.poll.return_value = 1
+                server._verify_spawned_listener(port, False)
+            assert server.foreign_server_port == port
+
     @pytest.mark.parametrize("identity", ["mine", "theirs"])
     def test_readable_listener(self, identity, own_datastore):
         server = Module("aw-server-rust", Path("/server"), "system")

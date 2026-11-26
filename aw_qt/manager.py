@@ -471,7 +471,7 @@ def _port_accepts_connections(
 ) -> bool:
     """Whether something listens on ``port``, independent of its HTTP health."""
     try:
-        with socket.create_connection((host or "127.0.0.1", port), timeout=timeout):
+        with socket.create_connection((host or "localhost", port), timeout=timeout):
             return True
     except OSError:
         return False
@@ -637,6 +637,7 @@ class Module:
         testing: bool,
         wait: float = 1.0,
         host: Optional[str] = None,
+        launch_guard: Optional[Callable[[], ContextManager[bool]]] = None,
     ) -> None:
         """Refuse the port unless its listener proves to be this user's server.
 
@@ -668,12 +669,18 @@ class Module:
             # its device_id after the snapshot above, then reports it.
             reason = _identity_mismatch(listener_id, _own_device_ids(testing))
             if reason:
-                self._refuse_port(port, reason)
+                # The network wait can outlive Stop/Restart. Serialize applying
+                # the result with process replacement, not the network request.
+                with launch_guard() if launch_guard else nullcontext(True) as allowed:
+                    if allowed and self._process is process:
+                        self._refuse_port(port, reason)
             return
         # Nothing identified itself. A free port is a slow or broken child; a
         # held one may belong to someone else.
         if self._process is process and _port_accepts_connections(port, host=host):
-            self._refuse_port(port, "its listener could not be identified")
+            with launch_guard() if launch_guard else nullcontext(True) as allowed:
+                if allowed and self._process is process:
+                    self._refuse_port(port, "its listener could not be identified")
 
     def _refuse_unverified_listener(
         self, port: Optional[int], testing: bool, host: Optional[str] = None
@@ -881,7 +888,9 @@ class Module:
             raise
         # Popen only confirms that a child was created. Verify outside the launch
         # guard: it waits on the network.
-        self._verify_spawned_listener(listen_port, testing, host=probe_host)
+        self._verify_spawned_listener(
+            listen_port, testing, host=probe_host, launch_guard=launch_guard
+        )
 
     def stop(self) -> None:
         """
