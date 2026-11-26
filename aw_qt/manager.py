@@ -485,10 +485,12 @@ def _own_device_ids(testing: bool) -> Set[str]:
         return _local_server_device_ids(profile_from_env(testing))
 
 
-def _port_accepts_connections(port: int, timeout: float = 0.2) -> bool:
+def _port_accepts_connections(
+    port: int, timeout: float = 0.2, host: Optional[str] = None
+) -> bool:
     """Whether something listens on ``port``, independent of its HTTP health."""
     try:
-        with socket.create_connection(("127.0.0.1", port), timeout=timeout):
+        with socket.create_connection((host or "127.0.0.1", port), timeout=timeout):
             return True
     except OSError:
         return False
@@ -572,14 +574,20 @@ class Module:
         except (urllib.error.URLError, OSError):
             return False
 
-    def _external_server_device_id(self, port: int, timeout: float) -> Optional[str]:
+    def _external_server_device_id(
+        self, port: int, timeout: float, host: Optional[str] = None
+    ) -> Optional[str]:
         """The listener's ``device_id``, or None if its info response has none.
+
+        ``host`` is the numeric address a pinned child binds; without it the
+        unpinned default ``localhost`` is probed.
 
         Raises if the info response cannot be fetched or parsed.
         """
+        netloc = "localhost" if host is None else (f"[{host}]" if ":" in host else host)
         deadline = monotonic() + timeout
         with urllib.request.urlopen(
-            f"http://localhost:{port}/api/0/info", timeout=timeout
+            f"http://{netloc}:{port}/api/0/info", timeout=timeout
         ) as response:
             info = json.loads(_read_info_body(response, deadline).decode("utf-8"))
         if not isinstance(info, dict):
@@ -620,12 +628,18 @@ class Module:
         self.started = False
 
     def _verify_spawned_listener(
-        self, port: Optional[int], testing: bool, wait: float = 1.0
+        self,
+        port: Optional[int],
+        testing: bool,
+        wait: float = 1.0,
+        host: Optional[str] = None,
     ) -> None:
         """Refuse the port unless its listener proves to be this user's server.
 
         The pre-spawn probe can miss a listener that answers slowly. The child
-        then exits with AddrInUse while that listener keeps the port.
+        then exits with AddrInUse while that listener keeps the port. ``host``
+        is the address the child was pinned to: probe that one, since another
+        user's server may hold the same port on the other loopback family.
         """
         process = self._process
         if port is None or process is None:
@@ -638,7 +652,9 @@ class Module:
         while monotonic() < deadline and self._process is process:
             exited = self._process_exited()
             try:
-                listener_id = self._external_server_device_id(port, timeout=0.2)
+                listener_id = self._external_server_device_id(
+                    port, timeout=0.2, host=host
+                )
             except (urllib.error.URLError, OSError, ValueError):
                 if exited:
                     break
@@ -652,18 +668,20 @@ class Module:
             return
         # Nothing identified itself. A free port is a slow or broken child; a
         # held one may belong to someone else.
-        if self._process is process and _port_accepts_connections(port):
+        if self._process is process and _port_accepts_connections(port, host=host):
             self._refuse_port(port, "its listener could not be identified")
 
-    def _refuse_unverified_listener(self, port: Optional[int], testing: bool) -> None:
+    def _refuse_unverified_listener(
+        self, port: Optional[int], testing: bool, host: Optional[str] = None
+    ) -> None:
         """Refuse a port someone else holds when our server failed to launch."""
         if port is None:
             return
         local_ids = _own_device_ids(testing)
-        if not local_ids or not _port_accepts_connections(port):
+        if not local_ids or not _port_accepts_connections(port, host=host):
             return
         try:
-            listener_id = self._external_server_device_id(port, timeout=0.5)
+            listener_id = self._external_server_device_id(port, timeout=0.5, host=host)
         except (urllib.error.URLError, OSError, ValueError) as exc:
             reason: Optional[str] = f"its identity cannot be read ({exc})"
         else:
@@ -820,6 +838,8 @@ class Module:
                     # changes between this read and the child's startup read.
                     exec_cmd.extend(["--host", address, "--port", str(port)])
                     endpoint = (profile, address, port)
+        # Verify the endpoint the child binds, not whatever answers on localhost.
+        probe_host = endpoint[1] if endpoint is not None else None
         # logger.debug("Running: {}".format(exec_cmd))
 
         # Don't display a console window on Windows
@@ -853,11 +873,11 @@ class Module:
         except Exception:
             # The probe can miss a slow listener, and autostart carries on past
             # a launch failure.
-            self._refuse_unverified_listener(listen_port, testing)
+            self._refuse_unverified_listener(listen_port, testing, host=probe_host)
             raise
         # Popen only confirms that a child was created. Verify outside the launch
         # guard: it waits on the network.
-        self._verify_spawned_listener(listen_port, testing)
+        self._verify_spawned_listener(listen_port, testing, host=probe_host)
 
     def stop(self) -> None:
         """

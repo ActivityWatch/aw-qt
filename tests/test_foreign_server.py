@@ -442,6 +442,42 @@ class TestSpawnedListenerVerification:
         assert mgr.foreign_server_port == (5600 if listening else None)
         assert len(watcher_calls) == (0 if listening else 1)
 
+    @pytest.mark.parametrize("launch_fails", [False, True])
+    def test_probes_the_pinned_endpoint(self, launch_fails, own_datastore):
+        # A child pinned to ::1 shares its port number with whatever holds
+        # 127.0.0.1; only the pinned address says anything about our child.
+        server = Module("aw-server-rust", Path("/server"), "system")
+        popen_kwargs = {"side_effect": OSError("missing")} if launch_fails else {}
+        with (
+            patch.object(server, "_get_server_port", return_value=5600),
+            patch.object(server, "_probe_external_server", return_value=False),
+            patch("aw_qt.config.dashboard_auth", return_value=("::1", "key")),
+            patch.object(
+                server, "_external_server_device_id", return_value="mine"
+            ) as read_identity,
+            patch(
+                "aw_qt.manager._port_accepts_connections", return_value=True
+            ) as port_probe,
+            patch("subprocess.Popen", **popen_kwargs) as popen,
+        ):
+            popen.return_value.poll.return_value = None
+            if launch_fails:
+                with pytest.raises(OSError):
+                    server.start(False)
+                assert port_probe.call_args.kwargs["host"] == "::1"
+            else:
+                server.start(False)
+
+        assert read_identity.call_args.kwargs["host"] == "::1"
+        assert server.foreign_server_port is None
+
+    def test_identity_url_brackets_ipv6(self):
+        server = Module("aw-server-rust", Path("/server"), "system")
+        with patch("urllib.request.urlopen", side_effect=OSError("down")) as urlopen:
+            with pytest.raises(OSError):
+                server._external_server_device_id(5600, timeout=0.1, host="::1")
+        assert urlopen.call_args.args[0] == "http://[::1]:5600/api/0/info"
+
     def test_refusal_terminates_spawned_child(self, own_datastore):
         server = Module("aw-server-rust", Path("/server"), "system")
         child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
@@ -495,7 +531,7 @@ class _TrickleHandler(BaseHTTPRequestHandler):
                 self.wfile.flush()
                 time.sleep(0.05)
         except OSError:
-            pass
+            pass  # The client gave up at its deadline, which is the point.
 
     def log_message(self, *args):
         pass
