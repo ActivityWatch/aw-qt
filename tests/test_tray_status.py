@@ -163,7 +163,7 @@ def test_notify_toggle_retains_only_saved_state_when_refresh_fails(
     tray = SimpleNamespace(
         _notify_action=action,
         port=5600,
-        manager=MagicMock(),
+        manager=MagicMock(foreign_server_port=None),
         _parent=None,
         _notify_generation=0,
         # The async re-read is covered in test_supporter_menu.py.
@@ -217,3 +217,28 @@ def test_restart_callback_does_not_start_after_shutdown(manual):
             check_status()
         module.start.assert_not_called()
         assert not manager._starting
+
+
+def test_notify_toggle_is_refused_while_server_refused(monkeypatch):
+    # Writing the setting would change another user's aw-notify settings.
+    from PyQt6.QtGui import QAction
+    from PyQt6.QtWidgets import QApplication
+
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    app = QApplication.instance() or QApplication([])
+    action = QAction("Enable notifications")
+    action.setCheckable(True)
+    tray = SimpleNamespace(
+        _notify_action=action,
+        port=5600,
+        manager=MagicMock(foreign_server_port=5600),
+        _show_refusal=MagicMock(),
+    )
+    action.triggered.connect(lambda: TrayIcon._on_notify_toggled(tray))
+    with patch("aw_qt.trayicon.write_notify_enabled") as write:
+        action.trigger()
+    write.assert_not_called()
+    assert not action.isChecked()
+    tray._show_refusal.assert_called_once_with()
+    tray.manager._spawn_claimed.assert_not_called()
+    assert app is not None

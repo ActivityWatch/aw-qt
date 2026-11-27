@@ -166,7 +166,7 @@ def test_build_rootmenu_starts_read_and_rechecks_on_open(tray):
 @pytest.fixture
 def notify_tray(app, server):
     with patch.object(TrayIcon, "_build_rootmenu"):
-        instance = TrayIcon(MagicMock(), QIcon(), port=server[0])
+        instance = TrayIcon(MagicMock(foreign_server_port=None), QIcon(), port=server[0])
     instance._notify_action = QAction("Enable notifications", instance)
     instance._notify_action.setCheckable(True)
     instance._notify_action.triggered.connect(instance._on_notify_toggled)

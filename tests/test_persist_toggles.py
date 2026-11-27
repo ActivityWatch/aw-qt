@@ -450,6 +450,21 @@ class TestTrayClick:
         self.spawned.assert_called_once()
         assert not fake.manager._starting
 
+    def test_start_blocked_by_refusal_is_not_persisted(self):
+        # A start refused because of a foreign datastore is not a choice to
+        # disable the watcher; saving it would drop it from autostart.
+        module = Module("aw-watcher-afk", Path("/bundled/aw-watcher-afk"), "bundled")
+        server = Module("aw-server-rust", Path("/bundled/aw-server-rust"), "bundled")
+        server.foreign_server_port = 5600
+        fake, click = self._tray(True, [server, module])
+        shown = []
+        fake._show_refusal = lambda: shown.append(True)
+        with patch("aw_qt.trayicon.persist_module_autostart") as persist:
+            click(module)
+        persist.assert_not_called()
+        self.spawned.assert_not_called()
+        assert shown == [True]
+
     def test_system_copy_shadowed_by_bundled_is_not_persisted(self):
         bundled = self._module("bundled")
         system = self._module("system")
