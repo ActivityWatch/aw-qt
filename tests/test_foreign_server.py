@@ -622,6 +622,23 @@ class TestSpawnedListenerVerification:
         if not launch_fails:
             popen.return_value.terminate.assert_called_once_with()
 
+    def test_failed_pinned_child_cannot_hide_localhost_listener(self, own_datastore):
+        server = Module("aw-server-rust", Path("/server"), "system")
+        with (
+            patch("subprocess.Popen") as popen,
+            patch.object(server, "_external_server_device_id", side_effect=TimeoutError),
+            patch(
+                "aw_qt.manager._port_accepts_connections",
+                side_effect=lambda port, host=None: host is None,
+            ),
+        ):
+            server._process = popen.return_value
+            server.started = True
+            popen.return_value.poll.return_value = 1
+            server._verify_spawned_listener(5600, False, host="::1")
+        assert server.foreign_server_port == 5600
+        assert not server.started
+
     def test_identity_connection_uses_socket_form_ipv6(self):
         server = Module("aw-server-rust", Path("/server"), "system")
         with patch("aw_qt.manager.http.client.HTTPConnection") as connection:

@@ -687,7 +687,10 @@ class Module:
             return
         # Nothing identified itself. A free port is a slow or broken child; a
         # held one may belong to someone else.
-        if self._process is process and _port_accepts_connections(port, host=host):
+        if self._process is process and (
+            _port_accepts_connections(port, host=host)
+            or (host is not None and _port_accepts_connections(port))
+        ):
             with launch_guard() if launch_guard else nullcontext(True) as allowed:
                 if allowed and self._process is process:
                     self._refuse_port(port, "its listener could not be identified")
