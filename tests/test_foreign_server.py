@@ -175,6 +175,40 @@ class TestAdoption:
         assert mod.foreign_server_port is None
         popen.assert_not_called()
 
+    @pytest.mark.parametrize("replacement", ["theirs", None])
+    def test_adopted_listener_replacement_stops_dependents(
+        self, replacement, info_server, own_datastore
+    ):
+        _InfoHandler.device_id = "mine"
+        mgr, server, watcher, notify = _manager()
+        with patch.object(server, "_get_server_port", return_value=info_server.server_port):
+            mgr.start(server.name)
+        assert server._external_server
+        watcher.started = notify.started = True
+        _InfoHandler.device_id = replacement
+        server._external_server_probe_cache_at = 0.0
+
+        mgr.get_unexpected_stops()
+
+        assert server.foreign_server_port == info_server.server_port
+        assert not server.started
+        assert not watcher.started and not notify.started
+
+    @pytest.mark.parametrize("unreadable", [False, True])
+    def test_adopted_identity_recheck(self, unreadable, info_server, own_datastore):
+        _InfoHandler.device_id = "mine"
+        mod, _ = _start_server_module(info_server.server_port)
+        mod._external_server_probe_cache_at = 0.0
+        read_identity = mod._external_server_device_id
+        with patch.object(
+            mod, "_external_server_device_id",
+            side_effect=TimeoutError("busy") if unreadable else read_identity,
+        ) as probe:
+            assert mod.is_alive() is not unreadable
+            assert mod.is_alive() is not unreadable
+        probe.assert_called_once()
+        assert mod.foreign_server_port == (info_server.server_port if unreadable else None)
+
     def test_adopts_when_user_has_no_local_datastore(self, info_server):
         # First run, or a Docker/systemd server with its own data dir: keep
         # the existing adoption behaviour (aw-qt#123).
@@ -526,7 +560,7 @@ class TestSpawnedListenerVerification:
     @pytest.mark.parametrize("launch_fails", [False, True])
     def test_probes_the_pinned_endpoint(self, launch_fails, own_datastore):
         # A child pinned to ::1 shares its port number with whatever holds
-        # 127.0.0.1; only the pinned address says anything about our child.
+        # 127.0.0.1; both the child and dependent endpoint must be ours.
         server = Module("aw-server-rust", Path("/server"), "system")
         popen_kwargs = {"side_effect": OSError("missing")} if launch_fails else {}
         with (
@@ -545,12 +579,48 @@ class TestSpawnedListenerVerification:
             if launch_fails:
                 with pytest.raises(OSError):
                     server.start(False)
-                assert port_probe.call_args.kwargs["host"] == "::1"
+                assert port_probe.call_args_list[0].kwargs["host"] == "::1"
+                assert port_probe.call_args_list[-1].kwargs["host"] is None
             else:
                 server.start(False)
 
-        assert read_identity.call_args.kwargs["host"] == "::1"
+        assert read_identity.call_args_list[0].kwargs["host"] == "::1"
+        assert read_identity.call_args_list[-1].kwargs["host"] is None
         assert server.foreign_server_port is None
+
+    @pytest.mark.parametrize("launch_fails", [False, True])
+    def test_pinned_own_server_does_not_authorize_foreign_localhost(
+        self, launch_fails, info_server, own_datastore
+    ):
+        # The pinned child is ours, but watchers and notification writes use
+        # localhost. Verify that real endpoint too before releasing them.
+        _InfoHandler.device_id = "theirs"
+        mgr, server, watcher, _notify = _manager()
+        read_identity = server._external_server_device_id
+
+        def identity(port, timeout, host=None):
+            if host == "::1":
+                return "mine"
+            return read_identity(port, timeout, host=host)
+
+        popen_kwargs = {"side_effect": OSError("missing")} if launch_fails else {}
+        with (
+            patch.object(server, "_get_server_port", return_value=info_server.server_port),
+            patch.object(server, "_probe_external_server", return_value=False),
+            patch("aw_qt.config.dashboard_auth", return_value=("::1", "key")),
+            patch.object(server, "_external_server_device_id", side_effect=identity),
+            patch("aw_qt.manager._port_accepts_connections", return_value=True),
+            patch("subprocess.Popen", **popen_kwargs) as popen,
+            patch.object(watcher, "start") as watcher_start,
+        ):
+            popen.return_value.poll.return_value = None
+            mgr.autostart([server.name, watcher.name])
+
+        assert mgr.foreign_server_port == info_server.server_port
+        assert not server.started
+        watcher_start.assert_not_called()
+        if not launch_fails:
+            popen.return_value.terminate.assert_called_once_with()
 
     def test_identity_connection_uses_socket_form_ipv6(self):
         server = Module("aw-server-rust", Path("/server"), "system")

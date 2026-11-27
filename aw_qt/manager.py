@@ -510,6 +510,7 @@ class Module:
         self._external_server: bool = False  # True if we detected an already-running server
         self._external_server_testing: bool = False
         self._external_server_port: Optional[int] = None
+        self._external_server_device_ids: Set[str] = set()
         self._external_server_probe_cache: Optional[bool] = None
         self._external_server_probe_cache_at: float = 0.0
         # Port refused as foreign or unverifiable. Never cleared: the refusal
@@ -643,8 +644,8 @@ class Module:
 
         The pre-spawn probe can miss a listener that answers slowly. The child
         then exits with AddrInUse while that listener keeps the port. ``host``
-        is the address the child was pinned to: probe that one, since another
-        user's server may hold the same port on the other loopback family.
+        is the address the child was pinned to. Verify it and the localhost
+        endpoint used by dependents: they can reach different loopback listeners.
         """
         process = self._process
         if port is None or process is None:
@@ -668,6 +669,15 @@ class Module:
             # Re-read: a first run of the other server implementation writes
             # its device_id after the snapshot above, then reports it.
             reason = _identity_mismatch(listener_id, _own_device_ids(testing))
+            if reason is None and host is not None:
+                try:
+                    dependent_id = self._external_server_device_id(
+                        port, timeout=0.2, host=None
+                    )
+                except (urllib.error.URLError, OSError, ValueError) as exc:
+                    reason = f"the localhost listener's identity cannot be read ({exc})"
+                else:
+                    reason = _identity_mismatch(dependent_id, _own_device_ids(testing))
             if reason:
                 # The network wait can outlive Stop/Restart. Serialize applying
                 # the result with process replacement, not the network request.
@@ -689,16 +699,22 @@ class Module:
         if port is None:
             return
         local_ids = _own_device_ids(testing)
-        if not local_ids or not _port_accepts_connections(port, host=host):
+        if not local_ids:
             return
-        try:
-            listener_id = self._external_server_device_id(port, timeout=0.5, host=host)
-        except (urllib.error.URLError, OSError, ValueError) as exc:
-            reason: Optional[str] = f"its identity cannot be read ({exc})"
-        else:
-            reason = _identity_mismatch(listener_id, local_ids)
-        if reason:
-            self._refuse_port(port, reason)
+        for probe_host in (host, None) if host is not None else (None,):
+            if not _port_accepts_connections(port, host=probe_host):
+                continue
+            try:
+                listener_id = self._external_server_device_id(
+                    port, timeout=0.5, host=probe_host
+                )
+            except (urllib.error.URLError, OSError, ValueError) as exc:
+                reason: Optional[str] = f"its identity cannot be read ({exc})"
+            else:
+                reason = _identity_mismatch(listener_id, local_ids)
+            if reason:
+                self._refuse_port(port, reason)
+                return
 
     def _probe_external_server_cached(self, testing: bool, max_age: float = 1.0) -> bool:
         now = monotonic()
@@ -708,7 +724,19 @@ class Module:
         ):
             return self._external_server_probe_cache
 
-        alive = self._probe_external_server(testing)
+        port = self._external_server_port
+        if port is not None and self._external_server_device_ids:
+            try:
+                listener_id = self._external_server_device_id(port, timeout=0.2)
+            except (urllib.error.URLError, OSError, ValueError) as exc:
+                reason: Optional[str] = f"its identity cannot be read ({exc})"
+            else:
+                reason = _identity_mismatch(listener_id, self._external_server_device_ids)
+            alive = reason is None
+            if reason:
+                self._refuse_port(port, reason)
+        else:
+            alive = self._probe_external_server(testing)
         self._external_server_probe_cache = alive
         self._external_server_probe_cache_at = now
         return alive
@@ -824,6 +852,9 @@ class Module:
                 self.dashboard_endpoint = None
                 self._external_server = True
                 self._external_server_testing = testing
+                # Snapshot outside manager locks: liveness polling must not
+                # resolve the profile while holding _notify_lock.
+                self._external_server_device_ids = local_ids
                 self._external_server_probe_cache = True
                 self._external_server_probe_cache_at = monotonic()
                 self.started = True
@@ -851,7 +882,7 @@ class Module:
                     # changes between this read and the child's startup read.
                     exec_cmd.extend(["--host", address, "--port", str(port)])
                     endpoint = (profile, address, port)
-        # Verify the endpoint the child binds, not whatever answers on localhost.
+        # Verify the child's endpoint as well as localhost used by dependents.
         probe_host = endpoint[1] if endpoint is not None else None
         # logger.debug("Running: {}".format(exec_cmd))
 
@@ -1067,7 +1098,11 @@ class Manager:
                 self.modules.append(m)
 
     def get_unexpected_stops(self) -> List[Module]:
-        return list(filter(lambda x: x.started and not x.is_alive(), self.modules))
+        with self._notify_lock:
+            stopped = [m for m in self.modules if m.started and not m.is_alive()]
+            # An adopted listener may have changed identity since startup.
+            self._stop_refused_dependents()
+            return stopped
 
     def resolve(self, module_name: str) -> Optional[Module]:
         """The module that ``start``/``autostart`` runs for ``module_name``.
